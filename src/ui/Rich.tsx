@@ -22,6 +22,7 @@ type Block =
   | { t: 'p'; text: string }
   | { t: 'h'; text: string }
   | { t: 'code'; lang: string; text: string }
+  | { t: 'quote'; paras: string[] }
   | { t: 'list'; ordered: boolean; items: { text: string; check?: boolean }[] }
 
 // live: the last line is still being typed.
@@ -38,6 +39,21 @@ function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], live = f
       const body: string[] = []
       while (++i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i])
       out.push({ t: 'code', lang: fence[1], text: body.join('\n') })
+      continue
+    }
+    // A quote: consecutive lines starting with ">". A bare ">" separates its paragraphs.
+    if (/^\s*>/.test(line)) {
+      flush()
+      const paras: string[] = []
+      let cur: string[] = []
+      for (; i < lines.length && /^\s*>/.test(lines[i]); i++) {
+        const body = lines[i].replace(/^\s*>\s?/, '')
+        if (body.trim()) cur.push(body)
+        else if (cur.length) { paras.push(cur.join('\n')); cur = [] }
+      }
+      i--
+      if (cur.length) paras.push(cur.join('\n'))
+      if (paras.length) out.push({ t: 'quote', paras })
       continue
     }
     if (!line.trim()) { flush(); continue }
@@ -85,6 +101,11 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
           case 'p': return <p key={i}>{b.text.split('\n').map((l, j) => <Fragment key={j}>{j > 0 && <br />}{inline(l)}</Fragment>)}{end}</p>
           case 'h': return <h4 key={i}>{inline(b.text)}{end}</h4>
           case 'code': return <pre key={i} className="codeblock" data-lang={b.lang || undefined}>{b.text}{end}</pre>
+          case 'quote': return (
+            <blockquote key={i}>
+              {b.paras.map((t, j) => <p key={j}>{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === b.paras.length - 1 && end}</p>)}
+            </blockquote>
+          )
           case 'list': {
             // A live list that starts with an open step is a plan from its first line, so it never
             // changes shape when the second arrives.

@@ -528,6 +528,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .rich{display:flex;flex-direction:column;gap:10px;min-width:0;user-select:text;overflow-wrap:anywhere}
 .rich p{font-size:14px;line-height:1.62;overflow-wrap:anywhere}
 .rich h4{font-size:13.5px;font-weight:600;margin-top:4px}
+.rich blockquote{display:flex;flex-direction:column;gap:8px;padding:1px 0 1px 14px;box-shadow:inset 2px 0 0 var(--line2)}
 .rich ul,.rich ol{display:flex;flex-direction:column;gap:4px;padding-left:20px;font-size:14px;line-height:1.55}
 .rich ul{list-style:none;padding-left:16px}
 .rich ul>li{position:relative}
