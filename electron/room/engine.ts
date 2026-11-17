@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { addressed } from '../../shared/address'
 import { sentence } from '../../shared/steps'
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import type { Access, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
 import { asks, plan } from '../../shared/plan'
 import { classify } from '../../shared/route'
-import { DESIGN_SOURCES, studioChecks } from '../../shared/studio'
+import { DESIGN_SOURCES, DIRECTION, directionGist, spark, studioChecks } from '../../shared/studio'
 import { describe as schedule } from '../../shared/flow'
 import { detect, run, type Result } from '../agents'
 import { plain } from '../agents/parse'
@@ -306,9 +306,25 @@ export class Engine {
       id: uid(), name: opts.name || 'New room', created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace, pack: opts.pack, flow: opts.flow, studio: opts.studio || undefined, design: opts.studio ? designFiles(opts.workspace) : undefined,
       sessions: {}, seen: {}, heard: {}, blocks: [], saved: { full: 0, sent: 0 },
     }
+    if (opts.studio) Object.assign(meta, this.inspire(meta.id))
     this.store.create(meta)
     this.list()
     return meta
+  }
+
+  // Expert's starting points for a room: three drawn at random, and the gist of the directions the
+  // last few Expert rooms wrote, so a new room looks somewhere else.
+  private inspire(room: string) {
+    const lately: string[] = []
+    for (const m of this.store.list()) {
+      if (lately.length >= 3) break
+      if (m.id === room || !m.studio) continue
+      try {
+        const gist = directionGist(readFileSync(join(m.workspace, DIRECTION), 'utf8'))
+        if (gist && !lately.includes(gist)) lately.push(gist)
+      } catch { /* that room never wrote a direction */ }
+    }
+    return { sparks: spark(), lately }
   }
 
   // Switching Studio on reads the project's own design files once and keeps the list with the room.
@@ -316,6 +332,7 @@ export class Engine {
     this.store.update(room, (m) => {
       m.studio = on || undefined
       m.design = on ? designFiles(m.workspace) : undefined
+      if (on && !m.sparks) Object.assign(m, this.inspire(room))
     })
     this.hooks.emit('room:meta', this.store.room(room))
   }
@@ -815,6 +832,8 @@ export class Engine {
     const me = this.agent(who)!
     const crew = meta.crew.map((id) => this.agent(id)).filter((a): a is AgentInfo => !!a)
     if (!crew.some((a) => a.id === who)) crew.unshift(me)
+    // Rooms that had Expert on before starting points existed get theirs on their next turn.
+    if (meta.studio && !meta.sparks) this.store.update(room, (m) => Object.assign(m, this.inspire(room)))
     const pack = this.hooks.packs().find((p) => p.id === meta.pack)
     const session = meta.sessions[who]
     // Only the CLIs Lunchbox knows how to resume get a delta; a connector always gets the whole room.

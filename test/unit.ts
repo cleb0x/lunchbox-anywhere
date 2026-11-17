@@ -1504,3 +1504,20 @@ test('hands: a shortened command posts its output with a token that opens nothin
   grant.revoke()
   assert.equal((await post(drop, long)).status, 404, 'and it ends with the turn')
 })
+
+test('expert: every room starts from its own random corner and steers away from recent looks', async () => {
+  const { spark, studioCore, directionGist } = await import('../shared/studio')
+  let n = 7
+  const rand = () => ((n = (n * 16807) % 2147483647) / 2147483647)
+  const drawn = Array.from({ length: 40 }, () => spark(rand))
+  for (const s of drawn) assert.equal(s.length, 3)
+  const first = new Set(drawn.map((s) => s[0]))
+  assert.ok(first.size > 25, 'draws vary from room to room')
+  const greens = drawn.flat().filter((x) => /green|teal|jade|chartreuse/.test(x)).length
+  assert.ok(greens < drawn.flat().length * 0.25, 'green is one family among many, not the default')
+  const core = studioCore([], drawn[0], ['Calm, green, quiet. System: Inter, emerald accent'])
+  assert.ok(core.includes(drawn[0][0]) && core.includes('Grow each of your three directions from one of them'))
+  assert.ok(core.includes('Do not repeat their main colour'))
+  assert.ok(!studioCore([]).includes('Lunchbox drew three starting points'))
+  assert.equal(directionGist('# Direction\nMood: dry, exact, nautical\nReferences: tide tables\nSystem: Söhne Breit, navy and brass, 8px'), 'dry, exact, nautical. Söhne Breit, navy and brass, 8px')
+})

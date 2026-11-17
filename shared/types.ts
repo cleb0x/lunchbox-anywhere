@@ -116,6 +116,10 @@ export type RoomMeta = {
   // The project's own design files, found once when Studio is switched on, so the instructions stay
   // the same turn to turn and files an agent creates later are never taken for the person's taste.
   design?: string[]
+  // Expert's random starting points for this room, and what recent Expert rooms settled on, both
+  // fixed when Expert is switched on so the instructions stay the same turn to turn.
+  sparks?: string[]
+  lately?: string[]
   sessions: Record<string, string>
   // Each agent's session totals as of its last turn, so the next turn can be counted on its own.
   meters?: Record<string, Meter & { session: string }>

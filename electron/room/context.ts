@@ -62,7 +62,7 @@ export function protocol(meta: RoomMeta, me: AgentInfo, crew: AgentInfo[], acces
     ].filter(Boolean).join('\n'),
     pack ? `Room focus, ${pack.name}: ${pack.brief}` : '',
     rules.length ? `How this person wants the work done:\n${rules.join('\n')}` : '',
-    studio ? studioCore(studio) : '',
+    studio ? studioCore(studio, meta.sparks, meta.lately) : '',
     main === me.id ? lunchbox(tools.includes('propose_flow')) : '',
   ].filter(Boolean).join('\n\n')
 }
