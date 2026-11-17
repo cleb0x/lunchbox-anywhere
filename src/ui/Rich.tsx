@@ -1,4 +1,5 @@
 import { Fragment, memo, type ReactNode } from 'react'
+import { ThemeOffer } from './ThemeOffer'
 import { foldChecklists, same, sincePlan, type Step } from '../../shared/plan'
 import { steady } from '../../shared/stream'
 import { PlanCard } from './Plan'
@@ -100,7 +101,7 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
         switch (b.t) {
           case 'p': return <p key={i}>{b.text.split('\n').map((l, j) => <Fragment key={j}>{j > 0 && <br />}{inline(l)}</Fragment>)}{end}</p>
           case 'h': return <h4 key={i}>{inline(b.text)}{end}</h4>
-          case 'code': return <pre key={i} className="codeblock" data-lang={b.lang || undefined}>{b.text}{end}</pre>
+          case 'code': return b.lang === 'lunchbox-theme' ? <ThemeOffer key={i} code={b.text} /> : <pre key={i} className="codeblock" data-lang={b.lang || undefined}>{b.text}{end}</pre>
           case 'quote': return (
             <blockquote key={i}>
               {b.paras.map((t, j) => <p key={j}>{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === b.paras.length - 1 && end}</p>)}

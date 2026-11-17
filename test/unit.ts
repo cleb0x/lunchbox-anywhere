@@ -1539,3 +1539,26 @@ test('clean: terminal and template leftovers never reach a reply, real content d
   assert.equal(clean('Path C:' + B + 'Users' + B + 'me'), 'Path C:' + B + 'Users' + B + 'me')
   assert.equal(clean('Tab\tand newline\nkept'), 'Tab\tand newline\nkept')
 })
+
+test('custom themes: what a person or an agent picks is made readable and kept in order', async () => {
+  const { build, contrast, grounds, draftOf, asRaw } = await import('../src/lib/custom')
+  const { THEMES } = await import('../src/lib/themes')
+  // An accent nearly the colour of the night sheet is moved until it reads, and says so.
+  const r = build({ name: 'Murk', base: '#335566', tint: 0.02, night: { block: '#20303a', accent: '#24343c', ascii: ['#ffffff', '#223344', '#88aacc', '#445566'] }, day: { block: '#f4f6f8', accent: '#e9eef2' } })!
+  const night = grounds(r.theme.hue, r.theme.chroma, 'dark'), day = grounds(r.theme.hue, r.theme.chroma, 'light')
+  assert.ok(contrast(r.theme.dark.accent, night.sheet) >= 2.6 && contrast(r.theme.light.accent, day.sheet) >= 2.6)
+  assert.ok(contrast(r.theme.dark.block, night.ground) >= 1.6 && contrast(r.theme.light.block, day.ground) >= 1.6)
+  assert.ok(contrast(r.theme.dark.onBlock, r.theme.dark.block) >= 4.5 && contrast(r.theme.light.onAccent, r.theme.light.accent) >= 3)
+  const g = r.theme.dark.glyphs
+  assert.ok(contrast(g[0], night.sheet) <= contrast(g[3], night.sheet) && contrast(g[3], night.sheet) >= 4.5)
+  assert.ok(r.fixed.length >= 2)
+  // Garbage never becomes a theme; a missing part falls back to colours from the base.
+  assert.equal(build({ name: 'x' }), null)
+  assert.equal(build('not json'), null)
+  assert.ok(build({ base: '#c0392b' })!.theme.dark.glyphs.length === 4)
+  // Any theme can be opened in the editor and comes back the same where it was already sound.
+  const lagoon = THEMES.find((t) => t.id === 'lagoon')!
+  const again = build(asRaw(draftOf(lagoon)), 'x')!.theme
+  assert.equal(again.dark.block, lagoon.dark.block)
+  assert.equal(again.light.accent, lagoon.light.accent)
+})

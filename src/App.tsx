@@ -22,13 +22,14 @@ import { FreeModels } from './views/Free'
 import { Library } from './views/Library'
 import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
-import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type ThemeId } from './lib/themes'
+import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
+import { loadCustom, saveCustom, THEME_BRIEF } from './lib/custom'
 import { shift } from './lib/fit'
 import { ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
 
 export type View =
   | { name: 'room'; id: string; focus?: string }
-  | { name: 'new'; skill?: Skill; pack?: string; text?: string }
+  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean }
   | { name: 'agents' } | { name: 'free' } | { name: 'settings' } | { name: 'pool' } | { name: 'savings' } | { name: 'library' } | { name: 'browser' } | { name: 'waiting' }
   | { name: 'flows'; edit?: string; template?: string }
 export type Look = 'lunchbox' | 'neyra'
@@ -70,6 +71,9 @@ export function App() {
   const [mode, setModeState] = useState<Mode>(saved<string>('theme', 'dark') === 'light' ? 'light' : 'dark')
   const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox')).id)
   const [ascii, setAscii] = useState<AsciiId>(() => asciiOf(saved('ascii', 'theme')).id)
+  // Themes a person made, and the one being made right now, shown on the app before it is saved.
+  const [custom, setCustom] = useState<Theme[]>(loadCustom)
+  const [preview, setPreview] = useState<Theme | null>(null)
   const [look, setLookState] = useState<Look>(() => (new URLSearchParams(location.search).get('look') as Look | null) ?? saved('look', 'lunchbox'))
   const [ready, setReady] = useState<boolean>(saved('ready', false))
   const [arriving, setArriving] = useState(false)
@@ -132,7 +136,7 @@ export function App() {
   const painted = useRef<string[]>([])
   useLayoutEffect(() => {
     const root = document.documentElement
-    const t = themeOf(theme)
+    const t = preview ?? themeOf(theme, custom)
     const a = asciiOf(ascii)
     const set: Record<string, string> = tokens(t, mode)
     const own = a.id === 'theme' || a.id === 'ink' ? null : a[mode]!
@@ -147,10 +151,10 @@ export function App() {
     else delete root.dataset.glyphs
     root.dataset.ascii = a.id
     keep('theme', mode)
-    keep('palette', t.id)
+    if (!preview) keep('palette', t.id)
     keep('ascii', a.id)
     desk.call('theme', mode === 'dark')
-  }, [theme, mode, ascii])
+  }, [theme, mode, ascii, custom, preview])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
   useLayoutEffect(() => { document.documentElement.dataset.platform = /^Win/.test(navigator.platform) ? 'win32' : /Mac/.test(navigator.platform) ? 'darwin' : 'linux' }, [])
   const searchButton = useRef<HTMLButtonElement>(null)
@@ -167,6 +171,27 @@ export function App() {
   }, [loaded, all, view])
 
   const setTheme = (t: ThemeId, e?: MouseEvent) => { if (t !== theme) reveal(() => setThemeState(t), e && { x: e.clientX, y: e.clientY }) }
+  // A theme saved from the editor or from an agent's offer in a room replaces one with its id, or
+  // joins the list, and is put on at once.
+  const keepTheme = useCallback((t: Theme) => {
+    setCustom((list) => { const next = [...list.filter((x) => x.id !== t.id), t]; saveCustom(next); return next })
+    setPreview(null)
+    setThemeState(t.id)
+  }, [])
+  const dropTheme = (id: string) => {
+    const next = custom.filter((x) => x.id !== id)
+    setCustom(next)
+    saveCustom(next)
+    if (theme === id) setTheme('lunchbox')
+  }
+  useEffect(() => {
+    const offer = (e: Event) => keepTheme((e as CustomEvent<Theme>).detail)
+    const show = (e: Event) => setPreview((e as CustomEvent<Theme | null>).detail)
+    addEventListener('lb:theme', offer)
+    addEventListener('lb:theme-preview', show)
+    return () => { removeEventListener('lb:theme', offer); removeEventListener('lb:theme-preview', show) }
+  }, [keepTheme])
+  const themeWithAgent = () => go({ name: 'new', text: THEME_BRIEF, send: true })
   const setMode = (m: Mode, e?: MouseEvent) => { if (m !== mode) reveal(() => setModeState(m), e && { x: e.clientX, y: e.clientY }) }
   const setLook = (l: Look) => flow(() => setLookState(l))
   const setAccess = (a: Access) => { setAccessState(a); keep('access', a) }
@@ -227,7 +252,8 @@ export function App() {
     { group: 'Go to', label: 'Agents', hint: 'Connected agents, models and budgets', run: () => go({ name: 'agents' }) },
     { group: 'Go to', label: 'Settings', hint: `${mod},`, run: () => go({ name: 'settings' }) },
     { group: 'Actions', label: mode === 'dark' ? 'Switch to day' : 'Switch to night', hint: 'Appearance', run: () => setMode(mode === 'dark' ? 'light' : 'dark') },
-    ...THEMES.filter((t) => t.id !== theme).map((t) => ({ group: 'Actions' as const, label: `Theme: ${t.name}`, hint: t.note, run: () => setTheme(t.id) })),
+    ...[...THEMES, ...custom].filter((t) => t.id !== theme).map((t) => ({ group: 'Actions' as const, label: `Theme: ${t.name}`, hint: t.note, run: () => setTheme(t.id) })),
+    { group: 'Actions', label: 'Make a theme with an agent', hint: 'Appearance', run: themeWithAgent },
     { group: 'Actions', label: look === 'neyra' ? 'Look: Lunchbox' : 'Look: Square', hint: 'Appearance', run: () => setLook(look === 'neyra' ? 'lunchbox' : 'neyra') },
     { group: 'Actions', label: 'Check for agents again', hint: 'Agents', run: async () => { await reload.agents(); say('Checked again') } },
     { group: 'Actions', label: 'Mode: Plan', hint: 'Read and plan only', run: () => setAccess('plan') },
@@ -291,7 +317,7 @@ export function App() {
             also a drag region swallows the wheel on macOS. */}
         {!['room', 'browser', 'new'].includes(view.name) && <div className="sheetdrag" aria-hidden="true" />}
         {view.name === 'room' && <RoomView key={view.id} id={view.id} focus={view.focus} access={access} setAccess={setAccess} open={(id) => go({ name: 'room', id })} say={say} />}
-        {view.name === 'new' && <NewRoom key={view.skill?.id ?? view.pack ?? 'new'} skill={view.skill} pack={view.pack} text={view.text} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
+        {view.name === 'new' && <NewRoom key={view.skill?.id ?? view.pack ?? (view.send ? 'send' : 'new')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
         {view.name === 'agents' && <Agents say={say} />}
         {view.name === 'free' && <FreeModels go={go} say={say} />}
         {view.name === 'flows' && <Flows key={view.edit ?? view.template ?? 'list'} edit={view.edit} template={view.template} go={go} say={say} workspace={workspace || env.cwd} />}
@@ -300,7 +326,7 @@ export function App() {
         {view.name === 'savings' && <Savings go={go} />}
         {view.name === 'library' && <Library go={go} say={say} />}
         {view.name === 'browser' && <Browser say={say} covered={palette} />}
-        {view.name === 'settings' && <Settings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
+        {view.name === 'settings' && <Settings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
         </Guard>
       </main>
 

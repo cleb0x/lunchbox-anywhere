@@ -538,6 +538,20 @@ function wallText(e: Extract<Event, { kind: 'wall' }>, agents: AgentInfo[]) {
 // the tail the outcome, the acts and the message tools.
 type Piece = 'head' | 'mid' | 'tail'
 
+// A long message from the person, a brief or a big paste, shows its opening lines and folds the
+// rest away behind one button, so the room reads as a conversation.
+function Folded({ text }: { text: string }) {
+  const long = text.length > 700 || text.split('\n').length > 14
+  const [open, setOpen] = useState(false)
+  if (!long) return <Rich text={text} />
+  return (
+    <>
+      <div className={`folded${open ? ' open' : ''}`}><Rich text={text} /></div>
+      <button type="button" className="unfoldbtn" onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Show all'}</button>
+    </>
+  )
+}
+
 function Row({ e, agents, actions, chosen }: { e: Event; agents: AgentInfo[]; actions: Actions; chosen: Map<string, string> }) {
   switch (e.kind) {
     case 'you':
@@ -547,7 +561,7 @@ function Row({ e, agents, actions, chosen }: { e: Event; agents: AgentInfo[]; ac
           {e.to && <span className="to">to {e.to.map((w) => agentOf(w, agents).short).join(', ')}</span>}
           {e.arena && <span className="to"><IconSplit />side by side</span>}
           <div className="bubble">
-            <Rich text={e.text} />
+            <Folded text={e.text} />
             {e.files && <div className="attached">{e.files.map((f) => <span key={f} className="file" title={f}><Thumb path={f} /><span>{f.split(/[\\/]/).pop()}</span></span>)}</div>}
           </div>
           {/* The room for it is kept from the start: the checkpoint is recorded a moment after the message lands. */}

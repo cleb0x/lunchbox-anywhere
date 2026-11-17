@@ -1,7 +1,10 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { ThemeCards } from '../ui/ThemeCards'
-import { ASCII, themeOf, type AsciiId, type Mode, type ThemeId } from '../lib/themes'
-import { Loader, Mark } from '../ui/bits'
+import { ASCII, themeOf, type AsciiId, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { draftOf, type Draft } from '../lib/custom'
+import { ThemeEditor } from '../ui/ThemeEditor'
+import { Loader, Mark, Sure } from '../ui/bits'
+import { IconEdit, IconPalette, IconPlus, IconTrash } from '../ui/icons'
 import { Logo } from '../ui/Logo'
 import { Maker } from '../ui/Maker'
 import { ACCESS, desk, reason, reload, short, unavailable, useApp, type RemoteStatus } from '../lib/desk'
@@ -75,8 +78,9 @@ function Phone({ say }: { say: (t: string) => void }) {
 const EFFORT = ['claude', 'codex']
 const LEVELS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
 
-export function Settings({ theme, setTheme, mode, setMode, ascii, setAscii, look, setLook, restart, say }: {
-  theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
+export function Settings({ theme, setTheme, mode, setMode, custom, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
+  theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
+  custom: Theme[]; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
   const agents = useApp((s) => s.agents)
@@ -87,6 +91,7 @@ export function Settings({ theme, setTheme, mode, setMode, ascii, setAscii, look
   const usable = agents.filter((a) => !unavailable(a)).sort((a, b) => Number(b.tools) - Number(a.tools))
   const crew = settings.defaultCrew
   const saving = settings.saving ?? {}
+  const [editing, setEditing] = useState<{ draft: Draft; id?: string } | null>(null)
 
   return (
     <div className="page">
@@ -101,7 +106,24 @@ export function Settings({ theme, setTheme, mode, setMode, ascii, setAscii, look
           </div>
           <div className="setting col">
             <div className="grow"><b>Theme</b><span>Lunchbox is ink on black or paper. The others tint every surface and give what is selected, what acts and the ASCII colours of their own.</span></div>
-            <ThemeCards value={theme} mode={mode} pick={setTheme} />
+            <ThemeCards value={theme} mode={mode} pick={setTheme} custom={custom}
+              tools={(t) => (
+                <span className="themetools">
+                  <button className="iconbtn" title="Edit" onClick={() => setEditing({ draft: draftOf(t), id: t.id })}><IconEdit /></button>
+                  <Sure className="iconbtn" act={() => dropTheme(t.id)}>{(sure) => <span title={sure ? 'Click again to delete' : 'Delete'}>{sure ? '?' : <IconTrash />}</span>}</Sure>
+                </span>
+              )}
+              extra={<>
+                <button className="themecard make" onClick={() => setEditing({ draft: draftOf(themeOf(theme === 'lunchbox' ? 'lagoon' : theme, custom), 'My theme') })}>
+                  <span className="tmini plus" aria-hidden="true"><IconPlus /></span>
+                  <b>New theme</b><small>Pick every colour</small>
+                </button>
+                <button className="themecard make" onClick={themeWithAgent}>
+                  <span className="tmini plus" aria-hidden="true"><IconPalette /></span>
+                  <b>With an agent</b><small>Describe it, get a theme</small>
+                </button>
+              </>} />
+            {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
           </div>
           <div className="setting col">
             <div className="grow"><b>ASCII colour</b><span>The characters on the home screen, in the room's field and beside a working agent. Follow the theme, or give them a palette of their own.</span></div>

@@ -97,6 +97,18 @@ if (process.env.FAKE_SCRIPT === 'prose' && name === 'claude') {
   process.exit(0)
 }
 
+// FAKE_SCRIPT=theme: Claude answers the theme brief with a designed theme in a lunchbox-theme block.
+if (process.env.FAKE_SCRIPT === 'theme' && name === 'claude') {
+  const theme = { name: 'Harbour', note: 'Tar, rope and signal orange', base: '#2f4a5a', tint: 0.022,
+    night: { block: '#e9dcc2', accent: '#ff7a3d', ascii: ['#2f4a5a', '#6f8fa0', '#e9dcc2', '#ff7a3d'] },
+    day: { block: '#1f3340', accent: '#e8611f', ascii: ['#b9c9d2', '#6f8fa0', '#1f3340', '#e8611f'] } }
+  const reply = 'From a working harbour at dusk: tarred wood, hemp rope and the orange of a signal buoy.\n\n```lunchbox-theme\n' + JSON.stringify(theme, null, 2) + '\n```'
+  say({ type: 'system', subtype: 'init', session_id: 'theme', model: 'claude-sonnet-5-5' })
+  say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'theme', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
+  process.exit(0)
+}
+
 // FAKE_SCRIPT=saving: Claude Code as the saving code meets it. A new session writes its whole
 // start to the cache, for five minutes when asked to and an hour otherwise; a resumed one reads
 // it back. A line starting "Run:" in the request runs that command the way Claude Code does, through the hook

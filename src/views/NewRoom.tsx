@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { PLAYBOOKS } from '../../shared/skills'
 import type { Skill } from '../../shared/types'
 import { Band } from '../ui/Band'
@@ -59,9 +59,9 @@ function defaultCrew(ids: string[], preferred: string[]) {
 
 const skillText = (s: Skill) => `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}`
 
-export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text }: {
+export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send }: {
   say: (t: string) => void
-  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string
+  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean
 }) {
   const agents = useApp((s) => s.agents)
   const packs = useApp((s) => s.packs)
@@ -102,6 +102,14 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
       say(reason(e))
     }
   }
+  // A room opened to send a message straight away, such as making a theme with an agent, sends it
+  // the moment the crew is known.
+  const sent = useRef(false)
+  useEffect(() => {
+    if (!send || !text || sent.current || !crew.length) return
+    sent.current = true
+    start(text)
+  })
   const shownPacks = packs.filter((p, i) => i < 4 || p.id === pack)
   const morePacks = packs.filter((p) => !shownPacks.includes(p))
   const pick = async () => { const p = await desk.call('pick'); if (p) setWorkspace(p) }

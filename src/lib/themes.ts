@@ -7,11 +7,12 @@
 // - day and night are tuned separately, not inverted: a colour that is a soft block at night is
 //   often the deep one by day.
 
-export type ThemeId = 'lunchbox' | 'lagoon' | 'cobalt' | 'meadow' | 'dusk' | 'glacier' | 'koi'
+// The built in themes by name; a theme a person makes has an id of its own.
+export type ThemeId = string
 export type Mode = 'dark' | 'light'
 type Ramp = [string, string, string, string]
 type Tone = { block: string; onBlock: string; accent: string; onAccent: string; glyphs: Ramp; warn?: string; bad?: string }
-export type Theme = { id: ThemeId; name: string; note: string; hue: number; chroma: number; dark: Tone; light: Tone }
+export type Theme = { id: ThemeId; name: string; note: string; hue: number; chroma: number; dark: Tone; light: Tone; custom?: boolean }
 
 export const THEMES: Theme[] = [
   { id: 'lunchbox', name: 'Lunchbox', note: 'Ink on black or paper', hue: 90, chroma: 0.004,
@@ -43,7 +44,7 @@ export const THEMES: Theme[] = [
     light: { block: '#1d1c1a', onBlock: '#f7f5f0', accent: '#e4503a', onAccent: '#ffffff', glyphs: ['#cbc6bb', '#8f8a80', '#e4503a', '#c48a08'], bad: '#9e1b12' } },
 ]
 
-export const themeOf = (id: string): Theme => THEMES.find((t) => t.id === id) ?? THEMES[0]
+export const themeOf = (id: string, custom: Theme[] = []): Theme => THEMES.find((t) => t.id === id) ?? custom.find((t) => t.id === id) ?? THEMES[0]
 
 // The neutrals of a theme in a mode, at the same lightness steps for every theme.
 export function surfaces(t: Theme, mode: Mode) {
