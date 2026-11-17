@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import { cash, savedIn, savedLine } from '../lib/saved'
 import type { Act, AgentInfo, Event, Live, LiveRun, LiveTurn, RoomMeta, Verdict } from '../../shared/types'
 import { wallWhy } from '../../shared/wall'
+import { clean } from '../../shared/clean'
 import { plan, planOn, plansBefore, type Step } from '../../shared/plan'
 import { searchOf, stepOf, type Search } from '../../shared/steps'
 import { cut } from '../../shared/weave'
@@ -646,7 +647,7 @@ function Turn({ who, e, t, piece, text, grouped, still, doing = '', helper, prio
 }) {
   const a = agentOf(who, agents)
   const flowing = useRef(!!t).current
-  const raw = t ? spoken(t) : text ?? e?.text ?? ''
+  const raw = clean(t ? spoken(t) : text ?? e?.text ?? '')
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const words = piece === 'head' || piece === 'mid'
@@ -672,7 +673,7 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
   const to = agentOf(t ? t.who : e!.to, agents)
   const from = agentOf(t ? t.from ?? '' : e!.from, agents)
   const flowing = useRef(!!t).current
-  const raw = t ? t.text : e!.answer
+  const raw = clean(t ? t.text : e!.answer)
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const tool = e?.via === 'tool'
@@ -1076,7 +1077,7 @@ function Arena({ id, done, going, picked, agents, pick }: { id: string; done: Sa
           return (
             <div key={c.who + id} className={`arenacol${picked === c.who ? ' picked' : picked ? ' dim' : ''}`}>
               <div className="who"><Mark seed={a.mark} size={14} active={c.live} /><b className="name">{a.short}</b><span className="when">{c.ms ? `${(c.ms / 1000).toFixed(1)} s` : ''}</span></div>
-              {c.text ? <Rich text={c.text} caret={c.live} /> : c.error ? <div className="err">{c.error}</div> : <div className="busyline"><span className="shimmer">Thinking</span></div>}
+              {c.text ? <Rich text={clean(c.text)} caret={c.live} /> : c.error ? <div className="err">{c.error}</div> : <div className="busyline"><span className="shimmer">Thinking</span></div>}
               <Acts acts={c.acts} live={c.live} />
               {settled && !picked && !c.error && <button className="btn small quiet keep" onClick={() => pick(id, c.who)}>Keep this one</button>}
             </div>

@@ -1521,3 +1521,21 @@ test('expert: every room starts from its own random corner and steers away from 
   assert.ok(!studioCore([]).includes('Lunchbox drew three starting points'))
   assert.equal(directionGist('# Direction\nMood: dry, exact, nautical\nReferences: tide tables\nSystem: Söhne Breit, navy and brass, 8px'), 'dry, exact, nautical. Söhne Breit, navy and brass, 8px')
 })
+
+test('clean: terminal and template leftovers never reach a reply, real content does', async () => {
+  const { clean } = await import('../shared/clean')
+  const B = String.fromCharCode(92)
+  assert.equal(clean('\x1b[32mDone\x1b[0m, all good<|im_end|>'), 'Done, all good')
+  assert.equal(clean('Working ' + String.fromCharCode(0x280b, 0x2819, 0x2839) + '\rFinished.'), 'Finished.')
+  assert.equal(clean('Answer</think>\n\nHere it is.<|eot_id|>'), 'Answer\n\nHere it is.')
+  assert.equal(clean('ok' + '!'.repeat(300)), 'ok!!!')
+  assert.equal(clean('loop\nloop\nloop\nloop\nloop\nend'), 'loop\nend')
+  // Content stays: quotes, rules, short repeats, tokens written on purpose in code.
+  const quote = '1.\n> after the incident\n>\n> paste any link\n\n---\n\nyes\nyes'
+  assert.equal(clean(quote), quote)
+  assert.equal(clean('Use `<|im_end|>` to stop.'), 'Use `<|im_end|>` to stop.')
+  const code = '```\n<s>tag</s> ' + '='.repeat(60) + '\nx\nx\nx\nx\n```'
+  assert.equal(clean('See:\n' + code), 'See:\n' + code)
+  assert.equal(clean('Path C:' + B + 'Users' + B + 'me'), 'Path C:' + B + 'Users' + B + 'me')
+  assert.equal(clean('Tab\tand newline\nkept'), 'Tab\tand newline\nkept')
+})

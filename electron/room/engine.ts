@@ -7,6 +7,7 @@ import { join, relative } from 'node:path'
 import type { Access, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
 import { asks, plan } from '../../shared/plan'
 import { classify } from '../../shared/route'
+import { clean } from '../../shared/clean'
 import { DESIGN_SOURCES, DIRECTION, directionGist, spark, studioChecks } from '../../shared/studio'
 import { describe as schedule } from '../../shared/flow'
 import { detect, run, type Result } from '../agents'
@@ -503,7 +504,7 @@ export class Engine {
     for (const id of this.quiet.get(room) ?? []) kill(id)
     for (const lt of live.turns) {
       this.flushed.add(lt.id)
-      if (lt.text.trim()) this.add(room, { kind: 'say', who: lt.who, text: lt.text.trim(), acts: lt.acts, error: 'Stopped' })
+      if (lt.text.trim()) this.add(room, { kind: 'say', who: lt.who, text: clean(lt.text).trim(), acts: lt.acts, error: 'Stopped' })
     }
     live.turns = []
     live.doing = ''
@@ -961,6 +962,9 @@ export class Engine {
     // and the room's queue reports what broke.
     try {
       r = await running.done
+      // Whatever a tool or model leaves in its output that was never meant to be read goes here,
+      // before the reply is shown, stored, remembered or handed to another agent.
+      r = { ...r, text: clean(r.text) }
     } finally {
       grant?.revoke()
       procs.delete(running)
@@ -973,7 +977,7 @@ export class Engine {
       this.hooks.emit('ledger', this.ledger())
       if (r.session && me.via === 'cli') this.keep(room, who, r)
       this.flushed.delete(lt.id)
-      this.add(room, { kind: 'say', who, text: lt.text.trim(), acts: r.acts.length ? r.acts : lt.acts, usage: r.usage, ms: r.ms })
+      this.add(room, { kind: 'say', who, text: clean(lt.text).trim(), acts: r.acts.length ? r.acts : lt.acts, usage: r.usage, ms: r.ms })
       const other = this.fallback(meta, who)
       this.add(room, {
         kind: 'decide',
@@ -1019,7 +1023,7 @@ export class Engine {
     const stopped = (this.gens.get(room) ?? 0) !== ctx.gen || r.error === 'Stopped'
     if (stopped) {
       const already = this.flushed.delete(lt.id)
-      if (lt.text.trim() && !already) this.add(room, { kind: 'say', who, text: lt.text.trim(), acts: r.acts, error: 'Stopped' })
+      if (lt.text.trim() && !already) this.add(room, { kind: 'say', who, text: clean(lt.text).trim(), acts: r.acts, error: 'Stopped' })
       return null
     }
     if (r.session && me.via === 'cli') this.keep(room, who, r)
