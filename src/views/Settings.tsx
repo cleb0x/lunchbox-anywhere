@@ -1,4 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react'
+import { ThemeCards } from '../ui/ThemeCards'
+import { ASCII, themeOf, type AsciiId, type Mode, type ThemeId } from '../lib/themes'
 import { Loader, Mark } from '../ui/bits'
 import { Logo } from '../ui/Logo'
 import { Maker } from '../ui/Maker'
@@ -73,8 +75,8 @@ function Phone({ say }: { say: (t: string) => void }) {
 const EFFORT = ['claude', 'codex']
 const LEVELS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
 
-export function Settings({ theme, setTheme, look, setLook, restart, say }: {
-  theme: 'dark' | 'light'; setTheme: (t: 'dark' | 'light', e?: MouseEvent) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
+export function Settings({ theme, setTheme, mode, setMode, ascii, setAscii, look, setLook, restart, say }: {
+  theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
   const agents = useApp((s) => s.agents)
@@ -94,8 +96,26 @@ export function Settings({ theme, setTheme, look, setLook, restart, say }: {
         <h2>Appearance</h2>
         <div className="settings">
           <div className="setting">
-            <div className="grow"><b>Theme</b><span>Dark is ink on black. Light is ink on paper.</span></div>
-            <div className="seg">{(['dark', 'light'] as const).map((t) => <button key={t} className={t === theme ? 'on' : ''} onClick={(e) => setTheme(t, e)}>{t === 'dark' ? 'Dark' : 'Light'}</button>)}</div>
+            <div className="grow"><b>Mode</b><span>Every theme has a night and a day.</span></div>
+            <div className="seg">{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
+          </div>
+          <div className="setting col">
+            <div className="grow"><b>Theme</b><span>Lunchbox is ink on black or paper. The others tint every surface and give what is selected, what acts and the ASCII colours of their own.</span></div>
+            <ThemeCards value={theme} mode={mode} pick={setTheme} />
+          </div>
+          <div className="setting col">
+            <div className="grow"><b>ASCII colour</b><span>The characters on the home screen, in the room's field and beside a working agent. Follow the theme, or give them a palette of their own.</span></div>
+            <div className="asciis" role="radiogroup" aria-label="ASCII colour">
+              {ASCII.map((a) => {
+                const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!
+                return (
+                  <button key={a.id} role="radio" aria-checked={ascii === a.id} className={`asciichip${ascii === a.id ? ' on' : ''}`} onClick={() => setAscii(a.id)}>
+                    <code aria-hidden="true">{'01|*/~'.split('').map((ch, i) => <span key={i} style={ramp ? { color: ramp[[1, 2, 3, 2, 3, 1][i]] } : undefined}>{ch}</span>)}</code>
+                    {a.name}
+                  </button>
+                )
+              })}
+            </div>
           </div>
           <div className="setting">
             <div className="grow"><b>Look</b><span>Lunchbox floats the work on a soft sheet. Square is flat panes, hairlines and square corners.</span></div>

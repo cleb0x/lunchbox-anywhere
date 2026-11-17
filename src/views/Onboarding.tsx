@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
+import { ThemeCards } from '../ui/ThemeCards'
+import { themeOf, type Mode, type ThemeId } from '../lib/themes'
 import type { AgentInfo } from '../../shared/types'
 import { Mark } from '../ui/bits'
 import { Band } from '../ui/Band'
@@ -13,8 +15,8 @@ const r = (i: number) => ({ '--i': i }) as CSSProperties
 
 // One band of code characters stays at the top through every step: it spells the name on the
 // welcome, then the word dissolves into it and its label says what the step is doing.
-export function Onboarding({ onDone, workspace, theme, setTheme }: {
-  onDone: (folder: string | null) => void; workspace: string; theme: 'dark' | 'light'; setTheme: (t: 'dark' | 'light', e?: MouseEvent) => void
+export function Onboarding({ onDone, workspace, theme, setTheme, mode, setMode }: {
+  onDone: (folder: string | null) => void; workspace: string; theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
 }) {
   const [step, setStep] = useState(0)
   const [folder, setFolder] = useState<string | null>(null)
@@ -26,7 +28,7 @@ export function Onboarding({ onDone, workspace, theme, setTheme }: {
   const done = () => { setLeaving(true); setTimeout(() => onDone(folder), 560) }
   useEffect(() => {
     if (step === 0) setLabel('')
-    if (step === 2) setLabel(theme === 'dark' ? 'ink on black' : 'ink on paper')
+    if (step === 2) setLabel(themeOf(theme).note.toLowerCase())
     if (step === 3) setLabel('choosing a workspace')
   }, [step, theme])
 
@@ -41,7 +43,7 @@ export function Onboarding({ onDone, workspace, theme, setTheme }: {
         </div>
         {step === 0 && <Welcome onNext={next} />}
         {step === 1 && <Agents onNext={next} setLabel={setLabel} setBusy={setBusy} />}
-        {step === 2 && <Look theme={theme} setTheme={setTheme} onNext={next} />}
+        {step === 2 && <Look theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} onNext={next} />}
         {step === 3 && <Folder folder={folder ?? workspace} pick={async () => { const p = await desk.call('pick'); if (p) setFolder(p) }} onDone={done} />}
       </div>
     </div>
@@ -146,23 +148,14 @@ function Agents({ onNext, setLabel, setBusy }: { onNext: () => void; setLabel: (
   )
 }
 
-function Look({ theme, setTheme, onNext }: { theme: 'dark' | 'light'; setTheme: (t: 'dark' | 'light', e?: MouseEvent) => void; onNext: () => void }) {
+function Look({ theme, setTheme, mode, setMode, onNext }: { theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void; onNext: () => void }) {
   useEnter(onNext)
   return (
     <div className="obpage">
-      <h1 className="rise" style={r(0)}>Dark or light?</h1>
+      <h1 className="rise" style={r(0)}>Pick a theme</h1>
       <p className="rise" style={r(1)}>Change it any time in Settings.</p>
-      <div className="looks rise" style={r(2)}>
-        {(['dark', 'light'] as const).map((t) => (
-          <button key={t} className={`lookcard ${t}${theme === t ? ' on' : ''}`} onClick={(e) => setTheme(t, e)} aria-pressed={theme === t}>
-            <span className="mini" aria-hidden="true">
-              <span className="mside"><i /><i /><i /></span>
-              <span className="msheet"><i className="l1" /><i className="l2" /><i className="l3" /><i className="mbox" /></span>
-            </span>
-            <b>{t === 'dark' ? 'Dark' : 'Light'}</b>
-          </button>
-        ))}
-      </div>
+      <div className="rise" style={r(2)}><ThemeCards value={theme} mode={mode} pick={setTheme} /></div>
+      <div className="seg rise" style={r(2)}>{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
       <button className="btn big rise" style={r(3)} onClick={onNext}>Continue <kbd>↵</kbd></button>
     </div>
   )

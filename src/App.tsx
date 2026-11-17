@@ -22,6 +22,7 @@ import { FreeModels } from './views/Free'
 import { Library } from './views/Library'
 import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
+import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type ThemeId } from './lib/themes'
 import { shift } from './lib/fit'
 import { ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
 
@@ -65,7 +66,10 @@ function reveal(change: () => void, at?: { x: number; y: number }) {
 const failure = (t: string) => /\b(fail(ed|s)?|error|could ?n[o']t|cannot|can't|not found|denied|refused|unable|timed out|crash)/i.test(t)
 
 export function App() {
-  const [theme, setThemeState] = useState<'dark' | 'light'>(saved('theme', 'dark'))
+  // 'theme' has always held dark or light, so it stays the mode; the theme is saved beside it.
+  const [mode, setModeState] = useState<Mode>(saved<string>('theme', 'dark') === 'light' ? 'light' : 'dark')
+  const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox')).id)
+  const [ascii, setAscii] = useState<AsciiId>(() => asciiOf(saved('ascii', 'theme')).id)
   const [look, setLookState] = useState<Look>(() => (new URLSearchParams(location.search).get('look') as Look | null) ?? saved('look', 'lunchbox'))
   const [ready, setReady] = useState<boolean>(saved('ready', false))
   const [arriving, setArriving] = useState(false)
@@ -122,11 +126,31 @@ export function App() {
   // An empty workspace means each room makes its own folder. Older installs saved the shared root
   // as their folder by default; that now means the same thing.
   useEffect(() => { if (workspace && workspace === env.cwd) setWorkspaceState('') }, [env.cwd, workspace])
+  // The theme's colours go on the root as custom properties, and the ASCII colour after them, on
+  // its own or following the theme. data-glyphs says a ramp is in use, so the bands, the field,
+  // the strips and the dot fields colour themselves; without it they are ink.
+  const painted = useRef<string[]>([])
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme
-    keep('theme', theme)
-    desk.call('theme', theme === 'dark')
-  }, [theme])
+    const root = document.documentElement
+    const t = themeOf(theme)
+    const a = asciiOf(ascii)
+    const set: Record<string, string> = tokens(t, mode)
+    const own = a.id === 'theme' || a.id === 'ink' ? null : a[mode]!
+    own?.forEach((c, i) => { set[`--glyph-${i + 1}`] = c })
+    for (const k of painted.current) if (!(k in set)) root.style.removeProperty(k)
+    for (const [k, v] of Object.entries(set)) root.style.setProperty(k, v)
+    painted.current = Object.keys(set)
+    root.dataset.theme = mode
+    if (t.id === 'lunchbox') delete root.dataset.palette
+    else root.dataset.palette = t.id
+    if (own || (a.id === 'theme' && t.id !== 'lunchbox')) root.dataset.glyphs = ''
+    else delete root.dataset.glyphs
+    root.dataset.ascii = a.id
+    keep('theme', mode)
+    keep('palette', t.id)
+    keep('ascii', a.id)
+    desk.call('theme', mode === 'dark')
+  }, [theme, mode, ascii])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
   useLayoutEffect(() => { document.documentElement.dataset.platform = /^Win/.test(navigator.platform) ? 'win32' : /Mac/.test(navigator.platform) ? 'darwin' : 'linux' }, [])
   const searchButton = useRef<HTMLButtonElement>(null)
@@ -142,7 +166,8 @@ export function App() {
     if (gone) setView({ name: 'new' })
   }, [loaded, all, view])
 
-  const setTheme = (t: 'dark' | 'light', e?: MouseEvent) => { if (t !== theme) reveal(() => setThemeState(t), e && { x: e.clientX, y: e.clientY }) }
+  const setTheme = (t: ThemeId, e?: MouseEvent) => { if (t !== theme) reveal(() => setThemeState(t), e && { x: e.clientX, y: e.clientY }) }
+  const setMode = (m: Mode, e?: MouseEvent) => { if (m !== mode) reveal(() => setModeState(m), e && { x: e.clientX, y: e.clientY }) }
   const setLook = (l: Look) => flow(() => setLookState(l))
   const setAccess = (a: Access) => { setAccessState(a); keep('access', a) }
   const setWorkspace = (w: string) => { setWorkspaceState(w); keep('workspace', w) }
@@ -186,7 +211,7 @@ export function App() {
   }
 
   if (!loaded) return <div className="booting"><Loader size={14} /></div>
-  if (!ready) return <Onboarding onDone={finish} workspace={workspace} setTheme={(t, e) => setTheme(t, e)} theme={theme} />
+  if (!ready) return <Onboarding onDone={finish} workspace={workspace} theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} />
 
   const commands: Command[] = [
     { group: 'Actions', label: 'New room', hint: `${mod}N`, run: () => go({ name: 'new' }) },
@@ -201,7 +226,8 @@ export function App() {
     { group: 'Actions', label: 'New flow', hint: 'Flows', run: () => go({ name: 'flows', edit: 'new' }) },
     { group: 'Go to', label: 'Agents', hint: 'Connected agents, models and budgets', run: () => go({ name: 'agents' }) },
     { group: 'Go to', label: 'Settings', hint: `${mod},`, run: () => go({ name: 'settings' }) },
-    { group: 'Actions', label: theme === 'dark' ? 'Switch to light' : 'Switch to dark', hint: 'Appearance', run: () => setTheme(theme === 'dark' ? 'light' : 'dark') },
+    { group: 'Actions', label: mode === 'dark' ? 'Switch to day' : 'Switch to night', hint: 'Appearance', run: () => setMode(mode === 'dark' ? 'light' : 'dark') },
+    ...THEMES.filter((t) => t.id !== theme).map((t) => ({ group: 'Actions' as const, label: `Theme: ${t.name}`, hint: t.note, run: () => setTheme(t.id) })),
     { group: 'Actions', label: look === 'neyra' ? 'Look: Lunchbox' : 'Look: Square', hint: 'Appearance', run: () => setLook(look === 'neyra' ? 'lunchbox' : 'neyra') },
     { group: 'Actions', label: 'Check for agents again', hint: 'Agents', run: async () => { await reload.agents(); say('Checked again') } },
     { group: 'Actions', label: 'Mode: Plan', hint: 'Read and plan only', run: () => setAccess('plan') },
@@ -274,7 +300,7 @@ export function App() {
         {view.name === 'savings' && <Savings go={go} />}
         {view.name === 'library' && <Library go={go} say={say} />}
         {view.name === 'browser' && <Browser say={say} covered={palette} />}
-        {view.name === 'settings' && <Settings theme={theme} setTheme={setTheme} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
+        {view.name === 'settings' && <Settings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
         </Guard>
       </main>
 
