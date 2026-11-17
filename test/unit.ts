@@ -1562,3 +1562,24 @@ test('custom themes: what a person or an agent picks is made readable and kept i
   assert.equal(again.dark.block, lagoon.dark.block)
   assert.equal(again.light.accent, lagoon.light.accent)
 })
+
+test('fine tune: one colour on top of a theme, with what follows from it, and nothing broken on load', async () => {
+  const { tuned, loadTune, warnings } = await import('../src/lib/tune')
+  const { contrast } = await import('../src/lib/custom')
+  const set = tuned({ dark: { '--ink': '#e0d8ff', '--accent': '#ffcc00' }, light: {} }, 'dark')
+  assert.equal(set['--ink'], '#e0d8ff')
+  assert.match(set['--dim'], /var\(--ink\) 64%/)
+  assert.ok(contrast(set['--on-accent'], '#ffcc00') >= 4.5)
+  assert.deepEqual(tuned({ dark: {}, light: { '--sheet': '#ffffff' } }, 'dark'), {}, 'night is untouched by a day tune')
+  assert.equal(set['--block'], undefined)
+  // Whatever is stored, only known parts with real colours come back.
+  const store = new Map<string, string>()
+  ;(globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) }
+  store.set('lb.tune', JSON.stringify({ dark: { '--ink': '#ffffff', '--evil': '#000000', '--sheet': 'red' }, light: 'nope' }))
+  assert.deepEqual(loadTune(), { dark: { '--ink': '#ffffff' }, light: {} })
+  store.set('lb.tune', '{broken')
+  assert.deepEqual(loadTune(), { dark: {}, light: {} })
+  delete (globalThis as any).localStorage
+  assert.deepEqual(warnings('#222222', '#1e1e1e', '#262626'), ['Text is hard to read on the sheet.'])
+  assert.deepEqual(warnings('#f2f0ea', '#0e0e0d', '#161614'), [])
+})

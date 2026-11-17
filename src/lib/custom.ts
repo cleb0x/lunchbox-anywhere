@@ -60,7 +60,7 @@ export function grounds(hue: number, tint: number, mode: Mode) {
 }
 
 // Text that sits on a colour: a deep or a pale shade of the colour's own hue, whichever reads better.
-function on(bg: string) {
+export function on(bg: string) {
   const { c, h } = oklch(bg)
   const deep = hexOf(0.22, Math.min(c, 0.06), h), pale = hexOf(0.985, Math.min(c, 0.02), h)
   return contrast(deep, bg) >= contrast(pale, bg) ? deep : pale

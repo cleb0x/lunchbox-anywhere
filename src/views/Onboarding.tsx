@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { ThemeCards } from '../ui/ThemeCards'
-import { themeOf, type Mode, type ThemeId } from '../lib/themes'
+import { THEMES, themeOf, type Mode, type ThemeId } from '../lib/themes'
 import type { AgentInfo } from '../../shared/types'
 import { Mark } from '../ui/bits'
 import { Band } from '../ui/Band'
@@ -154,7 +154,7 @@ function Look({ theme, setTheme, mode, setMode, onNext }: { theme: ThemeId; setT
     <div className="obpage">
       <h1 className="rise" style={r(0)}>Pick a theme</h1>
       <p className="rise" style={r(1)}>Change it any time in Settings.</p>
-      <div className="rise" style={r(2)}><ThemeCards value={theme} mode={mode} pick={setTheme} /></div>
+      <div className="rise" style={r(2)}><ThemeCards themes={THEMES} value={theme} mode={mode} pick={setTheme} /></div>
       <div className="seg rise" style={r(2)}>{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
       <button className="btn big rise" style={r(3)} onClick={onNext}>Continue <kbd>↵</kbd></button>
     </div>

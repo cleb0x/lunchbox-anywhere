@@ -1,5 +1,5 @@
 import type { CSSProperties, MouseEvent, ReactNode } from 'react'
-import { surfaces, THEMES, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { surfaces, type Mode, type Theme, type ThemeId } from '../lib/themes'
 
 // A small window in a theme's own colours in the mode that is on: the sidebar with a selected row
 // in its block colour, the sheet with a strip of its ASCII ramp, and the message box with the send
@@ -13,7 +13,7 @@ export function ThemeMini({ t, mode }: { t: Theme; mode: Mode }) {
     '--ts': lunchbox ? (mode === 'dark' ? '#0e0e0d' : '#fbfaf7') : s.sheet,
     '--tw': lunchbox ? (mode === 'dark' ? '#161614' : '#f3f2ee') : s.well,
     '--ti': lunchbox ? (mode === 'dark' ? '#f2f0ea' : '#0e0e0d') : s.ink,
-    '--tb': tone.block, '--ta': tone.accent,
+    '--tb': lunchbox ? tone.block : `color-mix(in oklab, ${tone.block} 30%, transparent)`, '--ta': tone.accent,
   } as CSSProperties
   return (
     <span className="tmini" style={vars} aria-hidden="true">
@@ -26,25 +26,23 @@ export function ThemeMini({ t, mode }: { t: Theme; mode: Mode }) {
   )
 }
 
-// Every theme as a card, the ones a person made after the built in ones, with room for the cards
-// that make new ones. The same cards on the first run and in Settings.
-export function ThemeCards({ value, mode, pick, custom = [], tools, extra }: {
-  value: ThemeId; mode: Mode; pick: (t: ThemeId, e: MouseEvent) => void; custom?: Theme[]
-  tools?: (t: Theme) => ReactNode; extra?: ReactNode
+// A row of theme cards: a small window, the name, and the theme's note as its title. The built in
+// themes are one even row of seven; the ones a person made sit in their own row under it, with
+// edit and delete on the corner.
+export function ThemeCards({ themes, value, mode, pick, tools }: {
+  themes: Theme[]; value: ThemeId; mode: Mode; pick: (t: ThemeId, e: MouseEvent) => void; tools?: (t: Theme) => ReactNode
 }) {
   return (
     <div className="themes" role="radiogroup" aria-label="Theme">
-      {[...THEMES, ...custom].map((t) => (
+      {themes.map((t) => (
         <div key={t.id} className="themeslot">
           <button role="radio" aria-checked={value === t.id} className={`themecard${value === t.id ? ' on' : ''}`} onClick={(e) => pick(t.id, e)} title={t.note}>
             <ThemeMini t={t} mode={mode} />
             <b>{t.name}</b>
-            <small>{t.note}</small>
           </button>
-          {t.custom && tools?.(t)}
+          {tools?.(t)}
         </div>
       ))}
-      {extra}
     </div>
   )
 }

@@ -1,8 +1,10 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { ThemeCards } from '../ui/ThemeCards'
-import { ASCII, themeOf, type AsciiId, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { ASCII, THEMES, themeOf, type AsciiId, type Mode, type Theme, type ThemeId } from '../lib/themes'
 import { draftOf, type Draft } from '../lib/custom'
 import { ThemeEditor } from '../ui/ThemeEditor'
+import { TuneSheet } from '../ui/TuneSheet'
+import type { Tune } from '../lib/tune'
 import { Loader, Mark, Sure } from '../ui/bits'
 import { IconEdit, IconPalette, IconPlus, IconTrash } from '../ui/icons'
 import { Logo } from '../ui/Logo'
@@ -78,9 +80,9 @@ function Phone({ say }: { say: (t: string) => void }) {
 const EFFORT = ['claude', 'codex']
 const LEVELS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
 
-export function Settings({ theme, setTheme, mode, setMode, custom, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
+export function Settings({ theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
   theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
-  custom: Theme[]; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
+  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
   const agents = useApp((s) => s.agents)
@@ -92,6 +94,8 @@ export function Settings({ theme, setTheme, mode, setMode, custom, keepTheme, dr
   const crew = settings.defaultCrew
   const saving = settings.saving ?? {}
   const [editing, setEditing] = useState<{ draft: Draft; id?: string } | null>(null)
+  const [tuning, setTuning] = useState(false)
+  const tunedCount = Object.keys(tune.dark).length + Object.keys(tune.light).length
 
   return (
     <div className="page">
@@ -105,31 +109,10 @@ export function Settings({ theme, setTheme, mode, setMode, custom, keepTheme, dr
             <div className="seg">{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
           </div>
           <div className="setting col">
-            <div className="grow"><b>Theme</b><span>Lunchbox is ink on black or paper. The others tint every surface and give what is selected, what acts and the ASCII colours of their own.</span></div>
-            <ThemeCards value={theme} mode={mode} pick={setTheme} custom={custom}
-              tools={(t) => (
-                <span className="themetools">
-                  <button className="iconbtn" title="Edit" onClick={() => setEditing({ draft: draftOf(t), id: t.id })}><IconEdit /></button>
-                  <Sure className="iconbtn" act={() => dropTheme(t.id)}>{(sure) => <span title={sure ? 'Click again to delete' : 'Delete'}>{sure ? '?' : <IconTrash />}</span>}</Sure>
-                </span>
-              )}
-              extra={<>
-                <button className="themecard make" onClick={() => setEditing({ draft: draftOf(themeOf(theme === 'lunchbox' ? 'lagoon' : theme, custom), 'My theme') })}>
-                  <span className="tmini plus" aria-hidden="true"><IconPlus /></span>
-                  <b>New theme</b><small>Pick every colour</small>
-                </button>
-                <button className="themecard make" onClick={themeWithAgent}>
-                  <span className="tmini plus" aria-hidden="true"><IconPalette /></span>
-                  <b>With an agent</b><small>Describe it, get a theme</small>
-                </button>
-              </>} />
-            {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
-          </div>
-          <div className="setting col">
             <div className="grow"><b>ASCII colour</b><span>The characters on the home screen, in the room's field and beside a working agent. Follow the theme, or give them a palette of their own.</span></div>
             <div className="asciis" role="radiogroup" aria-label="ASCII colour">
               {ASCII.map((a) => {
-                const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!
+                const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme, custom)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!
                 return (
                   <button key={a.id} role="radio" aria-checked={ascii === a.id} className={`asciichip${ascii === a.id ? ' on' : ''}`} onClick={() => setAscii(a.id)}>
                     <code aria-hidden="true">{'01|*/~'.split('').map((ch, i) => <span key={i} style={ramp ? { color: ramp[[1, 2, 3, 2, 3, 1][i]] } : undefined}>{ch}</span>)}</code>
@@ -138,6 +121,33 @@ export function Settings({ theme, setTheme, mode, setMode, custom, keepTheme, dr
                 )
               })}
             </div>
+          </div>
+          <div className="setting col">
+            <div className="grow"><b>Theme</b><span>Lunchbox is ink on black or paper. The others tint every surface and give what is selected, what acts and the ASCII colours of their own.</span></div>
+            <ThemeCards themes={THEMES} value={theme} mode={mode} pick={setTheme} />
+            {custom.length > 0 && (
+              <>
+                <span className="themesub">Yours</span>
+                <ThemeCards themes={custom} value={theme} mode={mode} pick={setTheme}
+                  tools={(t) => (
+                    <span className="themetools">
+                      <button className="iconbtn" title="Edit" onClick={() => setEditing({ draft: draftOf(t), id: t.id })}><IconEdit /></button>
+                      <Sure className="iconbtn" act={() => dropTheme(t.id)}>{(sure) => <span title={sure ? 'Click again to delete' : 'Delete'}>{sure ? '?' : <IconTrash />}</span>}</Sure>
+                    </span>
+                  )} />
+              </>
+            )}
+            <div className="themefoot">
+              <span className="themenow"><b>{themeOf(theme, custom).name}</b>{themeOf(theme, custom).note}</span>
+              <button className="btn small quiet" onClick={() => setEditing({ draft: draftOf(themeOf(theme === 'lunchbox' ? 'lagoon' : theme, custom), 'My theme') })}><IconPlus />New theme</button>
+              <button className="btn small quiet" onClick={themeWithAgent}><IconPalette />Make one with an agent</button>
+            </div>
+            {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
+          </div>
+          <div className="setting">
+            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand, on top of the theme.` : 'Change single colours, like the text or the sheet, on top of any theme.'}</span></div>
+            <button className="btn small quiet" onClick={() => setTuning(true)}>Customise</button>
+            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} />}
           </div>
           <div className="setting">
             <div className="grow"><b>Look</b><span>Lunchbox floats the work on a soft sheet. Square is flat panes, hairlines and square corners.</span></div>

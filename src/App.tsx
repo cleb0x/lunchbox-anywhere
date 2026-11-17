@@ -24,6 +24,7 @@ import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
 import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, THEME_BRIEF } from './lib/custom'
+import { loadTune, saveTune, tuned, type Tune } from './lib/tune'
 import { shift } from './lib/fit'
 import { ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
 
@@ -74,6 +75,9 @@ export function App() {
   // Themes a person made, and the one being made right now, shown on the app before it is saved.
   const [custom, setCustom] = useState<Theme[]>(loadCustom)
   const [preview, setPreview] = useState<Theme | null>(null)
+  // Single colours changed on top of the theme, per mode, from Fine tune in Settings.
+  const [tune, setTuneState] = useState<Tune>(loadTune)
+  const setTune = (t: Tune) => { setTuneState(t); saveTune(t) }
   const [look, setLookState] = useState<Look>(() => (new URLSearchParams(location.search).get('look') as Look | null) ?? saved('look', 'lunchbox'))
   const [ready, setReady] = useState<boolean>(saved('ready', false))
   const [arriving, setArriving] = useState(false)
@@ -141,11 +145,14 @@ export function App() {
     const set: Record<string, string> = tokens(t, mode)
     const own = a.id === 'theme' || a.id === 'ink' ? null : a[mode]!
     own?.forEach((c, i) => { set[`--glyph-${i + 1}`] = c })
+    // The tune goes last, so a colour picked by hand wins over the theme's.
+    if (!preview) Object.assign(set, tuned(tune, mode))
     for (const k of painted.current) if (!(k in set)) root.style.removeProperty(k)
     for (const [k, v] of Object.entries(set)) root.style.setProperty(k, v)
     painted.current = Object.keys(set)
     root.dataset.theme = mode
-    if (t.id === 'lunchbox') delete root.dataset.palette
+    // A selected colour tuned onto Lunchbox's own theme needs the rules that draw it.
+    if (t.id === 'lunchbox' && !set['--block']) delete root.dataset.palette
     else root.dataset.palette = t.id
     if (own || (a.id === 'theme' && t.id !== 'lunchbox')) root.dataset.glyphs = ''
     else delete root.dataset.glyphs
@@ -154,7 +161,7 @@ export function App() {
     if (!preview) keep('palette', t.id)
     keep('ascii', a.id)
     desk.call('theme', mode === 'dark')
-  }, [theme, mode, ascii, custom, preview])
+  }, [theme, mode, ascii, custom, preview, tune])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
   useLayoutEffect(() => { document.documentElement.dataset.platform = /^Win/.test(navigator.platform) ? 'win32' : /Mac/.test(navigator.platform) ? 'darwin' : 'linux' }, [])
   const searchButton = useRef<HTMLButtonElement>(null)
@@ -326,7 +333,7 @@ export function App() {
         {view.name === 'savings' && <Savings go={go} />}
         {view.name === 'library' && <Library go={go} say={say} />}
         {view.name === 'browser' && <Browser say={say} covered={palette} />}
-        {view.name === 'settings' && <Settings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
+        {view.name === 'settings' && <Settings theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} tune={tune} setTune={setTune} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
         </Guard>
       </main>
 

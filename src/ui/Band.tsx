@@ -170,7 +170,7 @@ export function Band({ rows = 9, label = '', word, busy = false, patterned = fal
     }
     colour()
     const theme = new MutationObserver(() => { colour(); draw(performance.now()) })
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-look', 'data-palette', 'data-ascii', 'data-glyphs'] })
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-look', 'data-palette', 'data-ascii', 'data-glyphs', 'style'] })
     size()
     const ro = new ResizeObserver(() => { size(); draw(performance.now()) })
     ro.observe(el)
