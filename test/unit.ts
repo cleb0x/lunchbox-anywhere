@@ -1583,3 +1583,18 @@ test('fine tune: one colour on top of a theme, with what follows from it, and no
   assert.deepEqual(warnings('#222222', '#1e1e1e', '#262626'), ['Text is hard to read on the sheet.'])
   assert.deepEqual(warnings('#f2f0ea', '#0e0e0d', '#161614'), [])
 })
+
+test('agent themes: surfaces of their own, held to readable text, and a brief that carries the current theme', async () => {
+  const { build, contrast, themeBrief } = await import('../src/lib/custom')
+  const { THEMES } = await import('../src/lib/themes')
+  // A warm paper sheet by day with a text colour too pale for it: the sheet stays, the text darkens.
+  const r = build({ name: 'Ledger', base: '#8a6f4e', tint: 0.02, day: { block: '#2f2a24', accent: '#b5462f', sheet: '#f3ead8', text: '#b8a990', box: '#ebe0ca' }, night: { block: '#e6d8bd', accent: '#e07a5f', waiting: '#e0b04a' } })!
+  assert.equal(r.theme.light.sheet, '#f3ead8')
+  assert.ok(contrast(r.theme.light.text!, '#f3ead8') >= 4.5 && contrast(r.theme.light.text!, '#ebe0ca') >= 4.5)
+  assert.ok(r.fixed.some((f) => f.includes('day text')))
+  assert.equal(r.theme.dark.warn, '#e0b04a')
+  assert.equal(r.theme.dark.sheet, undefined, 'night keeps the neutrals it did not set')
+  const brief = themeBrief(THEMES.find((t) => t.id === 'koi')!)
+  assert.ok(brief.includes('The theme I use now is Koi') && brief.includes('"base"') && brief.includes('lunchbox-theme'))
+  assert.ok(brief.includes('screenshots, photos, a website') && !brief.includes('\\`'))
+})

@@ -1,11 +1,11 @@
 import type { CSSProperties, MouseEvent, ReactNode } from 'react'
-import { surfaces, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { surfacesOf, type Mode, type Theme, type ThemeId } from '../lib/themes'
 
 // A small window in a theme's own colours in the mode that is on: the sidebar with a selected row
 // in its block colour, the sheet with a strip of its ASCII ramp, and the message box with the send
 // button in its accent.
 export function ThemeMini({ t, mode }: { t: Theme; mode: Mode }) {
-  const s = surfaces(t, mode)
+  const s = surfacesOf(t, mode)
   const tone = t[mode]
   const lunchbox = t.id === 'lunchbox'
   const vars = {

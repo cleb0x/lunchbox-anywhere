@@ -11,7 +11,9 @@
 export type ThemeId = string
 export type Mode = 'dark' | 'light'
 type Ramp = [string, string, string, string]
-type Tone = { block: string; onBlock: string; accent: string; onAccent: string; glyphs: Ramp; warn?: string; bad?: string }
+// A theme made by hand or by an agent may also set its own text, sheet, frame and message box,
+// which then replace the neutrals for that mode.
+type Tone = { block: string; onBlock: string; accent: string; onAccent: string; glyphs: Ramp; warn?: string; bad?: string; text?: string; sheet?: string; frame?: string; box?: string }
 export type Theme = { id: ThemeId; name: string; note: string; hue: number; chroma: number; dark: Tone; light: Tone; custom?: boolean }
 
 export const THEMES: Theme[] = [
@@ -54,10 +56,16 @@ export function surfaces(t: Theme, mode: Mode) {
     : { ground: `oklch(93% ${c * 1.3} ${h})`, sheet: `oklch(98.6% ${c * 0.35} ${h})`, well: `oklch(96% ${c * 0.6} ${h})`, ink: `oklch(25% ${c * 2.4} ${h})` }
 }
 
+// The neutrals with whatever the theme sets for itself in that mode.
+export function surfacesOf(t: Theme, mode: Mode) {
+  const s = surfaces(t, mode), tone = t[mode]
+  return { ground: tone.frame ?? s.ground, sheet: tone.sheet ?? s.sheet, well: tone.box ?? s.well, ink: tone.text ?? s.ink }
+}
+
 // Every custom property a theme sets on the root. Lunchbox sets none: styles.css is its source.
 export function tokens(t: Theme, mode: Mode): Record<string, string> {
   if (t.id === 'lunchbox') return {}
-  const s = surfaces(t, mode)
+  const s = surfacesOf(t, mode)
   const tone = t[mode]
   const mix = (n: number) => `color-mix(in oklab, var(--ink) ${n}%, transparent)`
   return {

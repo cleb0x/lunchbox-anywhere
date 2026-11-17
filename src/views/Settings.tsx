@@ -80,8 +80,8 @@ function Phone({ say }: { say: (t: string) => void }) {
 const EFFORT = ['claude', 'codex']
 const LEVELS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
 
-export function Settings({ theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
-  theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
+export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
+  edit?: string; theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
   custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
@@ -95,6 +95,11 @@ export function Settings({ theme, setTheme, mode, setMode, custom, tune, setTune
   const saving = settings.saving ?? {}
   const [editing, setEditing] = useState<{ draft: Draft; id?: string } | null>(null)
   const [tuning, setTuning] = useState(false)
+  // Opened from a theme an agent offered: that theme goes straight into the editor.
+  useEffect(() => {
+    const t = edit && custom.find((x) => x.id === edit)
+    if (t) setEditing({ draft: draftOf(t), id: t.id })
+  }, [edit])
   const tunedCount = Object.keys(tune.dark).length + Object.keys(tune.light).length
 
   return (

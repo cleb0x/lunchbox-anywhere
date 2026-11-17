@@ -11,9 +11,11 @@ export type Draft = {
   note: string
   base: string
   tint: number
-  dark: { block: string; accent: string; ascii: string[] }
-  light: { block: string; accent: string; ascii: string[] }
+  dark: Colours
+  light: Colours
 }
+// The colours of one mode. The last six are optional: left out, the base and tint decide them.
+type Colours = { block: string; accent: string; ascii: string[]; text?: string; sheet?: string; frame?: string; box?: string; warn?: string; bad?: string }
 
 // Colour in OKLab and OKLCH (Björn Ottosson's matrices), enough to reason about lightness and
 // contrast without leaving the hue a person chose.
@@ -94,9 +96,19 @@ export function build(raw: unknown, id?: string): { theme: Theme; fixed: string[
     const src = (mode === 'dark' ? r.night ?? r.dark : r.day ?? r.light) ?? {}
     const g = grounds(h, tint, mode)
     const fallback = (l: number, c: number) => hexOf(l, c, h)
+    const word = mode === 'dark' ? 'night' : 'day'
+    // Surfaces a theme sets itself replace the neutrals, and the text is held to what reads on them.
+    const own = { sheet: hex(src.sheet, ''), frame: hex(src.frame ?? src.ground, ''), box: hex(src.box ?? src.well, ''), text: hex(src.text ?? src.ink, '') }
+    if (own.sheet) g.sheet = own.sheet
+    if (own.frame) g.ground = own.frame
+    let ink = own.text || (own.sheet || own.box ? (mode === 'dark' ? fallback(0.96, tint * 0.6) : fallback(0.25, tint * 2.4)) : '')
+    if (ink) {
+      for (const bg of [g.sheet, own.box].filter(Boolean)) ink = lift(ink, bg, 4.5, mode)
+      if (contrast(ink, g.sheet) < 4.5) ink = on(g.sheet)
+      if (own.text && ink !== own.text) fixed.push(`The ${word} text was hard to read, so it is a shade ${mode === 'dark' ? 'lighter' : 'darker'}.`)
+    }
     let block = hex(src.block, mode === 'dark' ? fallback(0.88, 0.07) : fallback(0.3, 0.08))
     let accent = hex(src.accent, mode === 'dark' ? fallback(0.75, 0.13) : fallback(0.55, 0.15))
-    const word = mode === 'dark' ? 'night' : 'day'
     const block2 = lift(block, g.ground, 1.6, mode)
     if (block2 !== block) { fixed.push(`The ${word} block was too close to the frame, so it is a shade further from it.`); block = block2 }
     const accent2 = lift(accent, g.sheet, 2.6, mode)
@@ -107,7 +119,8 @@ export function build(raw: unknown, id?: string): { theme: Theme; fixed: string[
     const sorted = ramp.slice(0, 4).sort((a: string, b: string) => contrast(a, g.sheet) - contrast(b, g.sheet))
     if (sorted.join() !== ramp.slice(0, 4).join()) fixed.push(`The ${word} ASCII colours are put in order, quiet to loud.`)
     sorted[3] = lift(sorted[3], g.sheet, 4.5, mode)
-    return { block, onBlock: on(block), accent, onAccent: on(accent), glyphs: sorted as [string, string, string, string] }
+    const extra = { warn: hex(src.warn ?? src.waiting, ''), bad: hex(src.bad ?? src.failure, ''), text: ink, sheet: own.sheet, frame: own.frame, box: own.box }
+    return { block, onBlock: on(block), accent, onAccent: on(accent), glyphs: sorted as [string, string, string, string], ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v)) }
   }
   const name = text(r.name, 'My theme', 28)
   const theme: Theme = {
@@ -123,12 +136,19 @@ export function build(raw: unknown, id?: string): { theme: Theme; fixed: string[
 export function draftOf(t: Theme, name?: string): Draft {
   return {
     name: name ?? t.name, note: name ? 'Made by you' : t.note, base: hexOf(0.62, 0.12, t.hue), tint: t.chroma,
-    dark: { block: t.dark.block, accent: t.dark.accent, ascii: [...t.dark.glyphs] },
-    light: { block: t.light.block, accent: t.light.accent, ascii: [...t.light.glyphs] },
+    dark: colours(t.dark),
+    light: colours(t.light),
   }
 }
 
-export const asRaw = (d: Draft) => ({ name: d.name, note: d.note, base: d.base, tint: d.tint, night: d.dark, day: d.light })
+function colours(tone: Theme['dark']): Colours {
+  const { block, accent, glyphs, text, sheet, frame, box, warn, bad } = tone
+  return { block, accent, ascii: [...glyphs], ...Object.fromEntries(Object.entries({ text, sheet, frame, box, warn, bad }).filter(([, v]) => v)) }
+}
+
+// A draft in the format a person or an agent writes, with the names the brief uses.
+const named = ({ warn, bad, ...rest }: Colours) => ({ ...rest, ...(warn ? { waiting: warn } : {}), ...(bad ? { failure: bad } : {}) })
+export const asRaw = (d: Draft) => ({ name: d.name, note: d.note, base: d.base, tint: d.tint, night: named(d.dark), day: named(d.light) })
 
 // Saved custom themes, checked again on the way in so an old or edited entry can never break the app.
 export function loadCustom(): Theme[] {
@@ -142,23 +162,35 @@ export function saveCustom(list: Theme[]) {
   try { localStorage.setItem('lb.themes', JSON.stringify(list)) } catch {}
 }
 
-// The message that starts a room for designing a theme with an agent.
-export const THEME_BRIEF = `Make a Lunchbox theme with me.
+// The message that starts a room for designing a theme with an agent: what to ask, how to use
+// references, the format with every part it may set, the design rules, and the theme in use now.
+export function themeBrief(current: Theme) {
+  const now = JSON.stringify(asRaw(draftOf(current)), null, 2).replace(/\[\s+([^\]]*?)\s+\]/g, (_, list: string) => `[${list.split(/,\s+/).join(', ')}]`)
+  return `Make a Lunchbox theme with me.
 
-First ask me two or three short questions: the mood I am after, any colours, places, objects or brands I like, and whether I mostly use night or day mode. Then design the theme and send it as one code block marked lunchbox-theme. Lunchbox shows that block as a preview with a button to use it. If I ask for changes, send the whole block again.
+Start by asking me two or three short questions: the mood I am after, what the theme should come from, and whether I mostly work at night or by day. References help most. I can send screenshots, photos, a website, a brand, a painting or a place, and you take the palette from them; if you can open images or search the web, look at what I name rather than guessing. Then design the theme and send it as one code block marked lunchbox-theme. Lunchbox shows that block as a preview with buttons to use it at once or to open it in the theme editor. When I ask for changes, send the whole block again.
 
-The format:
+The format, with every part you may set:
 \`\`\`
 {
   "name": "Two words at most",
   "note": "Four or five words",
   "base": "#hex",
   "tint": 0.02,
-  "night": { "block": "#hex", "accent": "#hex", "ascii": ["#hex", "#hex", "#hex", "#hex"] },
-  "day": { "block": "#hex", "accent": "#hex", "ascii": ["#hex", "#hex", "#hex", "#hex"] }
+  "night": {
+    "block": "#hex", "accent": "#hex", "ascii": ["#hex", "#hex", "#hex", "#hex"],
+    "text": "#hex", "sheet": "#hex", "frame": "#hex", "box": "#hex", "waiting": "#hex", "failure": "#hex"
+  },
+  "day": { the same parts as night }
 }
 \`\`\`
 
-What each part does. base is the hue every surface is tinted with: the frame, the sheet, the message box, the text and the lines. tint is how strongly, from 0 (neutral grey) to 0.04 (clearly coloured); most good themes sit between 0.012 and 0.03. block is the colour a selected row or chip sits in. accent is the colour of what acts: the send button, ticks and progress. ascii is the four colours of the ASCII art in the app, from quiet to loud. Night sits on a sheet close to black, day on one close to white. Lunchbox picks the text on blocks and buttons itself, and nudges a colour that would be hard to read.
+What each part does. base is the hue every surface is tinted with: the frame, the sheet, the message box, the text and the lines. tint is how strongly, from 0 (neutral grey) to 0.04 (clearly coloured); most good themes sit between 0.012 and 0.03. block is the colour a selected row or chip is tinted with. accent is the colour of what acts: the send button, ticks and progress. ascii is the four colours of the ASCII art in the app, from quiet to loud. text, sheet (where the work sits), frame (behind the sidebar) and box (the message box and cards) are optional: leave them out and Lunchbox makes them from base and tint, which keeps every surface in one family; set them only when the idea needs it, a warm paper sheet for example. waiting (amber by default, a room needs me) and failure (vermilion by default, errors) are optional too; change them only if the accent would clash with them. Night sits on a sheet close to black and day on one close to white unless you set the sheet. Lunchbox picks the text on blocks and buttons itself, and moves any colour that would be hard to read, then tells me what it moved.
 
-Design it the way a senior designer at a good studio would. Start from one idea (a place, a material, a period, a printed object) and take a palette of three to five colours from it that clearly belong together, with at most one loud colour. The block and the accent have different jobs, so make them different colours, not two shades of one. Tune night and day separately rather than inverting one into the other. Stay away from defaults: no purple and blue, no neon on black, nothing that would suit any app. Before the block, say in one line what idea the theme comes from.`
+Design it the way a senior designer at a good studio would. Start from one idea (a place, a material, a period, a printed object, or my references) and take a palette of three to five colours from it that clearly belong together, with at most one loud colour. The block and the accent have different jobs, so make them different colours, not two shades of one. Tune night and day separately rather than inverting one into the other. Stay away from defaults: no purple and blue, no neon on black, nothing that would suit any app. Before the block, say in one line what idea the theme comes from.
+
+The theme I use now is ${current.name}, in the same format, for when I want to start from it or change it:
+\`\`\`
+${now}
+\`\`\``
+}
