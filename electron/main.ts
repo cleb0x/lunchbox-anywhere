@@ -25,6 +25,9 @@ import { cancelPull, pull, start } from './local'
 import { Limits } from './limits'
 
 app.setName('Lunchbox')
+// Electron exposes FedCM but has no browser side for it, so "Continue with Google" buttons fail
+// without a word. With it off, Google falls back to its sign-in popup, which the browser opens.
+app.commandLine.appendSwitch('disable-blink-features', 'FedCm')
 
 const mac = process.platform === 'darwin'
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }

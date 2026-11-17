@@ -88,6 +88,13 @@ type Box = { x: number; y: number; w: number; h: number; label: string }
 
 const web = (u: string) => /^https?:\/\//i.test(u) && !/^https?:\/\/(169\.254\.|0\.0\.0\.0|\[?::\]?)/i.test(u)
 
+// Pages and their sign in popups only ever go to the web. A popup's own popups stay inside it.
+function guard(wc: Electron.WebContents, popup = false) {
+  wc.on('will-navigate', (e, url) => { if (!web(url)) e.preventDefault() })
+  wc.on('will-redirect', (e, url) => { if (!web(url)) e.preventDefault() })
+  if (popup) wc.setWindowOpenHandler(({ url }) => { if (web(url)) wc.loadURL(url); return { action: 'deny' } })
+}
+
 // axe-core, read once on first use. It is the accessibility engine most checkers are built on.
 let axeSource: string | null = null
 const axe = () => (axeSource ??= readFileSync(createRequire(__filename).resolve('axe-core/axe.min.js'), 'utf8'))
@@ -116,11 +123,18 @@ export class Browser {
     const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:browser', backgroundThrottling: false } })
     view.setBackgroundColor('#00000000')
     const wc = view.webContents
-    // Pages open new windows in the same view, and only on the web: never file:, app or
+    // Links that open a new tab load in the same view, and only on the web: never file:, app or
     // javascript: schemes, whether a person clicks or a page or an agent asks.
-    wc.setWindowOpenHandler(({ url }) => { if (web(url)) wc.loadURL(url); return { action: 'deny' } })
-    wc.on('will-navigate', (e, url) => { if (!web(url)) e.preventDefault() })
-    wc.on('will-redirect', (e, url) => { if (!web(url)) e.preventDefault() })
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      if (!web(url)) return { action: 'deny' }
+      // A sized popup is a sign in window (Google, Apple, Microsoft). It has to stay a real window
+      // with its opener, or it cannot hand the login back to the page that asked for it.
+      if (disposition === 'new-window') return { action: 'allow', overrideBrowserWindowOptions: { parent: win, autoHideMenuBar: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:browser' } } }
+      wc.loadURL(url)
+      return { action: 'deny' }
+    })
+    wc.on('did-create-window', (popup) => guard(popup.webContents, true))
+    guard(wc)
     // Camera, microphone, location, notifications: no page in the agent browser gets them.
     wc.session.setPermissionRequestHandler((_w, _p, done) => done(false))
     wc.session.setPermissionCheckHandler(() => false)
