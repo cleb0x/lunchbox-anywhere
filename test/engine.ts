@@ -109,7 +109,8 @@ test('room: borrowed hands over MCP', { skip: process.platform === 'win32' }, as
   assert.match(borrowed.ask, /^Search X for: agent limits/)
   const said = events[2] as Extract<typeof events[number], { kind: 'say' }>
   assert.match(said.text, /Grok found: 212 posts/)
-  assert.match(said.text, /Tools: ask_crewmate, bring_in, search_x, search_web, make_image, propose_flow, room_memory, remember/)
+  // Codex is set up but not in this room, so there is no make_image.
+  assert.match(said.text, /Tools: ask_crewmate, bring_in, search_x, search_web, propose_flow, room_memory, remember/)
   assert.ok(said.acts.some((a) => a.t === 'tool' && a.name === 'mcp__lunchbox__search_x'))
 
   engine.send(room.id, 'What is trending on X today?', 'workspace')

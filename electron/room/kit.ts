@@ -27,7 +27,10 @@ const str = (v: unknown, name: string) => {
 export function kit(h: Host): Tool[] {
   const tools: Tool[] = []
   const mates = h.crew.filter((a) => a.id !== h.me.id)
-  const other = (ids: string[]) => ids.map((id) => h.ready.find((a) => a.id === id)).find((a) => a && a.id !== h.me.id)
+  // Searching and drawing are done by a crewmate, never by an agent the person left out of the
+  // room, even when it is set up elsewhere in Lunchbox.
+  const inRoom = (id: string) => h.crew.some((a) => a.id === id) && h.ready.find((a) => a.id === id)
+  const other = (ids: string[]) => ids.map(inRoom).find((a) => a && a.id !== h.me.id)
 
   if (!h.nested && mates.length) {
     tools.push({
@@ -91,7 +94,7 @@ export function kit(h: Host): Tool[] {
     })
   }
 
-  if (!h.nested && h.canWrite && (h.ready.some((a) => a.id === 'openai-api') || other(['codex']))) {
+  if (!h.nested && h.canWrite && (inRoom('openai-api') || other(['codex']))) {
     tools.push({
       name: 'make_image',
       description: 'Generate an image and save it in the room\'s folder. Returns the saved path. Describe subject, style, composition and any text exactly.',

@@ -722,7 +722,7 @@ export class Engine {
       canWrite: access === 'workspace' || access === 'full',
       consult: (to, ask) => this.consult(room, me.id, to, ask, access, ctx),
       bring: (to, job, context) => this.bring(room, me.id, to, job, context, access, ctx),
-      image: (prompt, file, size) => this.image(room, me.id, prompt, access, ctx, file, size),
+      image: (prompt, file, size) => this.image(room, me.id, prompt, access, ctx, file, size, crew.some((a) => a.id === 'openai-api')),
       memory: () => this.store.room(room)?.blocks ?? [],
       remember: (title, text) => this.block(room, `note-${uid()}`, title, text, me.id),
       offerFlow: (flow, why) => this.offerFlow(room, me.id, flow, why),
@@ -767,14 +767,15 @@ export class Engine {
     return r.text
   }
 
-  private async image(room: string, from: string, prompt: string, access: Access, ctx: Ctx, file?: string, size?: string) {
+  private async image(room: string, from: string, prompt: string, access: Access, ctx: Ctx, file?: string, size?: string, api = false) {
     const meta = this.store.room(room)
     if (!meta) throw new Error('The room is gone')
     const path = target(meta.workspace, prompt, file)
     const key = this.store.keys().openai
     let by = 'codex'
     let usage: Usage | undefined
-    if (key && !this.why('openai-api')) {
+    // The OpenAI key draws only when it is in the room; otherwise Codex, the crewmate, does.
+    if (api && key && !this.why('openai-api')) {
       by = 'openai-api'
       const live = this.live(room)
       live.doing = `Making an image for ${this.name(from)}`

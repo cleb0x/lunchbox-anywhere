@@ -977,6 +977,19 @@ test('saving: a room with one agent is told nothing about a crew', async () => {
   assert.ok(kit(host([me, agent('codex')])).some((t) => t.name === 'remember'))
 })
 
+test('kit: search and image tools only use agents in the room, not every one set up', async () => {
+  const { kit } = await import('../electron/room/kit')
+  const agent = (id: string) => ({ id, short: id, name: id, maker: 'x', via: 'cli', good: 'good', tools: true, ready: true, mark: id }) as never
+  const all = ['claude', 'gemini', 'grok', 'codex', 'openai-api'].map(agent)
+  const names = (crew: string[]) => kit({ me: all[0], crew: all.filter((a: any) => crew.includes(a.id)), ready: all, nested: false, canWrite: true, lead: true } as never).map((t) => t.name)
+  for (const t of ['search_web', 'search_x', 'make_image', 'ask_crewmate']) assert.ok(!names(['claude']).includes(t), `${t} reaches outside a room of one`)
+  assert.ok(names(['claude', 'grok']).includes('search_web') && names(['claude', 'grok']).includes('search_x'))
+  assert.ok(!names(['claude', 'grok']).includes('make_image'))
+  assert.ok(names(['claude', 'codex']).includes('make_image') && !names(['claude', 'codex']).includes('search_web'))
+  const web = kit({ me: all[0], crew: [all[0], all[2]], ready: all, nested: false, canWrite: true, lead: true } as never).find((t) => t.name === 'search_web')!
+  assert.ok(web.description.includes('grok') && !web.description.includes('gemini'))
+})
+
 // Free models answer in their own ways: some think in a separate stream and can run out before
 // the answer, some gateways refuse the usage option. Each case must end in text or a clear error.
 test('openai style: free model quirks end in text or a sentence, never an empty bubble', async () => {
