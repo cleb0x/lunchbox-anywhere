@@ -26,15 +26,22 @@ function listOf(a: AgentInfo) {
 // The crew menu: who is in the room, and beside each one the model it uses. The model opens that
 // agent's list in place; picking one slides back. The same setting as on the Agents page.
 // The first in the crew is the main agent; Make main moves another one to the front.
-export function CrewMenu({ listed, crew, toggle, promote, footer }: { listed: AgentInfo[]; crew: string[]; toggle: (id: string) => void; promote: (id: string) => void; footer: ReactNode }) {
+// With a single usable agent there is nobody to choose, so the menu opens on its models and a pick
+// closes it: two clicks instead of three. The agent sits greyed in the corner and still opens the list.
+export function CrewMenu({ listed, crew, toggle, promote, footer, close }: { listed: AgentInfo[]; crew: string[]; toggle: (id: string) => void; promote: (id: string) => void; footer: ReactNode; close: () => void }) {
   const models = useApp((s) => s.settings.models)
   const [at, setAt] = useState<AgentInfo | null>(null)
   const [came, setCame] = useState(false)
+  const [all, setAll] = useState(false)
   const open = (a: AgentInfo) => { setCame(true); setAt(a) }
   const back = () => setAt(null)
+  const usable = listed.filter((a) => !unavailable(a))
+  const only = !all && usable.length === 1 && crew.includes(usable[0].id) ? usable[0] : null
   return (
     <Fit>
-      {at ? (
+      {only ? (
+        <div key="only"><Choices a={only} value={models[only.id] ?? ''} back={close} alone={() => { setCame(true); setAll(true) }} /></div>
+      ) : at ? (
         <div key={at.id} className="slide in"><Choices a={at} value={models[at.id] ?? ''} back={back} /></div>
       ) : (
         <div key="crew" className={`slide${came ? ' returning' : ''}`}>
@@ -78,7 +85,7 @@ function Fit({ children }: { children: ReactNode }) {
   return <div className="fit" style={{ height: h }}><div ref={inner}>{children}</div></div>
 }
 
-function Choices({ a, value, back }: { a: AgentInfo; value: string; back: () => void }) {
+function Choices({ a, value, back, alone }: { a: AgentInfo; value: string; back: () => void; alone?: () => void }) {
   const models = useApp((s) => s.settings.models)
   const [list, setList] = useState<string[] | null>(null)
   const [find, setFind] = useState('')
@@ -94,7 +101,14 @@ function Choices({ a, value, back }: { a: AgentInfo; value: string; back: () => 
   )
   return (
     <div className="modelset">
-      <button className="modelhead" onClick={back}><IconBack /><Mark seed={a.mark} size={12} /><b>{a.short}</b><span>model</span></button>
+      {alone ? (
+        <div className="modelhead alone">
+          <b>Model</b>
+          <button className="soleagent" onClick={alone} title={`${a.name} is the only agent set up. Open the agent list`}><Mark seed={a.mark} size={12} />{a.short}</button>
+        </div>
+      ) : (
+        <button className="modelhead" onClick={back}><IconBack /><Mark seed={a.mark} size={12} /><b>{a.short}</b><span>model</span></button>
+      )}
       {(list?.length ?? 0) > 12 && <input className="modelfind" placeholder={`Find among ${list!.length}`} value={find} onChange={(e) => setFind(e.target.value)} autoFocus />}
       <div className="modellist">
         <button role="menuitemradio" aria-checked={!value} className={`item modelrow${!value ? ' on' : ''}`} onClick={() => pick('')}>
