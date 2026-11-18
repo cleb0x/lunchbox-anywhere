@@ -1005,6 +1005,7 @@ test('openai style: free model quirks end in text or a sentence, never an empty 
       if (mode === 'strict' && body.stream_options) { res.writeHead(400, { 'content-type': 'application/json' }); res.end('{"error":{"message":"Unrecognized request argument supplied: stream_options"}}'); return }
       if (mode === 'thinking') return sse([{ choices: [{ delta: { content: null, reasoning: 'Let me think about' } }] }, { choices: [{ delta: { reasoning: ' this' }, finish_reason: 'length' }] }])
       if (mode === 'empty') return sse([{ choices: [{ delta: {}, finish_reason: 'stop' }] }])
+      if (mode === 'cut') return sse([{ choices: [{ delta: { content: 'Half an ans' } }] }, { choices: [{ delta: {}, finish_reason: 'length' }] }])
       if (mode === 'limit') { res.writeHead(429, { 'content-type': 'application/json' }); res.end('{"error":{"message":"Rate limit exceeded: free-models-per-day. Add credits to unlock more."}}'); return }
       sse([{ choices: [{ delta: { role: 'assistant', content: '' } }] }, { choices: [{ delta: { content: 'Hello' } }] }, { choices: [{ delta: { content: ' there' } }] }, { choices: [], usage: { prompt_tokens: 12, completion_tokens: 2 } }])
     })
@@ -1023,6 +1024,13 @@ test('openai style: free model quirks end in text or a sentence, never an empty 
     await assert.rejects(go(), /spent its whole answer thinking/)
     mode = 'empty'
     await assert.rejects(go(), /sent back an empty answer/)
+    mode = 'cut'
+    await assert.rejects(go(), (e: Error & { text?: string }) => {
+      assert.match(e.message, /stopped partway/)
+      assert.equal(e.text, 'Half an ans', 'what it wrote before the cap is kept')
+      assert.equal(limitOf(e.message), null, 'a length cap is not a usage limit')
+      return true
+    })
     mode = 'limit'
     await assert.rejects(go(), (e: Error) => { assert.ok(limitOf(e.message), 'a free daily limit reads as a usage limit, so the next agent takes over'); return true })
   } finally {
