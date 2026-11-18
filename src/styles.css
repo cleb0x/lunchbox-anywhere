@@ -174,6 +174,12 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .find .iconbtn svg{width:12px;height:12px}
 ::highlight(lb-find){background-color:color-mix(in oklab,var(--accent) 26%,transparent)}
 ::highlight(lb-find-at){background-color:var(--accent);color:var(--on-accent)}
+/* Quote the words selected in a message. */
+.quotebtn{position:absolute;z-index:3;display:inline-flex;align-items:center;gap:8px;height:26px;padding:0 9px;border-radius:8px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 3px 10px -6px rgb(0 0 0/calc(.5*var(--shade)));font-size:12px;color:var(--ink);translate:-50% calc(-100% - 6px);animation:fadein 140ms var(--out) both}
+.quotebtn.below{translate:-50% 6px}
+.quotebtn kbd{margin:0;font:10.5px var(--mono);opacity:.45}
+@media (hover:hover){.quotebtn:hover{background:var(--well)}}
+.quotebtn:active{scale:.97}
 .dock{padding:0 24px 20px;flex:none}
 .dock .composer{max-width:var(--col);margin:0 auto}
 
@@ -543,6 +549,7 @@ label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
 .rich p{font-size:14px;line-height:1.62;overflow-wrap:anywhere}
 .rich h4{font-size:13.5px;font-weight:600;margin-top:4px}
 .rich blockquote{display:flex;flex-direction:column;gap:8px;padding:1px 0 1px 14px;box-shadow:inset 2px 0 0 var(--line2)}
+.rich blockquote cite{font:11px var(--mono);font-style:normal;color:var(--faint);margin-bottom:-4px}
 .rich ul,.rich ol{display:flex;flex-direction:column;gap:4px;padding-left:20px;font-size:14px;line-height:1.55}
 .rich ul{list-style:none;padding-left:16px}
 .rich ul>li{position:relative}

@@ -19,6 +19,7 @@ import { agentOf, clock, desk, KIND_LABEL, mod, money, reason, short, tail, toke
 import { Changes } from './Changes'
 import { Composer } from './Composer'
 import { Find } from './Find'
+import { Quote } from './Quote'
 
 type Data = { meta: RoomMeta; events: Event[]; live: Live }
 type Say = Extract<Event, { kind: 'say' }>
@@ -322,6 +323,7 @@ const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'sa
 // handoffs reads as one piece of work; your messages sit on the right and break the thread.
 function Transcript({ events, live, agents, actions, focus, empty }: { events: Event[]; live: Live | null; agents: AgentInfo[]; actions: Actions; focus?: string; empty: boolean }) {
   const box = useRef<HTMLDivElement>(null)
+  const wrap = useRef<HTMLDivElement>(null)
   const [finding, setFinding] = useState(false)
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -350,6 +352,13 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
     if (!opened.current) { el.scrollTop = el.scrollHeight; ours.current = el.scrollTop; opened.current = events.length > 0; return }
   }, [size])
   const working = !!live?.turns.length || !!live?.runs.length
+  // A message the person just sent is where they want to be, wherever they had scrolled to.
+  const mine = events.findLast((e) => e.kind === 'you' && !e.from && !e.inside)?.id
+  const sentBefore = useRef(mine)
+  useLayoutEffect(() => {
+    if (mine && mine !== sentBefore.current && opened.current) { stick.current = true; setAway(false); flow.current?.wake() }
+    sentBefore.current = mine
+  }, [mine])
   // Rows pushed down by what grows above them travel there at the pace the view follows, so
   // nothing in the room moves in one step.
   const flow = useRef<Glide | null>(null)
@@ -513,8 +522,9 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
   )
 
   return (
-    <div className="transwrap">
+    <div className="transwrap" ref={wrap}>
     {finding && <Find box={box} close={() => setFinding(false)} moving={() => { stick.current = false }} />}
+    <Quote wrap={wrap} />
     <div className="transcript" ref={box}
       onScroll={(e) => {
         // Following stops on any move up the reader makes, by wheel, scrollbar, keys or j and k,
@@ -552,10 +562,11 @@ function useSame<T>(value: T): T {
 
 const Settled = createContext(false)
 
-function Ev({ mark, grouped = false, className = '', id, still = false, children }: { mark: ReactNode; grouped?: boolean; className?: string; id?: string; still?: boolean; children: ReactNode }) {
+// who: the name a quote from this row is given.
+function Ev({ mark, grouped = false, className = '', id, still = false, who, children }: { mark: ReactNode; grouped?: boolean; className?: string; id?: string; still?: boolean; who?: string; children: ReactNode }) {
   const settled = useContext(Settled) || still
   return (
-    <div className={`ev ${className}${grouped ? ' grouped' : ''}${settled ? ' settled' : ''}`} data-id={id}>
+    <div className={`ev ${className}${grouped ? ' grouped' : ''}${settled ? ' settled' : ''}`} data-id={id} data-who={who}>
       <div className="gut">{!grouped && mark}</div>
       <div className="evbody">{children}</div>
     </div>
@@ -591,7 +602,7 @@ function Row({ e, agents, actions, chosen }: { e: Event; agents: AgentInfo[]; ac
   switch (e.kind) {
     case 'you':
       return (
-        <div className="mine" data-id={e.id}>
+        <div className="mine" data-id={e.id} data-who="You">
           {e.from && <span className="to">{e.from === 'flow' ? <><IconClock />from a flow</> : <><IconPhone />from your phone</>}</span>}
           {e.to && <span className="to">to {e.to.map((w) => agentOf(w, agents).short).join(', ')}</span>}
           {e.arena && <span className="to"><IconSplit />side by side</span>}
@@ -703,7 +714,7 @@ function Turn({ who, e, t, piece, text, grouped, still, doing = '', helper, prio
   const words = piece === 'head' || piece === 'mid'
   const work = useLeaving(t)
   return (
-    <Ev id={piece === 'mid' || piece === 'tail' ? undefined : e?.id} mark={<Mark seed={a.mark} size={16} active={!!t} />} grouped={grouped || piece === 'mid'} className={`turn${t ? ' live' : ''}`} still={still}>
+    <Ev id={piece === 'mid' || piece === 'tail' ? undefined : e?.id} mark={<Mark seed={a.mark} size={16} active={!!t} />} grouped={grouped || piece === 'mid'} className={`turn${t ? ' live' : ''}`} still={still} who={a.short}>
       {!grouped && piece !== 'mid' && <div className="who"><b className="name">{a.short}</b>{e && <span className="when">{clock(e.at)}</span>}</div>}
       {raw.trim() && <Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} />}
       {!words && e?.error && <div className={`err${e.error === 'Stopped' ? ' soft' : ''}`}>{e.error === 'Stopped' ? 'Stopped' : e.error}{e.error !== 'Stopped' && <button className="reportbtn" onClick={() => openReport({ context: `${a.short}: ${e.error}` })}>Report this</button>}</div>}
@@ -733,7 +744,7 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
   const cli = e?.via === 'cli'
   const work = useLeaving(t)
   return (
-    <Ev id={e?.id} mark={<Mark seed={to.mark} size={16} active={!!t} />} className={`hands${t ? ' live' : ''}`}>
+    <Ev id={e?.id} mark={<Mark seed={to.mark} size={16} active={!!t} />} className={`hands${t ? ' live' : ''}`} who={to.short}>
       <div className="handhead">
         <b className="name">{to.short}</b><span>{t ? 'is answering' : cli ? 'was run by' : tool ? 'lent a hand to' : 'answered'}</span><Mark seed={from.mark} size={12} /><span>{from.short}</span>
         {tool && <span className="tag" title={`${from.short} called ${to.short} through the room's tools and kept working with the answer`}>while working</span>}

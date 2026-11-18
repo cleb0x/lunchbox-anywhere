@@ -40,6 +40,18 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
     addFiles(out)
     return out.length > 0
   }
+  // Words quoted from the room go under whatever is already typed, with the caret after them.
+  useEffect(() => {
+    const quoted = (e: Event) => {
+      const q = (e as CustomEvent<string>).detail
+      setText((now) => (now.trim() ? `${now.replace(/\s+$/, '')}\n\n${q}` : q))
+      // At once, so what is typed next is not lost before the box has grown.
+      area.current?.focus()
+      requestAnimationFrame(() => { const el = area.current; if (!el) return; el.focus(); el.setSelectionRange(el.value.length, el.value.length); el.scrollTop = el.scrollHeight })
+    }
+    addEventListener('lb:quote', quoted)
+    return () => removeEventListener('lb:quote', quoted)
+  }, [])
   const takeRef = useRef(take)
   takeRef.current = take
   useEffect(() => {

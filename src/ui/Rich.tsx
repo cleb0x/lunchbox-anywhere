@@ -138,11 +138,17 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
           case 'p': return <p key={i} dir="auto">{b.text.split('\n').map((l, j) => <Fragment key={j}>{j > 0 && <br />}{inline(l)}</Fragment>)}{end}</p>
           case 'h': return <h4 key={i} dir="auto">{inline(b.text)}{end}</h4>
           case 'code': return b.lang === 'lunchbox-theme' ? <ThemeOffer key={i} code={b.text} /> : <Code key={i} text={b.text} lang={b.lang}>{end}</Code>
-          case 'quote': return (
-            <blockquote key={i}>
-              {b.paras.map((t, j) => <p key={j} dir="auto">{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === b.paras.length - 1 && end}</p>)}
-            </blockquote>
-          )
+          case 'quote': {
+            // A quote taken from the room names who said it on its first line.
+            const said = b.paras[0].match(/^([^\n]{1,40}) said:\n/)
+            const paras = said ? [b.paras[0].slice(said[0].length), ...b.paras.slice(1)] : b.paras
+            return (
+              <blockquote key={i}>
+                {said && <cite>{said[1]}</cite>}
+                {paras.map((t, j) => <p key={j} dir="auto">{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === paras.length - 1 && end}</p>)}
+              </blockquote>
+            )
+          }
           case 'rule': return <hr key={i} />
           case 'table': return (
             <div key={i} className="tablewrap">
