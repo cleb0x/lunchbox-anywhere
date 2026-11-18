@@ -7,14 +7,14 @@ import { plan, planOn, plansBefore, type Step } from '../../shared/plan'
 import { searchOf, stepOf, type Search } from '../../shared/steps'
 import { cut } from '../../shared/weave'
 import { glide, reflow, reflowing, type Glide } from '../lib/glide'
-import { Loader, Mark, Meter, Sure, Thumb } from '../ui/bits'
+import { Loader, Mark, Meter, still, Sure, Thumb } from '../ui/bits'
 import { Field, type Scene } from '../ui/Field'
 import { Menu } from '../ui/Access'
 import { Inline, Rich } from '../ui/Rich'
 import { Bar, handingOver, onHanded, planDrawing, PlanRow } from '../ui/Plan'
 import { roomCard } from '../ui/roomcard'
 import { openReport } from '../lib/report'
-import { IconBranches, IconChevron, IconClock, IconCopy, IconDiff, IconFolder, IconFork, IconMore, IconPanel, IconPhone, IconPin, IconReview, IconRewind, IconSplit, IconGlobe, IconX } from '../ui/icons'
+import { IconBranches, IconCheck, IconChevron, IconDown, IconClock, IconCopy, IconDiff, IconFolder, IconFork, IconMore, IconPanel, IconPhone, IconPin, IconReview, IconRewind, IconSplit, IconGlobe, IconX } from '../ui/icons'
 import { agentOf, clock, desk, KIND_LABEL, mod, money, reason, short, tail, tokens, unavailable, useApp, type Access } from '../lib/desk'
 import { Changes } from './Changes'
 import { Composer } from './Composer'
@@ -194,7 +194,10 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
 
   return (
     <div className={`room${panel ? ' withdetails' : ''}${stopping ? ' stopping' : ''}`}>
-      <section className="convo">
+      <section className="convo"
+        // A file dropped anywhere in the room lands in the message box.
+        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+        onDrop={(e) => { if (!e.dataTransfer.files.length || (e.target as HTMLElement).closest('.composer')) return; e.preventDefault(); dispatchEvent(new CustomEvent('lb:files', { detail: e.dataTransfer.files })) }}>
         <header className="roomhead">
           <Title name={meta.name} rename={(n) => desk.call('room:rename', id, n)} />
           {meta.forkedFrom && <button className="tag" onClick={() => open(meta.forkedFrom!.room)}>fork</button>}
@@ -319,6 +322,8 @@ const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'sa
 function Transcript({ events, live, agents, actions, focus, empty }: { events: Event[]; live: Live | null; agents: AgentInfo[]; actions: Actions; focus?: string; empty: boolean }) {
   const box = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
+  // Far enough up that the newest message is out of sight: a way back down is offered.
+  const [away, setAway] = useState(false)
   const size = events.length + (live ? live.turns.reduce((n, t) => n + t.text.length + t.acts.length, 0) + live.runs.reduce((n, r) => n + r.out.length + r.state.length, 0) : 0)
   // Opening a room lands at the bottom at once. After that the view eases after new content
   // instead of jumping to it, for as long as you stay at the bottom.
@@ -399,7 +404,8 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
   const picks = useMemo(() => new Map(events.flatMap((e) => (e.kind === 'pick' ? [[e.arena, e.who] as const] : []))), [events])
   const priors = useMemo(() => plansBefore(events), [events])
   const current = useMemo(() => plan(events), [events])
-  const going = useMemo(() => planOn(current, liveEvents(live ?? undefined)), [current, live])
+  // Every live update makes a new list; rows only draw again when a step in it has changed.
+  const going = useSame(useMemo(() => planOn(current, liveEvents(live ?? undefined)), [current, live]))
   const turns = live?.turns ?? []
   const landed = (t: LiveTurn) => events.some((e) => replaces(e, t))
   // Help a turn called for while it ran is shown inside that turn, where it was asked for: the
@@ -494,6 +500,7 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
   )
 
   return (
+    <div className="transwrap">
     <div className="transcript" ref={box}
       onScroll={(e) => {
         // Following stops on any move up the reader makes, by wheel, scrollbar, keys or j and k,
@@ -505,6 +512,7 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         if (Math.abs(top - ours.current) < 1) return
         const gap = el.scrollHeight - el.clientHeight - top
         stick.current = gap < 2 || (!up && gap < 80)
+        if (gap > 600 !== away) setAway(gap > 600)
       }}>
       <div className="column" ref={column}>
         {empty && !live?.turns.length && <div className="roomempty">Nothing here yet. Say what you need and the crew takes it from there.</div>}
@@ -512,7 +520,20 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         <div className="tail" />
       </div>
     </div>
+    {away && (
+      <button type="button" className="tolatest" onClick={() => { const el = box.current!; stick.current = true; setAway(false); el.scrollTo({ top: el.scrollHeight, behavior: still() ? 'auto' : 'smooth' }) }}>
+        <IconDown />{working ? 'Follow the work' : 'Latest'}
+      </button>
+    )}
+    </div>
   )
+}
+
+// The value from the last render for as long as the new one holds the same thing.
+function useSame<T>(value: T): T {
+  const last = useRef(value)
+  if (last.current !== value && JSON.stringify(last.current) !== JSON.stringify(value)) last.current = value
+  return last.current
 }
 
 const Settled = createContext(false)
@@ -661,7 +682,8 @@ function Turn({ who, e, t, piece, text, grouped, still, doing = '', helper, prio
 }) {
   const a = agentOf(who, agents)
   const flowing = useRef(!!t).current
-  const raw = clean(t ? spoken(t) : text ?? e?.text ?? '')
+  const said = t ? spoken(t) : text ?? e?.text ?? ''
+  const raw = useMemo(() => clean(said), [said])
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const words = piece === 'head' || piece === 'mid'
@@ -687,7 +709,8 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
   const to = agentOf(t ? t.who : e!.to, agents)
   const from = agentOf(t ? t.from ?? '' : e!.from, agents)
   const flowing = useRef(!!t).current
-  const raw = clean(t ? t.text : e!.answer)
+  const answer = t ? t.text : e!.answer
+  const raw = useMemo(() => clean(answer), [answer])
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const tool = e?.via === 'tool'
@@ -1025,6 +1048,13 @@ function Rewind({ id, actions }: { id: string; actions: Actions }) {
 function Tools({ e, actions }: { e: Extract<Event, { kind: 'say' | 'hands' }>; actions: Actions }) {
   const text = e.kind === 'say' ? e.text : e.answer
   const u = e.usage
+  // The copy button shows a tick for a moment, so the click is seen to have worked.
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(false), 1400)
+    return () => clearTimeout(t)
+  }, [copied])
   return (
     <div className="msgtools">
       {e.ms ? <span>{(e.ms / 1000).toFixed(1)} s</span> : null}
@@ -1032,10 +1062,10 @@ function Tools({ e, actions }: { e: Extract<Event, { kind: 'say' | 'hands' }>; a
       {u && u.cost > 0 ? <span>{money(u.cost)}</span> : null}
       {u && savedIn(u) >= 0.005 ? <span title={`Saved on this message at API list prices: ${savedLine(u)}.`}>saved {cash(savedIn(u))}</span> : null}
       <span className="spacer" />
-      {text && <button onClick={() => navigator.clipboard.writeText(text)} title="Copy"><IconCopy /></button>}
-      {text && <button onClick={() => actions.pin(e.id)} title="Pin to shared memory"><IconPin /></button>}
+      {text && <button onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})} title={copied ? 'Copied' : 'Copy'} aria-label="Copy">{copied ? <IconCheck /> : <IconCopy />}</button>}
+      {text && <button onClick={() => actions.pin(e.id)} title="Pin to shared memory" aria-label="Pin to shared memory"><IconPin /></button>}
       {text && <Review e={e} actions={actions} />}
-      <button onClick={() => actions.fork(e.id)} title="Fork the room from here"><IconFork /></button>
+      <button onClick={() => actions.fork(e.id)} title="Fork the room from here" aria-label="Fork the room from here"><IconFork /></button>
     </div>
   )
 }

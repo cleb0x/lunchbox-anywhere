@@ -66,6 +66,13 @@ try {
 
   await size(960, 640)
   await shot('05-small-room', 900)
+  // Far up in a long room there is a way back to the newest message.
+  await page.$eval('.transcript', (el) => { el.scrollTop = 0 })
+  await page.waitForSelector('.tolatest', { timeout: 3000 }).catch(() => errors.push('no way back to the latest message'))
+  await shot('05b-latest', 300)
+  await page.click('.tolatest').catch(() => {})
+  await page.waitForTimeout(900)
+  if (await page.$('.tolatest')) errors.push('the latest button stayed after it was used')
   for (const name of ['Pool', 'Savings', 'Library', 'Flows', 'Agents', 'Settings']) {
     await page.click(`.sbitem >> text=${name}`)
     await shot(`06-small-${name.toLowerCase()}`, 800)

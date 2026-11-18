@@ -46,6 +46,13 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
     addFiles(out)
     return out.length > 0
   }
+  const takeRef = useRef(take)
+  takeRef.current = take
+  useEffect(() => {
+    const dropped = (e: Event) => { takeRef.current((e as CustomEvent<FileList>).detail); area.current?.focus() }
+    addEventListener('lb:files', dropped)
+    return () => removeEventListener('lb:files', dropped)
+  }, [])
   const [at, setAt] = useState(0)
   const [caret, setCaret] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)

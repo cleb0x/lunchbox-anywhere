@@ -20,6 +20,8 @@
 .send:not(.stop){background:var(--accent);color:var(--on-accent)}
 :root[data-palette] .send:not(.stop){background:color-mix(in oklab,var(--accent) 82%,var(--well))}
 .planbar i::after,.planbox .fill{background:var(--accent);fill:var(--accent)}
+/* A thin line needs more than a button does: a pale accent, a yellow by day, is drawn towards the text. */
+:root[data-palette] .planbar i::after{background:color-mix(in oklab,var(--accent) 68%,var(--ink))}
 .planbox .tick{stroke:var(--on-accent)}
 .item.checked .check{background:var(--accent);box-shadow:inset 0 0 0 3px var(--sheet),inset 0 0 0 4px var(--accent)}
 :root[data-palette] .composer:focus-within{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent) 50%,transparent),0 8px 24px -12px rgb(0 0 0/calc(.35*var(--shade)))}
