@@ -2,6 +2,7 @@
 // and only then the window from src/, which finds window.lb as it would in the desktop app.
 import './shims/process'
 import * as vfs from './vfs'
+import { exec } from './bash'
 
 // Node timers can be unref'd so they do not keep the process alive; a browser has nothing to keep
 // alive, so the call is accepted and does nothing.
@@ -25,7 +26,7 @@ globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 
 async function boot() {
   // For tests and for looking into the file system from the developer tools.
-  ;(window as unknown as { __lunchbox: unknown }).__lunchbox = { vfs }
+  ;(window as unknown as { __lunchbox: unknown }).__lunchbox = { vfs, exec }
   await vfs.boot()
   await vfs.restoreMounts().catch((e) => console.warn('Linked folders could not be restored', e))
   const { serveFiles } = await import('./browser')

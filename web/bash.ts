@@ -6,6 +6,7 @@ import { Bash, defineCommand, type IFileSystem } from 'just-bash/browser'
 import { Buffer } from 'buffer'
 import * as vfs from './vfs'
 import { HOME } from './shims/os'
+import { nodeCommand, npmCommand } from './node'
 
 const dec = new TextDecoder()
 
@@ -68,11 +69,11 @@ export const shellFs: IFileSystem = {
 }
 
 // Commands people and agents expect that a browser cannot run get a clear answer, not a mystery.
-const NOT_HERE = ['node', 'npm', 'npx', 'pnpm', 'yarn', 'bun', 'deno', 'git', 'pip', 'pip3', 'make', 'cargo', 'go', 'docker', 'brew', 'apt', 'apt-get', 'sudo', 'open', 'xdg-open', 'code']
+const NOT_HERE = ['npx', 'pnpm', 'yarn', 'bun', 'deno', 'git', 'pip', 'pip3', 'make', 'cargo', 'go', 'docker', 'brew', 'apt', 'apt-get', 'sudo', 'open', 'xdg-open', 'code']
 const unavailable = NOT_HERE.map((name) =>
   defineCommand(name, async () => ({
     stdout: '',
-    stderr: `${name}: not available in the browser version of Lunchbox. Files, text tools (ls, cat, grep, sed, awk, find, jq, diff, tar, sqlite3) and curl work here.\n`,
+    stderr: `${name}: not available in the browser version of Lunchbox. Files, text tools (ls, cat, grep, sed, awk, find, jq, diff, tar, sqlite3), curl, node (plain JavaScript, no packages) and npm test / npm run work here.\n`,
     exitCode: 127,
   })),
 )
@@ -84,7 +85,7 @@ export function bash() {
     cwd: HOME,
     env: { HOME, USER: 'you', LOGNAME: 'you', SHELL: '/bin/bash', PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'en_US.UTF-8', TERM: 'dumb', TMPDIR: '/tmp' },
     network: { dangerouslyAllowFullInternetAccess: true },
-    customCommands: unavailable,
+    customCommands: [...unavailable, nodeCommand, npmCommand],
     executionLimits: { maxCommandCount: 1_000_000, maxLoopIterations: 1_000_000 },
   } as ConstructorParameters<typeof Bash>[0]))
 }
