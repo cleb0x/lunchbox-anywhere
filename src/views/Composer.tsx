@@ -8,14 +8,26 @@ import { follow } from '../lib/fit'
 import { PLAYBOOKS, fillPlaybook } from '../../shared/skills'
 import { addOpenCode, hasOpenCode, openCodeFound } from './Connect'
 
+// What was typed in each room and not sent yet, so leaving a room and coming back loses nothing,
+// and the messages sent since the app opened, newest first, for the up arrow.
+const drafts = new Map<string, { text: string; files: string[] }>()
+const sent: string[] = []
+
 type Suggestion = { key: string; label: string; hint: string; insert: string; mark?: string }
 
-export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder }: {
+export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder, room }: {
   crew: string[]; setCrew: (c: string[]) => void; onSend: (t: string, files?: string[]) => void; access: Access; setAccess: (a: Access) => void
-  busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string
+  busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string; room?: string
 }) {
-  const [text, setText] = useState('')
-  const [files, setFiles] = useState<string[]>([])
+  const [text, setText] = useState(() => (room && drafts.get(room)?.text) || '')
+  const [files, setFiles] = useState<string[]>(() => (room && drafts.get(room)?.files) || [])
+  useEffect(() => {
+    if (!room) return
+    if (text || files.length) drafts.set(room, { text, files })
+    else drafts.delete(room)
+  }, [room, text, files])
+  // Where the up arrow stands in the sent messages; -1 is the box as it was typed.
+  const [past, setPast] = useState(-1)
   const [over, setOver] = useState(false)
   const addFiles = (paths: string[]) => setFiles((f) => [...new Set([...f, ...paths.filter(Boolean)])].slice(0, 12))
   const attach = async () => addFiles(await desk.call('attach'))
@@ -27,8 +39,8 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
       const path = desk.pathOf?.(f)
       if (path) { out.push(path); continue }
       if (!f.type.startsWith('image/')) continue
-      const data = await new Promise<string>((done) => { const r = new FileReader(); r.onload = () => done(String(r.result)); r.readAsDataURL(f) })
-      const saved = await desk.call('attach:data', data, f.type.split('/')[1] || 'png', folder)
+      const data = await new Promise<string>((done) => { const r = new FileReader(); r.onload = () => done(String(r.result)); r.onerror = () => done(''); r.readAsDataURL(f) })
+      const saved = data && await desk.call('attach:data', data, f.type.split('/')[1] || 'png', folder).catch(() => null)
       if (saved) out.push(saved)
     }
     addFiles(out)
@@ -117,6 +129,8 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   const submit = () => {
     if (!text.trim() && !files.length) return
     onSend(text.trim() || 'Have a look at the attached files.', files.length ? files : undefined)
+    if (text.trim() && sent[0] !== text.trim()) { sent.unshift(text.trim()); sent.length = Math.min(sent.length, 50) }
+    setPast(-1)
     setText('')
     setFiles([])
     setCaret(0)
@@ -129,7 +143,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
     <div className={`composer${shell ? ' shell' : ''}${arena ? ' arena' : ''}${over ? ' over' : ''}`}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setOver(true) } }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false) }}
-      onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files) }}>
+      onDrop={(e) => { setOver(false); if (e.dataTransfer.files.length) { e.preventDefault(); take(e.dataTransfer.files) } }}>
       {files.length > 0 && (
         <div className="attached">
           {files.map((f) => (
@@ -153,15 +167,22 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
       )}
       <textarea ref={area} value={text} rows={1} autoFocus={autoFocus} spellCheck
         placeholder={placeholder ?? 'Message the room'}
-        onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setAt(0) }}
+        onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setAt(0); setPast(-1) }}
         onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
-        onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); take(e.clipboardData.files) } }}
+        // Text copied from a document or a sheet often carries a picture of itself; the words win.
+        onPaste={(e) => { if (e.clipboardData.files.length && !e.clipboardData.getData('text/plain')) { e.preventDefault(); take(e.clipboardData.files) } }}
         onKeyDown={(e) => {
           if (suggestions.length) {
             if (e.key === 'ArrowDown') { e.preventDefault(); return setAt(at + 1) }
             if (e.key === 'ArrowUp') { e.preventDefault(); return setAt(at - 1 + suggestions.length) }
             if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing)) { e.preventDefault(); return pickSuggestion(suggestions[at % suggestions.length]) }
           }
+          // Up in an empty box brings back what was sent before; down walks forward again.
+          // Inside a recalled message the arrows still move the caret; only its two ends step on.
+          const el = e.currentTarget
+          const recall = (to: number) => { e.preventDefault(); setPast(to); setText(to < 0 ? '' : sent[to]); setCaret(0); requestAnimationFrame(() => el.setSelectionRange(0, 0)) }
+          if (e.key === 'ArrowUp' && !e.shiftKey && (past >= 0 ? el.selectionStart === 0 : !text) && past + 1 < sent.length) return recall(past + 1)
+          if (e.key === 'ArrowDown' && !e.shiftKey && past >= 0 && (el.selectionStart === 0 || el.selectionEnd === text.length)) return recall(past - 1)
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
         }} />
       <div className="cbar">

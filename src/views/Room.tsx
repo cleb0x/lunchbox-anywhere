@@ -214,7 +214,7 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
         <div className="dock">
           <Composer
             crew={meta.crew} setCrew={(c) => desk.call('room:crew', id, c)} onSend={send} access={access} setAccess={setAccess}
-            busy={busy} onStop={stop} arena={arena} setArena={setArena} studio={!!meta.studio} setStudio={(on) => desk.call('room:studio', id, on)} pack={meta.pack} folder={meta.workspace} draft={returned}
+            busy={busy} onStop={stop} arena={arena} setArena={setArena} studio={!!meta.studio} setStudio={(on) => desk.call('room:studio', id, on)} pack={meta.pack} folder={meta.workspace} draft={returned} room={id}
             placeholder={meta.crew.length > 1 ? 'Message the room. Start with a name, like "Claude, ...", to ask one agent. ! runs a command.' : 'Message the room. Start with ! to run a command.'}
           />
         </div>
