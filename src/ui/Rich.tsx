@@ -4,6 +4,7 @@ import { foldChecklists, same, sincePlan, type Step } from '../../shared/plan'
 import { steady } from '../../shared/stream'
 import { PlanCard } from './Plan'
 import { highlight } from '../lib/highlight'
+import { IconCheck, IconCopy } from './icons'
 
 // Code, bold, emphasis, web links, links to files on disk (shown as the file name) and bare URLs.
 // Emphasis needs a word on both sides of its stars, so 2 * 3 * 4 and *.ts stay as they are.
@@ -102,18 +103,30 @@ export function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], l
 // The cells of one table row. A pipe inside inline code or after a backslash is part of the cell.
 const cells = (line: string) => line.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|(?=(?:[^`]*`[^`]*`)*[^`]*$)/).map((c) => c.trim().replace(/\\\|/g, '|'))
 
-// A code block with a way to copy it. The button says so for a moment once it has.
+// Words meant to be read and pasted, a prompt or a message to send, not code: they wrap like
+// text and are never coloured.
+const PROSE = /^(text|txt|plain|plaintext|prompt|message|markdown|md)$/i
+
+// Any fenced block, code or a prompt, with one way to copy exactly what was written. The icon
+// turns into a tick and the label says so for a moment once it has.
 function Code({ text, lang, children }: { text: string; lang?: string; children?: ReactNode }) {
-  const [copied, setCopied] = useState(false)
+  // Counts the clicks, so copying again while it still says Copied starts the moment over.
+  const [copied, setCopied] = useState(0)
   useEffect(() => {
     if (!copied) return
-    const t = setTimeout(() => setCopied(false), 1400)
+    const t = setTimeout(() => setCopied(0), 1500)
     return () => clearTimeout(t)
   }, [copied])
+  const prose = PROSE.test(lang ?? '')
   return (
-    <div className="codewrap" data-lang={lang || undefined}>
-      <pre className="codeblock" dir="ltr">{highlight(text, lang).map(([t, role], i) => (role ? <span key={i} className={role}>{t}</span> : t))}{children}</pre>
-      {text.trim() && <button type="button" className="codecopy" onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}>{copied ? 'Copied' : 'Copy'}</button>}
+    <div className={`codewrap${prose ? ' prose' : ''}`} data-lang={lang && !prose ? lang : undefined}>
+      <pre className="codeblock" dir={prose ? 'auto' : 'ltr'}>{prose ? text : highlight(text, lang).map(([t, role], i) => (role ? <span key={i} className={role}>{t}</span> : t))}{children}</pre>
+      {text.trim() && (
+        <button type="button" className={`codecopy${copied ? ' done' : ''}`} aria-label={copied ? 'Copied' : 'Copy'} onClick={() => navigator.clipboard.writeText(text).then(() => setCopied((n) => n + 1), () => {})}>
+          <span className="glyph" aria-hidden><IconCopy /><IconCheck /></span>
+          <span className="word" aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      )}
     </div>
   )
 }

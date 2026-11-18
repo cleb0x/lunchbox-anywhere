@@ -145,6 +145,8 @@ if (process.env.FAKE_SCRIPT === 'code' && name === 'claude' && !/^Shell: /m.test
     '```bash\n# Run the parser tests, then the whole suite\nnpm test -- parseDate && echo "parser ok: $?"\nfor f in src/*.ts; do wc -l "$f"; done\n```',
     '```css\n@media (hover: hover) {\n  .date:hover { color: #f2f0ea; padding: 4px 12px; }\n}\n/* the field */\n.date::after { content: "dd/mm"; opacity: .5 }\n```',
     '```diff\n@@ -3,2 +3,3 @@ export function parseDate\n-  return new Date(year, a - 1, b)\n+  const dayFirst = locale !== \'en-US\'\n+  return new Date(year, (dayFirst ? b : a) - 1, dayFirst ? a : b)\n```',
+    'And a prompt for the release note, ready to paste:',
+    '```text\nWrite a release note for version 1.4.0 of the dates package. Say in two sentences that dates after the twelfth of a month are read correctly again, and that the form now sends its locale. Plain words, no headings, no list.\n\nEnd with one line on how to upgrade.\n```',
     'The parser now takes the locale from the form. I ran the parser tests and the rest of the suite.',
   ].join('\n\n') : 'Yes. The parser falls back to en-GB when the form sends no locale, so old forms keep working.'
   say({ type: 'system', subtype: 'init', session_id: 'code', model: 'claude-sonnet-5-5' })

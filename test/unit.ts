@@ -971,7 +971,8 @@ test('saving: a room with one agent is told nothing about a crew', async () => {
   const crewed = protocol({ ...meta, crew: ['claude', 'codex'] }, me, [me, agent('codex')], 'workspace', undefined, ['propose_flow', 'room_memory', 'remember'], [], 'claude', null)
   assert.ok(!/crewmate|several AI agents|@handle|what others/.test(alone))
   assert.ok(alone.includes('- [ ] step') && alone.includes('Run the check before claiming it') && alone.includes('offer one with propose_flow'))
-  assert.ok(alone.length < 1700 && alone.length < crewed.length * 0.7)
+  assert.ok(alone.includes('own fenced block'), 'what may be copied gets a block with a copy button')
+  assert.ok(alone.length < 1850 && alone.length < crewed.length * 0.7)
   const host = (crew: never[]) => ({ me, crew, ready: crew, nested: false, canWrite: true, lead: true }) as never
   assert.deepEqual(kit(host([me])).map((t) => t.name), ['propose_flow'])
   assert.ok(kit(host([me, agent('codex')])).some((t) => t.name === 'remember'))

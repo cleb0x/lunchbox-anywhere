@@ -84,6 +84,41 @@ try {
   await check('lunchbox night')
   await shot('01-code-lunchbox-night')
 
+  // One copy button on every block, a prompt as much as code. A prompt reads as text: it wraps,
+  // it is not coloured, and what is copied is exactly what was written.
+  const copyShots = async (tag) => {
+    for (const [name, sel] of [['code', '.codewrap:not(.prose) >> nth=0'], ['prompt', '.codewrap.prose']]) {
+      const wrap = page.locator(sel).first()
+      await wrap.scrollIntoViewIfNeeded()
+      await wrap.hover()
+      await page.waitForTimeout(600)
+      await page.screenshot({ path: `${out}08-copy-${name}-${tag}.png`, clip: await wrap.boundingBox() })
+      await page.waitForTimeout(1600)
+      await wrap.locator('.codecopy').click()
+      await page.waitForTimeout(110)
+      await page.screenshot({ path: `${out}08-copy-${name}-${tag}-mid.png`, clip: await wrap.boundingBox() })
+      await page.waitForTimeout(300)
+      if ((await wrap.locator('.codecopy .word').textContent()) !== 'Copied') errors.push(`${name}: the button did not say Copied`)
+      await page.screenshot({ path: `${out}08-copy-${name}-${tag}-copied.png`, clip: await wrap.boundingBox() })
+      const same = await wrap.evaluate(async (el) => (await navigator.clipboard.readText().catch(() => null)) === el.querySelector('pre').textContent)
+      if (!same) errors.push(`${name}: the clipboard does not hold the block as written`)
+      await page.waitForTimeout(1500)
+      if ((await wrap.locator('.codecopy .word').textContent()) !== 'Copy') errors.push(`${name}: the button did not settle back`)
+    }
+  }
+  const prose = await page.$eval('.codewrap.prose', (el) => ({ spans: el.querySelectorAll('pre span').length, wide: el.querySelector('pre').scrollWidth - el.querySelector('pre').clientWidth, lines: Math.round(el.querySelector('pre').clientHeight / 21), label: el.dataset.lang ?? '' }))
+  if (prose.spans || prose.wide > 1 || prose.lines < 4 || prose.label) errors.push(`the prompt block is not clean wrapped text: ${JSON.stringify(prose)}`)
+  if ((await page.$$('.codewrap .codecopy')).length !== (await page.$$('.codewrap')).length) errors.push('a block has no copy button')
+  // The keyboard reaches the button, and it shows when it has the focus.
+  await page.focus('.codewrap.prose .codecopy')
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  if (!(await page.evaluate(() => document.activeElement?.matches('.codewrap.prose .codecopy')))) errors.push('Tab does not reach the copy button')
+  await page.waitForTimeout(300)
+  if ((await page.$eval('.codewrap.prose .codecopy', (b) => getComputedStyle(b).opacity)) !== '1') errors.push('the copy button stays hidden with the keyboard on it')
+  await page.evaluate(() => document.activeElement?.blur())
+  await copyShots('night')
+
   // Find: every match marked, the count, next and previous, and a match inside a folded message.
   await page.keyboard.press(`${mod}+f`)
   await page.waitForSelector('.find input')
@@ -151,6 +186,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.turn').length >= 2 && !document.querySelector('.turn.live'), null, { timeout: 20000 })
   const mine = await page.$eval('.mine:last-of-type .bubble, .mine >> nth=-1', (el) => el.textContent).catch(() => page.$$eval('.mine .bubble', (l) => l[l.length - 1].textContent))
   if (/>/.test(mine)) errors.push(`a raw > shows in the sent quote: "${mine}"`)
+  await page.waitForTimeout(1500)
   const gap = await page.$eval('.transcript', (el) => el.scrollHeight - el.clientHeight - el.scrollTop)
   if (gap > 80) errors.push(`sending from far up left the view ${Math.round(gap)}px above the new message`)
   await shot('06-quote-sent', 900)
@@ -202,6 +238,8 @@ try {
     await shot(`10-code-${theme}-${mode === 'dark' ? 'night' : 'day'}`, 500)
   }
   await look('cobalt', 'light')
+  await copyShots('day')
+  await page.$eval('.transcript', (el) => { el.scrollTop = el.scrollHeight })
   await page.keyboard.press(`${mod}+f`)
   await page.keyboard.type('parser')
   await page.keyboard.press('Enter')

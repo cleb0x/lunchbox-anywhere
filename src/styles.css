@@ -577,9 +577,26 @@ label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
 .codeblock .c{color:var(--code-com)}
 .codewrap[data-lang]::after{content:attr(data-lang);position:absolute;top:1px;right:1px;padding:6px 9px 4px;border-radius:0 7px 0 6px;background:var(--well);font:10px var(--mono);color:var(--faint);pointer-events:none}
 .codewrap{position:relative;min-width:0}
-.codecopy{position:absolute;z-index:1;top:6px;right:6px;height:22px;padding:0 8px;border-radius:6px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line2);font-size:11px;color:var(--dim);opacity:0;transition:opacity 140ms var(--out),color 140ms var(--out)}
-.codewrap:hover .codecopy,.codecopy:focus-visible{opacity:1}
+/* One copy button on every fenced block. It shows when the block is hovered or the button has
+   the keyboard, and stays while it says Copied. The copy icon gives way to a tick in place. */
+.codecopy{position:absolute;z-index:1;top:6px;right:6px;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px 0 7px;border-radius:6px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line2);font-size:11.5px;color:var(--dim);opacity:0;transition:opacity 140ms var(--out),color 140ms var(--out),scale 140ms var(--out)}
+.codewrap:hover .codecopy,.codecopy:focus-visible,.codecopy.done{opacity:1}
+.codecopy:active{scale:.96}
+/* The language label steps aside for the button, which takes its corner. */
+.codewrap[data-lang]::after{transition:opacity 140ms var(--out)}
+.codewrap[data-lang]:is(:hover,:has(.codecopy:focus-visible),:has(.codecopy.done))::after{opacity:0}
+.codecopy.done{color:var(--ink)}
+.codecopy .glyph{position:relative;width:13px;height:13px}
+.codecopy .glyph svg{position:absolute;inset:0;width:13px;height:13px;transition:opacity 200ms var(--out),scale 200ms var(--out)}
+.codecopy .glyph svg:last-child{opacity:0;scale:.6}
+.codecopy.done .glyph svg:first-child{opacity:0;scale:.6}
+.codecopy.done .glyph svg:last-child{opacity:1;scale:1}
+@media (prefers-reduced-motion:reduce){.codecopy,.codecopy .glyph svg{transition:none}}
 @media (hover:hover){.codecopy:hover{color:var(--ink)}}
+/* A prompt or a message to paste somewhere reads as text: the words wrap and keep the ink. */
+.codewrap.prose .codeblock{font:13.5px/1.6 var(--sans);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;padding:13px 16px}
+/* The first line stops short of the button, so the two never sit on each other. */
+.codewrap.prose .codeblock::before{content:"";float:right;width:78px;height:20px}
 .rich em{font-style:italic}
 .rich hr{height:1px;margin:4px 0;border:0;background:var(--line)}
 .tablewrap{max-width:100%;overflow-x:auto;border-radius:8px;box-shadow:inset 0 0 0 1px var(--line)}

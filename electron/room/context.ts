@@ -64,6 +64,7 @@ export function protocol(meta: RoomMeta, me: AgentInfo, crew: AgentInfo[], acces
       me.tools && access !== 'plan' ? '- The folder is yours to organise. Give a new project its own folder inside it rather than scattering files.' : '',
       '- For work with several steps, post the plan before you start: three to eight short "- [ ] step" lines, in order. Lunchbox pins it beside the room for the person to follow. The moment a step is done, write that one step as "- [x] step" on its own line before starting the next, never all at the end. Never post the whole list again; a new step is one more "- [ ] step" line.',
       '- Claims like "the tests pass" or "the build works" are checked against the commands that ran in this room after the last edit. Run the check before claiming it.',
+      '- What the person may copy goes in its own fenced block: commands and code in their language, a prompt or a message as ```text.',
       '- Write for the person: short and plain.' + (alone ? '' : ' Do not repeat what others already said.'),
     ].filter(Boolean).join('\n'),
     pack ? `Room focus, ${pack.name}: ${pack.brief}` : '',
