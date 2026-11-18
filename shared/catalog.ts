@@ -31,7 +31,7 @@ export const CATALOG: CatalogTool[] = [
     id: 'context7', name: 'Context7', group: 'Know', repo: 'upstash/context7', run: 'npx',
     line: 'Current docs and examples for thousands of libraries, so agents stop guessing old APIs.',
     args: ['-y', '@upstash/context7-mcp@latest'],
-    secrets: [{ id: 'key', label: 'API key', arg: '--api-key', optional: true, hint: 'Optional, raises the rate limit', url: 'https://context7.com/dashboard' }],
+    secrets: [{ id: 'key', label: 'API key', env: 'CONTEXT7_API_KEY', optional: true, hint: 'Optional, raises the rate limit', url: 'https://context7.com/dashboard' }],
   },
   {
     id: 'github', name: 'GitHub', group: 'Work', repo: 'modelcontextprotocol/servers-archived', run: 'npx',
@@ -54,7 +54,7 @@ export const CATALOG: CatalogTool[] = [
     id: 'figma', name: 'Figma', group: 'Design', repo: 'GLips/Figma-Context-MCP', run: 'npx',
     line: 'Layout, styles and assets from a Figma link, for building designs one to one.',
     args: ['-y', 'figma-developer-mcp', '--stdio'],
-    secrets: [{ id: 'key', label: 'Personal access token', arg: '--figma-api-key', url: 'https://help.figma.com/hc/en-us/articles/8085703771159' }],
+    secrets: [{ id: 'key', label: 'Personal access token', env: 'FIGMA_API_KEY', url: 'https://help.figma.com/hc/en-us/articles/8085703771159' }],
   },
   {
     id: 'firecrawl', name: 'Firecrawl', group: 'Search', repo: 'firecrawl/firecrawl-mcp-server', run: 'npx',
@@ -111,7 +111,7 @@ export const CATALOG: CatalogTool[] = [
     id: 'stripe', name: 'Stripe', group: 'Work', repo: 'stripe/agent-toolkit', run: 'npx',
     line: 'Customers, products, payment links and invoices. Use a restricted or test key.',
     args: ['-y', '@stripe/mcp', '--tools=all'],
-    secrets: [{ id: 'key', label: 'Secret key', arg: '--api-key', hint: 'rk_test_… or sk_test_…', url: 'https://dashboard.stripe.com/apikeys' }],
+    secrets: [{ id: 'key', label: 'Secret key', env: 'STRIPE_SECRET_KEY', hint: 'rk_test_… or sk_test_…', url: 'https://dashboard.stripe.com/apikeys' }],
   },
   {
     id: 'notion', name: 'Notion', group: 'Work', repo: 'makenotion/notion-mcp-server', run: 'npx',

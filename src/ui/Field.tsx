@@ -47,7 +47,7 @@ export function Field({ scene, height = 168, quiet = 0.25, className = '' }: { s
     const ctx = el.getContext('2d')!
     let cols = 0, rows = 0, cellW = 7.2, raf = 0, last = 0, shown = true, bumps = scene.current.bump ?? 0
     let slow = 0, vt = 0, prev = 0
-    let ink = '', faint = '', font = ''
+    let ink = '', mid = '', faint = '', font = '', ramped = false
     const energy: number[] = []
     const ripples: Ripple[] = []
     const pointer = { c: -99, r: -99, lift: 0 }
@@ -56,8 +56,12 @@ export function Field({ scene, height = 168, quiet = 0.25, className = '' }: { s
 
     const colours = () => {
       const s = getComputedStyle(el)
-      ink = s.getPropertyValue('--ink').trim()
-      faint = s.getPropertyValue('--faint').trim()
+      // A theme's ASCII ramp colours the three strengths; without one they are ink and faint.
+      const glyph = (i: number) => s.getPropertyValue(`--glyph-${i}`).trim()
+      ramped = document.documentElement.hasAttribute('data-glyphs') && !!glyph(4)
+      ink = (ramped && glyph(4)) || s.getPropertyValue('--ink').trim()
+      mid = (ramped && glyph(3)) || ink
+      faint = (ramped && glyph(1)) || s.getPropertyValue('--faint').trim()
       font = `12px ${s.getPropertyValue('--mono')}`
     }
     const size = () => {
@@ -184,10 +188,11 @@ export function Field({ scene, height = 168, quiet = 0.25, className = '' }: { s
         const yy = r * CELL_H
         ctx.fillStyle = faint
         ctx.fillText(line[DIM], 0, yy)
-        ctx.fillStyle = ink
-        ctx.globalAlpha = 0.6
+        ctx.fillStyle = mid
+        ctx.globalAlpha = ramped ? 0.85 : 0.6
         ctx.fillText(line[MID], 0, yy)
         ctx.globalAlpha = 1
+        ctx.fillStyle = ink
         ctx.fillText(line[INK], 0, yy)
       }
     }
@@ -204,7 +209,7 @@ export function Field({ scene, height = 168, quiet = 0.25, className = '' }: { s
     const fit = new ResizeObserver(size)
     fit.observe(el)
     const theme = new MutationObserver(colours)
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-look'] })
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-look', 'data-palette', 'data-ascii', 'data-glyphs', 'style'] })
     const seen = new IntersectionObserver(([e]) => { shown = e.isIntersecting })
     seen.observe(el)
     const cell = (e: PointerEvent) => {

@@ -45,7 +45,7 @@
 [data-look=neyra] .send svg{display:none}
 [data-look=neyra] .send span{display:inline}
 [data-look=neyra] .send:disabled{opacity:.3}
-[data-look=neyra] .menu{box-shadow:0 0 0 1px var(--line2),0 12px 32px rgba(0,0,0,.35)}
+[data-look=neyra] .menu{box-shadow:0 0 0 1px var(--line2),0 12px 32px rgb(0 0 0/calc(.35*var(--shade)))}
 
 /* Room */
 [data-look=neyra] .roomhead{height:56px;padding:0 12px 0 28px}
@@ -65,7 +65,6 @@
 [data-look=neyra] .newbody{flex:1;max-width:880px;gap:12px}
 [data-look=neyra] .newbody .band{margin:auto 0 24px}
 [data-look=neyra] .newbody h1{font-size:30px;letter-spacing:-.025em}
-[data-look=neyra] .newsub{display:block;margin-top:-4px;color:var(--dim);font-size:14px}
 [data-look=neyra] .ideas{order:8;flex-direction:column;gap:8px;margin-top:12px}
 [data-look=neyra] .ideas button{height:44px;padding:0 16px;font-size:14px;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
 @media (hover:hover){[data-look=neyra] .ideas button:hover{background:none;box-shadow:inset 0 0 0 1px var(--faint)}}
@@ -77,6 +76,6 @@
 [data-look=neyra] .page>.btn{align-self:flex-start}
 [data-look=neyra] .pagehead h1{font-size:24px;letter-spacing:-.025em}
 [data-look=neyra] .pagehead p{margin-top:5px}
-[data-look=neyra] .pglow{box-shadow:0 20px 50px rgba(0,0,0,.4)}
+[data-look=neyra] .pglow{box-shadow:0 20px 50px rgb(0 0 0/calc(.4*var(--shade)))}
 [data-look=neyra] .sheetdrag{height:22px}
 [data-look=neyra] .libbar{top:-6px}

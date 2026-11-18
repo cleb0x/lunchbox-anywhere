@@ -295,7 +295,8 @@ export class Limits {
         // A refused or failed read keeps the last good numbers for half an hour, marked with their time.
         const prev = this.now[id]
         if (!l.windows.length && prev?.windows.length && Date.now() - prev.at < 30 * 60e3) l = { ...prev, stale: true }
-        await this.measure(id, l)
+        // Sizing a window writes a file; a full disk must not cost every agent its reading.
+        await this.measure(id, l).catch(() => {})
         this.now[id] = l
         if (this.gate(id, l)) gated = true
       }))

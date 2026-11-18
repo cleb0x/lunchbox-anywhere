@@ -100,7 +100,7 @@ await visit('Agents', '08b-agents', async () => {
   await shot('08c-agents-local', 600)
 })
 await visit('Settings', '09-settings')
-await page.click('.seg button:has-text("Light")')
+await page.click('.seg button:has-text("Day")')
 await visit('Pool', '10-pool-light')
 await visit('Savings', '10b-savings-light')
 await visit('Flows', '11-flows-light')

@@ -234,7 +234,8 @@ function marked(history: string[]): Block[] {
 
 type Spec = Pick<Tool, 'name' | 'description' | 'input' | 'required'>
 type Call = { id: string; name: string; args: Record<string, unknown>; bad?: string }
-type Round = { text: string; calls: Call[]; thought: boolean }
+// cut: the model stopped because it had written the most one answer may hold, not because it was done.
+type Round = { text: string; calls: Call[]; thought: boolean; cut?: boolean }
 type Outcome = { call: Call; text: string; ok: boolean }
 type Ask = { p: Provider; name: string; id: string; key: string; system: string; prompt: string; history: string[]; cacheKey: string; signal: AbortSignal; usage: Usage; onDelta(d: string): void; waiting(first: boolean): void; stalled?: boolean }
 
@@ -295,7 +296,7 @@ function anthropicWire(a: Ask): Wire {
         // when the conversation continues after a tool.
         const blocks: any[] = []
         const partial: Record<number, string> = {}
-        let text = '', out = 0, read = 0, written = 0
+        let text = '', out = 0, read = 0, written = 0, cut = false
         for await (const line of lines(res, () => beat(180000))) {
           const o = data(line)
           if (!o) continue
@@ -312,7 +313,7 @@ function anthropicWire(a: Ask): Wire {
             read = start.cache_read_input_tokens ?? 0
             written = start.cache_creation_input_tokens ?? 0
           }
-          if (o.type === 'message_delta') out = o.usage?.output_tokens ?? out
+          if (o.type === 'message_delta') { out = o.usage?.output_tokens ?? out; if (o.delta?.stop_reason === 'max_tokens') cut = true }
           if (o.type === 'error') throw new Error(o.error?.message ?? 'Anthropic stream error')
         }
         const calls: Call[] = []
@@ -341,7 +342,7 @@ function anthropicWire(a: Ask): Wire {
         const gross = readSaving(a.id, read, fresh + read)
         if (saved !== null && saved !== undefined) a.usage.saved = (a.usage.saved ?? 0) + saved
         if (gross !== null && gross !== undefined) a.usage.gross = (a.usage.gross ?? 0) + gross
-        return { text, calls, thought: blocks.some((b) => b?.type === 'thinking' || b?.type === 'redacted_thinking') }
+        return { text, calls, cut, thought: blocks.some((b) => b?.type === 'thinking' || b?.type === 'redacted_thinking') }
       } finally { end() }
     },
   }
@@ -391,13 +392,14 @@ function openaiWire(a: Ask): Wire {
       const { res, beat, end } = r
       try {
         if (!res.ok) throw await failure(res)
-        let text = '', thought = false
+        let text = '', thought = false, cut = false
         const raw: { id?: string; name: string; args: string; extra?: unknown }[] = []
         for await (const line of lines(res, () => beat(near ? 300000 : 180000))) {
           const o = data(line)
           if (!o) continue
           if (o.error) throw new Error(o.error.message ?? (typeof o.error === 'string' ? o.error : 'Stream error'))
           const d = o.choices?.[0]?.delta
+          if (o.choices?.[0]?.finish_reason === 'length') cut = true
           // Reasoning models stream their thinking apart from the answer; it is not shown, but it means
           // an empty answer is a model that thought until it ran out, not a broken connection.
           if (d?.reasoning || d?.reasoning_content) thought = true
@@ -429,7 +431,7 @@ function openaiWire(a: Ask): Wire {
         const calls = real.map((c, n): Call => ({ id: c.id || `call_${later.length}_${n}`, name: c.name, ...jsonArgs(c.args) }))
         if (calls.length) later.push({ role: 'assistant', content: text || null, tool_calls: calls.map((c, n) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: real[n].args || '{}' }, ...(real[n].extra ? { extra_content: real[n].extra } : {}) })) })
         else if (text) later.push({ role: 'assistant', content: text })
-        return { text, calls, thought }
+        return { text, calls, thought, cut }
       } finally { end() }
     },
   }
@@ -454,7 +456,7 @@ function googleWire(a: Ask): Wire {
       }, a, 180000)
       try {
         if (!res.ok) throw await failure(res)
-        let text = '', thought = false
+        let text = '', thought = false, cut = false
         // The model's parts go back exactly as sent: a call carries a signature the next request needs.
         const parts: any[] = []
         const calls: Call[] = []
@@ -463,6 +465,7 @@ function googleWire(a: Ask): Wire {
           const o = data(line)
           if (!o) continue
           if (o.error) throw new Error(o.error.message ?? 'Gemini stream error')
+          if (o.candidates?.[0]?.finishReason === 'MAX_TOKENS') cut = true
           for (const part of o.candidates?.[0]?.content?.parts ?? []) {
             parts.push(part)
             if (part.thought) { thought = true; continue }
@@ -477,7 +480,7 @@ function googleWire(a: Ask): Wire {
         a.usage.output += seen.output
         a.usage.cached += seen.cached
         if (parts.length) contents.push({ role: 'model', parts })
-        return { text, calls, thought }
+        return { text, calls, thought, cut }
       } finally { end() }
     },
   }
@@ -503,7 +506,7 @@ function ollamaWire(a: Ask, info: Local): Wire {
       }, a, 600000)
       try {
         if (!res.ok) throw await failure(res)
-        let text = '', thought = false
+        let text = '', thought = false, cut = false
         const calls: Call[] = []
         for await (const line of lines(res, () => beat(300000))) {
           const o = data(line)
@@ -514,10 +517,10 @@ function ollamaWire(a: Ask, info: Local): Wire {
           if (m.content) { text += m.content; a.onDelta(m.content) }
           for (const c of m.tool_calls ?? []) if (c.function?.name) calls.push({ id: `call_${messages.length}_${calls.length}`, name: c.function.name, ...jsonArgs(c.function.arguments) })
           if (m.content || m.thinking || m.tool_calls) a.waiting(false)
-          if (o.done) { a.usage.input += o.prompt_eval_count ?? 0; a.usage.output += o.eval_count ?? 0 }
+          if (o.done) { a.usage.input += o.prompt_eval_count ?? 0; a.usage.output += o.eval_count ?? 0; if (o.done_reason === 'length') cut = true }
         }
         if (calls.length || text) messages.push({ role: 'assistant', content: text, ...(calls.length ? { tool_calls: calls.map((c) => ({ function: { name: c.name, arguments: c.args } })) } : {}) })
-        return { text, calls, thought }
+        return { text, calls, thought, cut }
       } finally { end() }
     },
   }
@@ -568,6 +571,8 @@ export async function chat(name: string, key: string, model: string, system: str
   let sieve = new Sieve(tools?.map((t) => t.name))
   let text = ''
   let thought = false
+  // Whether the last thing the model wrote was cut off at its length cap.
+  let short = false
   let slow: ReturnType<typeof setTimeout> | undefined
   let writing = false
   const show = (shown: string) => {
@@ -621,6 +626,7 @@ export async function chat(name: string, key: string, model: string, system: str
       }
       if (!shaped) show(sieve.end())
       thought ||= r.thought || sieve.thought
+      short = !!r.cut
       if (!tools || !hands) break
       let calls = r.calls
       let viaText = false
@@ -686,5 +692,8 @@ export async function chat(name: string, key: string, model: string, system: str
     if (thought) throw new Error(`${id} spent its whole answer thinking and sent no text. Ask again, or pick another model.`)
     throw new Error(`${id} sent back an empty answer. Free and small models do this now and then; ask again, or pick another model.`)
   }
-  return { text: text.trim().replace(/\n{3,}/g, '\n\n'), usage, acts }
+  const whole = text.trim().replace(/\n{3,}/g, '\n\n')
+  // What it wrote is kept, with a line under it saying it is not all there.
+  if (short) throw Object.assign(new Error(`${id} wrote as much as one answer can hold and stopped partway. Ask it to carry on.`), { text: whole, acts, usage })
+  return { text: whole, usage, acts }
 }

@@ -23,7 +23,7 @@ const TABS: { id: Tab; name: string }[] = [
 ]
 
 export function Library({ go, say }: { go: (v: View) => void; say: (t: string) => void }) {
-  const [tab, setTab] = useState<Tab>(() => (sessionStorage.getItem('lb.libtab') as Tab) || 'playbooks')
+  const [tab, setTab] = useState<Tab>(() => { const t = sessionStorage.getItem('lb.libtab'); return TABS.find((x) => x.id === t)?.id ?? 'playbooks' })
   const [q, setQ] = useState('')
   useEffect(() => { sessionStorage.setItem('lb.libtab', tab) }, [tab])
   const skills = useApp((s) => s.skills)
@@ -133,7 +133,7 @@ function PlaybookSheet({ p, close, go }: { p: Playbook; close: () => void; go: (
         {p.ask && (
           <label className="askfield">
             <span>{p.ask}</span>
-            <textarea ref={box} rows={3} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) start() }} />
+            <textarea ref={box} rows={3} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && input.trim()) start() }} />
           </label>
         )}
         <details className="peek">
@@ -171,8 +171,8 @@ function Tools({ q, say }: { q: string; say: (t: string) => void }) {
           <span>Lunchbox runs these open source MCP servers itself and passes their tools to Claude Code, Codex and Gemini in every room. Nothing to configure per agent.</span>
         </div>
         <div className="row">
-          <span className="quiet">Built-in browser</span>
-          <Toggle on={settings.browser !== false} set={(on) => reload.settings({ browser: on })} label="Let agents use the built-in browser" />
+          <span className="quiet">Lunchbox browser</span>
+          <Toggle on={settings.browser !== false} set={(on) => reload.settings({ browser: on })} label="Let agents use the Lunchbox browser" />
         </div>
       </div>
       {GROUPS.map((g) => {
@@ -297,7 +297,7 @@ function Packs({ q, go, say }: { q: string; go: (v: View) => void; say: (t: stri
       <section className="group">
         <h2>Add a pack<span className="quiet">from a link someone shared, or a file</span></h2>
         <div className="row">
-          <label className="search grow"><input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://gist.github.com/… or a raw GitHub file" onKeyDown={(e) => e.key === 'Enter' && link && add()} /></label>
+          <label className="search grow"><input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://gist.github.com/… or a raw GitHub file" onKeyDown={(e) => e.key === 'Enter' && link.trim() && !busy && add()} /></label>
           <button className="btn small" disabled={!link || busy} onClick={add}>{busy ? <Loader size={10} /> : 'Add'}</button>
           <button className="btn small quiet" onClick={importFile}>From a file</button>
         </div>
@@ -324,7 +324,7 @@ function Skills({ q, go, say }: { q: string; go: (v: View) => void; say: (t: str
       <div className="cards">
         {shown.map((s, i) => (
           <div key={s.id} className="card static" style={{ '--i': i } as CSSProperties}>
-            <small>{s.steps.length} steps</small>
+            <small>{s.steps.length} step{s.steps.length === 1 ? '' : 's'}</small>
             <b>{s.name}</b>
             <span>{s.brief.slice(0, 120)}</span>
             <span className="cardfoot">

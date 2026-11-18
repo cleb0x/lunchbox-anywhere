@@ -1,5 +1,5 @@
-import { copyFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Pack } from '../shared/types'
 
 export const BUILTIN: Pack[] = [
@@ -75,9 +75,18 @@ const NOT_A_PACK = 'That is not a Lunchbox pack. It needs an id, a name, a brief
 export function importPack(file: string, dir: string): Pack {
   const p = JSON.parse(readFileSync(file, 'utf8'))
   if (!valid(p)) throw new Error(NOT_A_PACK)
-  copyFileSync(file, join(dir, basename(`${p.id}.json`)))
-  return { ...p, source: 'user' }
+  const clean = shaped(p)
+  writeFileSync(join(dir, `${clean.id}.json`), JSON.stringify(clean, null, 2))
+  return { ...clean, source: 'user' }
 }
+
+// A pack from outside, cut down to the fields a pack has, each held to its type and length.
+const shaped = (p: Pack): Pack => ({
+  id: p.id, name: p.name.slice(0, 40), line: (typeof p.line === 'string' ? p.line : '').slice(0, 80), brief: p.brief.slice(0, 4000),
+  ideas: p.ideas.filter((i) => typeof i === 'string').slice(0, 6),
+  crew: Array.isArray(p.crew) ? p.crew.filter((w) => typeof w === 'string').slice(0, 8) : undefined,
+  checks: Array.isArray(p.checks) ? p.checks.filter((c) => c && typeof c.command === 'string' && typeof c.label === 'string').map((c) => ({ label: c.label.slice(0, 60), command: c.command.slice(0, 400) })).slice(0, 6) : undefined,
+})
 
 // Packs are shared as plain links: a gist, a raw GitHub file, any https URL that returns the JSON.
 export async function fetchPack(url: string, dir: string): Promise<Pack> {
@@ -93,7 +102,7 @@ export async function fetchPack(url: string, dir: string): Promise<Pack> {
   let p: Partial<Pack>
   try { p = JSON.parse(text) } catch { throw new Error(NOT_A_PACK) }
   if (!valid(p)) throw new Error(NOT_A_PACK)
-  const clean: Pack = { id: p.id, name: p.name.slice(0, 40), line: (p.line ?? '').slice(0, 80), brief: p.brief.slice(0, 4000), ideas: p.ideas.filter((i) => typeof i === 'string').slice(0, 6), crew: p.crew, checks: p.checks?.filter((c) => c && typeof c.command === 'string' && typeof c.label === 'string').slice(0, 6) }
+  const clean = shaped(p)
   writeFileSync(join(dir, `${clean.id}.json`), JSON.stringify(clean, null, 2))
   return { ...clean, source: 'user' }
 }

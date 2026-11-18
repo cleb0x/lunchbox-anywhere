@@ -82,12 +82,14 @@ export type DecideAction =
   | { type: 'accept' }
   | { type: 'flow'; flow: { name: string; steps: FlowStep[]; every?: Every; at?: string; day?: number } }
 
+// A hands event with via 'cli' is one agent starting another from its own command line, outside
+// the room: ask holds the prompt or the command, answer what it printed.
 // inside: written while another agent's turn was running, for that turn, and shown within it at
 // the point it was asked for: mark is how much of that turn's text came before.
 export type Event = { id: string; at: number; inside?: { turn: string; mark: number } } & (
   | { kind: 'you'; text: string; to?: string[]; arena?: boolean; cat?: Category; lead?: string; files?: string[]; from?: 'flow' | 'phone' }
   | { kind: 'say'; who: string; text: string; acts: Act[]; usage?: Usage; proof?: Proof[]; arena?: string; reply?: string; error?: string; ms?: number; turn?: string }
-  | { kind: 'hands'; from: string; to: string; ask: string; answer: string; acts: Act[]; usage?: Usage; error?: string; ms?: number; via?: 'tool' }
+  | { kind: 'hands'; from: string; to: string; ask: string; answer: string; acts: Act[]; usage?: Usage; error?: string; ms?: number; via?: 'tool' | 'cli' }
   | { kind: 'image'; by: string; for: string; prompt: string; path: string; size?: string; usage?: Usage }
   | { kind: 'wall'; from: string; to: string; until?: number; reason: string; arena?: string }
   | { kind: 'decide'; text: string; options: { label: string; action: DecideAction }[] }
@@ -116,6 +118,10 @@ export type RoomMeta = {
   // The project's own design files, found once when Studio is switched on, so the instructions stay
   // the same turn to turn and files an agent creates later are never taken for the person's taste.
   design?: string[]
+  // Expert's random starting points for this room, and what recent Expert rooms settled on, both
+  // fixed when Expert is switched on so the instructions stay the same turn to turn.
+  sparks?: string[]
+  lately?: string[]
   sessions: Record<string, string>
   // Each agent's session totals as of its last turn, so the next turn can be counted on its own.
   meters?: Record<string, Meter & { session: string }>
@@ -168,6 +174,8 @@ export type LiveTurn = {
 
 export type LiveRun = {
   id: string
+  // A question that is neither a command nor an edit: its own wording, and what Always covers.
+  asks?: { text: string; always: string }
   who: string
   command: string
   cwd: string
@@ -176,6 +184,8 @@ export type LiveRun = {
   edit?: boolean
   verdict?: Verdict
   out: string
+  // What the command printed, before colour codes and redrawn lines were taken out.
+  raw?: string
   started: number
 }
 
@@ -308,7 +318,8 @@ export type Day = { day: string; cost: number; tokens: number; input: number; ca
 
 export type Hit = { room: string; roomName: string; event?: string; text: string }
 
-export type Env = { home: string; platform: string; version: string; cwd: string; data: string }
+// window: which of the app's windows is asking.
+export type Env = { home: string; platform: string; version: string; cwd: string; data: string; window?: number }
 
 // A message pushed to every copy of the app from the signed feed, no update needed. A toast sits in
 // the corner, a card is a designed pop-up for big news, a banner runs across the top of the page.
@@ -334,5 +345,9 @@ export type UpdateState =
   | { state: 'ready'; version: string }
   | { state: 'manual'; version: string; url: string }
   | { state: 'error'; error: string }
+
+// A chat found in another agent's own history on this computer. there: its folder still exists.
+export type ChatSource = 'claude' | 'codex' | 'gemini' | 'grok'
+export type FoundChat = { agent: ChatSource; id: string; file: string; folder: string; there: boolean; first: string; title?: string; at: number; size: number }
 
 export type Report = { kind: 'bug' | 'idea' | 'question'; text: string; contact?: string; context?: string; diagnostics?: string }

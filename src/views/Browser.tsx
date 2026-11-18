@@ -6,7 +6,7 @@ import { YOU } from '../../shared/tabs'
 
 type Device = 'desktop' | 'tablet' | 'phone'
 type Tab = { id: string; who: string; room?: string; url: string; title: string; loading: boolean; back: boolean; forward: boolean; device: Device; action?: string; busy: boolean }
-type State = { tabs: Tab[]; active: string | null; shown: boolean }
+type State = { tabs: Tab[]; active: string | null; shown: boolean; host?: number }
 
 const WIDTH: Record<Device, number> = { desktop: 0, tablet: 820, phone: 390 }
 const BLANK: Tab = { id: YOU, who: YOU, url: '', title: '', loading: false, back: false, forward: false, device: 'desktop', busy: false }
@@ -49,6 +49,12 @@ export function Browser({ say, covered }: { say: (t: string) => void; covered: b
   const rooms = useApp((x) => x.rooms)
   const open = !!s.url
   const hidden = useOverlaid() || covered
+  // The pages are drawn in one window at a time. Opening this page brings them here once; after
+  // that this window only moves them while it is the one holding them.
+  const me = useApp((x) => x.env.window)
+  const mine = !web.host || web.host === me
+  const claim = useRef(true)
+  const [taken, take] = useState(0)
 
   useEffect(() => { if (!open) desk.call('browser:local').then(setLocal, () => setLocal([])) }, [open])
   // What was being typed belongs to the page it was typed on.
@@ -57,6 +63,8 @@ export function Browser({ say, covered }: { say: (t: string) => void; covered: b
   useLayoutEffect(() => {
     const el = hole.current
     if (!el || !open || hidden) { desk.call('browser:place', null); return }
+    if (!mine && !claim.current) return
+    claim.current = false
     const place = () => {
       const r = el.getBoundingClientRect()
       desk.call('browser:place', { x: r.left, y: r.top, width: r.width, height: r.height })
@@ -66,7 +74,7 @@ export function Browser({ say, covered }: { say: (t: string) => void; covered: b
     ro.observe(el)
     addEventListener('resize', place)
     return () => { ro.disconnect(); removeEventListener('resize', place) }
-  }, [open, hidden, s.device])
+  }, [open, hidden, s.device, mine, taken])
   useEffect(() => () => { desk.call('browser:place', null) }, [])
 
   const go = async (e?: FormEvent, url = typed ?? '') => {
@@ -132,7 +140,10 @@ export function Browser({ say, covered }: { say: (t: string) => void; covered: b
       <div className="bstage">
         {open ? (
           <div className={`bdevice ${s.device}`} style={width ? ({ '--w': `${width}px` } as CSSProperties) : undefined}>
-            <div ref={hole} className="bhole">{covered && <span className="quiet">The page is behind this window</span>}</div>
+            <div ref={hole} className="bhole">
+              {covered && <span className="quiet">The page is behind this window</span>}
+              {!mine && !covered && <span className="quiet">The page is showing in another window. <button className="linkbtn" onClick={() => { claim.current = true; take((n) => n + 1) }}>Show it here</button></span>}
+            </div>
           </div>
         ) : (
           <div className="bstart">

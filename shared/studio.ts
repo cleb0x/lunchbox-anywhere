@@ -55,17 +55,103 @@ const GENERIC = [
   'a small mono label with a pulsing dot',
   'stock phrases such as "Unlock the power of", "seamless" or "supercharge"',
   'invented numbers, logos or testimonials',
+  'the colour and type you reach for without thinking, which for models is usually a green or teal accent with a geometric sans',
   'blobs, sparkles and decoration that mean nothing',
 ]
 
-export function studioCore(sources: string[]) {
+// Starting points Lunchbox draws at random for each Expert room. Left to choose, models settle on
+// the same few looks whatever the brief (a green or teal accent, a geometric sans, cream and
+// charcoal), so every room starts from a different corner. Each colour world carries its family,
+// so the three drawn for a room never share one.
+const COLOURS: [string, string][] = [
+  ['red', 'oxblood, bone and warm grey, like a leather ledger'],
+  ['red', 'signal red on newsprint with black ink'],
+  ['red', 'brick, plaster pink and soot'],
+  ['orange', 'safety orange, concrete grey and white'],
+  ['orange', 'terracotta, sand and a deep olive shadow'],
+  ['orange', 'burnt amber on near black, like a darkroom lamp'],
+  ['yellow', 'chrome yellow, cobalt and paper white, like a 1960s airline'],
+  ['yellow', 'mustard, chocolate brown and cream'],
+  ['yellow', 'pale butter, graphite and one hard black'],
+  ['green', 'racing green, brass and ivory'],
+  ['green', 'chartreuse on charcoal, used sparingly'],
+  ['blue', 'ultramarine and chalk, nothing else'],
+  ['blue', 'navy, pale sky and a warm brass detail'],
+  ['blue', 'ice blue, steel and deep ink, like a winter harbour'],
+  ['blue', 'cyanotype blue and white'],
+  ['purple', 'aubergine, lilac and cream'],
+  ['purple', 'violet ink on cold grey paper'],
+  ['pink', 'shell pink, rust and charcoal'],
+  ['pink', 'hot magenta on black with silver grey'],
+  ['pink', 'dusty rose, bottle green and parchment'],
+  ['brown', 'tobacco, linen and walnut'],
+  ['brown', 'espresso, caramel and off white'],
+  ['neutral', 'stark black and white with one tiny red mark'],
+  ['neutral', 'warm greys only, from fog to slate, with no accent'],
+  ['neutral', 'silver, graphite and frosted white, like brushed aluminium'],
+  ['mixed', 'Bauhaus primaries, red, yellow and blue, on off white'],
+  ['mixed', 'risograph pair: fluorescent pink and teal overprinting'],
+  ['mixed', 'tropical: coral, jade and deep marine'],
+]
+const TYPE = [
+  'a condensed grotesk set large and tight',
+  'a wide extended sans',
+  'a classic book serif with real italics',
+  'a high contrast didone for display',
+  'a sturdy slab serif',
+  'a monospace typewriter face throughout',
+  'a humanist sans, warm and open',
+  'a grotesk from Swiss posters of the 1960s',
+  'a soft rounded sans',
+  'a sharp transitional serif paired with a plain grotesk',
+  'a blackletter or engraved display face used once, with a quiet text face',
+  'a stencil or industrial display face over a plain text face',
+]
+const REFERENCES = [
+  'a Japanese train timetable', 'a 1970s NASA manual', 'a field guide to birds', 'a Penguin paperback cover',
+  'a Swiss railway poster', 'a vinyl record sleeve from Blue Note', 'a botanical herbarium sheet', 'a chemistry lab label',
+  'a Dieter Rams radio', 'a Scandinavian ferry ticket', 'a museum wall caption', 'a pharmacy receipt',
+  'a mid century travel brochure', 'an architect\'s blueprint', 'a Polaroid and its white frame', 'a newspaper front page from 1960',
+  'a stamp sheet', 'a ski resort trail map', 'a cookbook from the 1950s', 'an airline safety card',
+  'a seed packet', 'a concert ticket stub', 'a theatre programme', 'a weather chart',
+  'a Bauhaus exhibition poster', 'a library index card', 'a sports kit and its numbers', 'a tide table',
+  'a modernist hotel sign', 'a nautical chart', 'a racing car livery', 'a bank note',
+]
+
+const pick = <T,>(list: T[], n: number, rand: () => number) => {
+  const left = [...list]
+  return Array.from({ length: n }, () => left.splice(Math.floor(rand() * left.length), 1)[0])
+}
+
+// Three starting points for one room, each a colour world, a type voice and a reference, with
+// three different colour families. Drawn once when Expert is switched on and kept with the room.
+export function spark(rand = Math.random): string[] {
+  const families = pick([...new Set(COLOURS.map(([f]) => f))], 3, rand)
+  const type = pick(TYPE, 3, rand)
+  const refs = pick(REFERENCES, 3, rand)
+  return families.map((f, i) => {
+    const [, colour] = pick(COLOURS.filter(([g]) => g === f), 1, rand)[0]
+    return `${colour}; ${type[i]}; the feel of ${refs[i]}`
+  })
+}
+
+// The palette and type of a direction another room settled on, short enough to list.
+export function directionGist(text: string) {
+  const field = (label: string) => text.match(new RegExp(`^\\W*${label}\\W*:?\\s*(.+)$`, 'im'))?.[1].trim()
+  const parts = [field('Mood'), field('System')].filter(Boolean) as string[]
+  return parts.join('. ').replace(/\s+/g, ' ').slice(0, 220)
+}
+
+export function studioCore(sources: string[], sparks: string[] = [], lately: string[] = []) {
   return [
     'Expert mode is on. The person wants work at the level of a senior designer at a good studio: decided, distinct and finished, checked with your own eyes before it is handed over. Steps 2 to 9 are for visual work (interfaces, identities, graphics, 3D, slides, motion); for anything else, plan briefly, check the result against the request, and hand over with evidence.',
     sources.length
       ? `1. Their direction rules. This project carries its own in: ${sources.join(', ')}. Read these first and follow them exactly, along with every attachment, reference and instruction from the person. Where they conflict with anything below, they win. Where they are silent, extend them in their own spirit. A file still at its framework default sets no direction.`
       : '1. Their direction rules. Whatever the person, the project or an attached file sets (a style, a design system, references, rules) is followed exactly. Where it conflicts with anything below, it wins. Where it is silent, extend it in its own spirit.',
     `2. Read the brief the way an art director does, before any making. Who is this for, and what should they do or feel? What does the subject itself suggest: its name, its trade, its materials, its audience, the place it comes from? Say the mood in three plain words. If ${DIRECTION} exists, this room already has a direction: read it and stay inside it unless the person changes it.`,
-    '3. When the request leaves the look open and nothing in step 1 sets it, name three directions in one line each. They must differ in kind, not in shade: different references, different type, a different first impression. Choose the one that fits the subject best, say why in one line, and carry on. The person can name another at any time. When a direction is given, skip this.',
+    '3. When the request leaves the look open and nothing in step 1 sets it, name three directions in one line each. They must differ in kind, not in shade: different references, different type, a different first impression. Choose the one that fits the subject best, say why in one line, and carry on. The person can name another at any time. When a direction is given, skip this.' +
+      (sparks.length ? ` Lunchbox drew three starting points for this room at random, so that rooms do not all arrive at the same look: ${sparks.map((x, i) => `(${'abc'[i]}) ${x}`).join('; ')}. Grow each of your three directions from one of them, bent to the subject: a seed, not a brief, so keep what serves the subject and change the rest.` : '') +
+      (lately.length ? ` Directions from this person's recent Expert rooms: ${lately.join(' | ')}. Do not repeat their main colour or their type unless the person asks for it.` : ''),
     `4. Write the direction down before building new visual work, and save it as ${DIRECTION}, thirteen lines at most. Mood: the three words. References: two or three real things named in words (a maker, a period, a printed object, a place, a material) and what you take from each. The one move: the single thing someone will remember, which everything else stays quiet for. First screen: what the opening frame holds at desktop and at phone width, with the one move inside it and no part of the frame left over. System: type families and why these, the scale; each colour with its role; the spacing unit; shape; how images and motion are treated. Rules out: what this direction forbids. If it would still fit under another name, it is not a direction yet: sharpen it. For existing work, name the system already there and stay inside it.`,
     `5. Unless asked for, avoid what reads as made by default: ${GENERIC.join('; ')}. Each is a decision nobody made. Make the decision.`,
     '6. Build from real content and the system. Write the real words, names and numbers first, since layout made for placeholder text fails when the real text arrives. Then tokens, then parts that use only those tokens.',
