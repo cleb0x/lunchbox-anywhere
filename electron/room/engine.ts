@@ -12,13 +12,14 @@ import { DESIGN_SOURCES, DIRECTION, directionGist, spark, studioChecks } from '.
 import { describe as schedule } from '../../shared/flow'
 import { detect, run, type Result } from '../agents'
 import { plain } from '../agents/parse'
-import type { Hands, Tool, Watch } from '../hands'
+import type { Guard, Hands, Tool, Watch } from '../hands'
 import { rates } from '../../shared/prices'
 import { openaiImage, target } from '../images'
 import { kit, type Host } from './kit'
 import { clearMemory, writeMemory } from './project'
-import { ask, execute, kill, type Ran } from '../shell'
-import { decide } from '../policy'
+import { ask, execute, kill, type Answer, type Ran } from '../shell'
+import { decide, prefix } from '../policy'
+import type { Verdict } from '../../shared/types'
 import type { Bench } from '../agents/bench'
 import type { Snapshots } from '../snap'
 import type { Store } from '../store'
@@ -60,6 +61,18 @@ const FLOW_ASK = 15 * 60e3
 // Grok Build only loads MCP servers from config files, which the room does not touch.
 const BORROWS = new Set(['claude', 'codex', 'gemini'])
 const LOST_SESSION = /(session|conversation|thread|rollout)[^\n]{0,60}(not found|no such|invalid|expired|unknown|missing|does not exist|could not be (found|loaded|resumed))|no (conversation|session|thread|rollout) found|(could not|cannot|can't|failed to|unable to) (find|load|resume)[^\n]{0,40}(session|conversation|thread|rollout)|--resume|unexpected[^\n]{0,30}(session|resume)/i
+// The site an address for the browser leads to, or nothing for this computer. Words with no
+// address in them are a web search.
+export function siteOf(url: string) {
+  const u = url.trim()
+  if (/^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(u)) return ''
+  if (!/^https?:\/\//i.test(u) && (/\s/.test(u) || !u.includes('.'))) return 'a web search'
+  try {
+    const host = new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname.toLowerCase()
+    return /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)$/.test(host) || host.endsWith('.localhost') ? '' : host
+  } catch { return 'a web search' }
+}
+
 // What "always" remembers for edits in Ask mode, in the place command prefixes are kept.
 const EDITS = '\u0000edits'
 const uid = () => randomUUID().replace(/-/g, '').slice(0, 14)
@@ -870,7 +883,7 @@ export class Engine {
     // Help this turn calls for is shown inside it, where it was asked for, not above it.
     const inner: Ctx = !ctx.host && !ctx.arena && lt.kind === 'say' ? { ...ctx, host: { turn: lt.id, mark: () => lt.text.length } } : ctx
     const tools = this.hands && me.via === 'cli' && BORROWS.has(who)
-      ? [...kit(this.host(room, me, crew, access, inner)), ...(this.hooks.tools?.(who, meta.workspace, access, room) ?? []).filter((t) => meta.studio || !t.name.startsWith('expert_'))]
+      ? [...kit(this.host(room, me, crew, access, inner)), ...this.gated(room, who, access, (this.hooks.tools?.(who, meta.workspace, access, room) ?? []).filter((t) => meta.studio || !t.name.startsWith('expert_')))]
       : []
     const http = me.via !== 'cli'
     // A model behind an API has no file tools of its own, so the room gives it some.
@@ -914,8 +927,22 @@ export class Engine {
       const said = list.map((q) => q.text + (q.files?.length ? `\n\nAttached: ${q.files.join(', ')}` : '')).join('\n\n')
       return `The person sent this while you were working. Take it into account from here, and keep going unless it asks you to stop:\n\n${said}`
     } : undefined
+    // In Auto, Claude Code runs commands without asking anyone. The room's mode is put in front
+    // of each one: inside the folder they run as before, and one that reaches the internet,
+    // leaves the folder or is dangerous waits for a yes in the room, like any other command.
+    const guard: Guard | undefined = who === 'claude' && access === 'workspace' ? async (command, cwd) => {
+      const root = meta.workspace
+      const memory = this.allowed.get(root) ?? new Set<string>()
+      this.allowed.set(root, memory)
+      const v = decide(access, command, cwd || root, root, memory)
+      if (v.decision === 'allow') return null
+      if (v.decision === 'deny') return `Lunchbox did not run this: it ${v.reason}.`
+      const a = await this.permit(room, who, command, v)
+      if (a === 'always') memory.add(prefix(command))
+      return a === 'deny' ? 'The person declined this command. Carry on without it, or ask them what to do instead.' : null
+    } : undefined
     // Granted last, with nothing between it and the turn that could fail and leave it open.
-    const grant = this.hands && (tools.length || watch || (inbox && who === 'claude')) ? this.hands.grant(tools, watch, inbox) : null
+    const grant = this.hands && (tools.length || watch || guard || (inbox && who === 'claude')) ? this.hands.grant(tools, watch, inbox, guard) : null
     const running = run(who, {
       prompt: http ? p.tail : p.text, history: http ? p.history : undefined, cacheKey: `${room}:${who}`, system, fresh: !resumed || meta.protos?.[who] !== sent, cwd: meta.workspace, access,
       model: ctx.models?.[who] || this.store.settings.models[who] || me.model, session: resumed ? session : undefined, meter: resumed && meta.meters?.[who]?.session === session ? meta.meters[who] : undefined, allow: ctx.allow, hands: grant?.url || undefined, bench,
@@ -1173,19 +1200,53 @@ export class Engine {
       },
       confirm: async (what) => {
         if (memory.has(EDITS)) return true
-        const live = this.live(room)
-        const lr: LiveRun = { id: uid(), who, command: what, cwd: root, state: 'asking', edit: true, out: '', started: Date.now(), verdict: { kind: 'write', decision: 'ask', reason: 'changes a file in the folder' } }
-        live.runs.push(lr)
-        this.hooks.notify(meta.name, `Allow ${this.name(who)} to ${what[0].toLowerCase()}${what.slice(1)}?`, room)
-        if (meta.flow) setTimeout(() => { if (live.runs.includes(lr)) kill(lr.id) }, FLOW_ASK).unref()
-        this.changed(room)
-        const a = await ask(lr.id)
-        live.runs = live.runs.filter((x) => x !== lr)
-        this.changed(room)
+        const a = await this.permit(room, who, what, { kind: 'write', decision: 'ask', reason: 'changes a file in the folder' }, true)
         if (a === 'always') memory.add(EDITS)
         return a !== 'deny'
       },
     }
+  }
+
+  // A question for the person about something an agent is about to do by itself: a command of
+  // its own, an edit, a connected tool. It shows in the room like a command waiting for a yes.
+  private async permit(room: string, who: string, what: string, verdict: Verdict, edit = false, asks?: LiveRun['asks']): Promise<Answer> {
+    const meta = this.store.room(room)!
+    const live = this.live(room)
+    const lr: LiveRun = { id: uid(), who, command: what, cwd: meta.workspace, state: 'asking', edit: edit || undefined, asks, out: '', started: Date.now(), verdict }
+    live.runs.push(lr)
+    this.hooks.notify(meta.name, edit ? `Allow ${this.name(who)} to ${what[0].toLowerCase()}${what.slice(1)}?` : `Allow \`${what}\`?`, room)
+    // A flow often runs with nobody at the computer: the question counts as a no after a while.
+    if (meta.flow) setTimeout(() => { if (live.runs.includes(lr)) kill(lr.id) }, FLOW_ASK).unref()
+    this.changed(room)
+    const a = await ask(lr.id)
+    live.runs = live.runs.filter((x) => x !== lr)
+    this.changed(room)
+    return a
+  }
+
+  // Tools from outside the room, held to its mode. In Ask, a connected tool can write anywhere,
+  // so each one waits for a yes the first time. In Auto, the browser opens a site outside this
+  // computer only after a yes for that site, or for every site with Always.
+  private gated(room: string, who: string, access: Access, tools: Tool[]): Tool[] {
+    if (access !== 'ask' && access !== 'workspace') return tools
+    const meta = this.store.room(room)!
+    const memory = this.allowed.get(meta.workspace) ?? new Set<string>()
+    this.allowed.set(meta.workspace, memory)
+    const yes = async (key: string, all: string, what: string, verdict: Verdict, asks: LiveRun['asks']) => {
+      if (memory.has(key) || memory.has(all)) return
+      const a = await this.permit(room, who, what, verdict, true, asks)
+      if (a === 'deny') throw new Error('The person declined this. Carry on without it, or ask them what to do instead.')
+      memory.add(a === 'always' ? all : key)
+    }
+    return tools.map((t) => {
+      if (access === 'ask') return { ...t, run: async (args) => { await yes(`\u0000tool:${t.name}`, '\u0000tools', `Use the tool ${t.name.replace(/_/g, ' ')}`, { kind: 'outside', decision: 'ask', reason: 'uses a tool you connected, which can reach outside the folder' }, { text: 'Ask mode checks with you before a tool you connected is used. Allow this one?', always: 'Allow every connected tool here' }); return t.run(args) } }
+      if (t.name !== 'browser_open') return t
+      return { ...t, run: async (args) => {
+        const host = siteOf(String(args.url ?? ''))
+        if (host) await yes(`\u0000site:${host}`, '\u0000sites', `Open ${host} in the browser`, { kind: 'network', decision: 'ask', reason: 'opens a site on the internet' }, { text: 'Auto asks the first time the browser opens a site outside this computer. Allow this one?', always: 'Allow every site here' })
+        return t.run(args)
+      } }
+    })
   }
 
   shell(room: string, who: string, command: string, access: Access): Promise<Ran> {

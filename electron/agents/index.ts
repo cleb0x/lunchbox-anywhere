@@ -9,6 +9,7 @@ import { chat, listModels, parseHeaders, PROVIDERS } from './http'
 import type { Bench } from './bench'
 import { logoOf } from '../../shared/logos'
 import { localSetup } from '../local'
+import { HOOK_TIMEOUT } from '../hands'
 
 export type Input = {
   prompt: string
@@ -99,7 +100,7 @@ function claudeHook(i: Input, file: string): Pick<Spec, 'extra'> & { args: strin
   if (!i.hook) return { args: dirs }
   const path = file.replace(/\.txt$/, '.settings.json')
   const settings = { hooks: {
-    PreToolUse: [{ matcher: i.guarded ? '*' : 'Bash', hooks: [{ type: 'http', url: i.hook, timeout: 10 }] }],
+    PreToolUse: [{ matcher: i.guarded ? '*' : 'Bash', hooks: [{ type: 'http', url: i.hook, timeout: HOOK_TIMEOUT }] }],
     // After each step, so a message sent mid-turn reaches the agent without stopping it.
     ...(i.inbox ? { PostToolUse: [{ matcher: '*', hooks: [{ type: 'http', url: i.hook, timeout: 10 }] }] } : {}),
   } }

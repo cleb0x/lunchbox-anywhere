@@ -172,6 +172,8 @@ export type LiveTurn = {
 
 export type LiveRun = {
   id: string
+  // A question that is neither a command nor an edit: its own wording, and what Always covers.
+  asks?: { text: string; always: string }
   who: string
   command: string
   cwd: string

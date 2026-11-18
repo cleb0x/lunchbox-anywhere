@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, rmSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { logs, trim } from './room/trim'
 
 export type Tool = {
@@ -25,6 +25,32 @@ export type Watch =
   | { kind: 'shorten'; dir: string; cut(chars: number): void }
   | { kind: 'refuse' }
 
+// Asked before a command the agent is about to run by itself. It answers with nothing when the
+// command may run, or with the reason it may not, which the agent is told.
+export type Guard = (command: string, cwd?: string) => Promise<string | null>
+
+// A question put to the person has to be answered before the agent's own hook gives up, because
+// a hook that times out lets the command through.
+export const HOOK_TIMEOUT = 1800
+const GUARD_WAIT = (HOOK_TIMEOUT - 120) * 1000
+
+// The folder command output is kept in, and the one above it, belong to this account and nobody
+// else can list or write them. On Linux the temp folder is shared, so a folder someone else made
+// there first, or a link put in its place, is never used.
+export function privateDir(dir: string) {
+  try {
+    for (const d of [dirname(dir), dir]) {
+      mkdirSync(d, { recursive: true, mode: 0o700 })
+      const s = lstatSync(d)
+      if (!s.isDirectory() || s.isSymbolicLink()) return false
+      if (process.platform === 'win32') continue
+      if (s.uid !== process.getuid?.()) return false
+      if (s.mode & 0o077) chmodSync(d, 0o700)
+    }
+    return true
+  } catch { return false }
+}
+
 const MAX_RPC = 1_000_000
 const MAX_OUTPUT = 16_000_000
 
@@ -41,7 +67,7 @@ const VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
 // credential: it names the tools that turn may use and stops working when the turn ends.
 export class Hands {
   private server: Server | null = null
-  private grants = new Map<string, { tools: Tool[]; watch?: Watch; drop: string; inbox?: () => string | null }>()
+  private grants = new Map<string, { tools: Tool[]; watch?: Watch; drop: string; inbox?: () => string | null; guard?: Guard }>()
   // Where a shortened command sends its output. That address ends up on a command line, which
   // other programs on the computer can read, so it has a token of its own that opens nothing else.
   private drops = new Map<string, Watch>()
@@ -70,15 +96,15 @@ export class Hands {
   }
 
   // inbox hands over a message the person sent mid-turn, once, after the agent's next step.
-  grant(tools: Tool[], watch?: Watch, inbox?: () => string | null) {
+  grant(tools: Tool[], watch?: Watch, inbox?: () => string | null, guard?: Guard) {
     // Without a server the agents run without the room's tools rather than call a dead address.
     if (!this.port) return { url: '', hook: '', revoke: () => {} }
     const token = randomBytes(18).toString('base64url')
     const drop = randomBytes(18).toString('base64url')
-    this.grants.set(token, { tools, watch, drop, inbox })
+    this.grants.set(token, { tools, watch, drop, inbox, guard })
     if (watch) this.drops.set(drop, watch)
     const base = `http://127.0.0.1:${this.port}`
-    return { url: tools.length ? `${base}/mcp/${token}` : '', hook: watch || inbox ? `${base}/hook/${token}` : '', revoke: () => { this.grants.delete(token); this.drops.delete(drop) } }
+    return { url: tools.length ? `${base}/mcp/${token}` : '', hook: watch || inbox || guard ? `${base}/hook/${token}` : '', revoke: () => { this.grants.delete(token); this.drops.delete(drop) } }
   }
 
   private send(res: ServerResponse, status: number, body?: unknown) {
@@ -110,7 +136,7 @@ export class Hands {
     }
     const raw = Buffer.concat(chunks).toString('utf8')
     if (drop) return this.output(res, raw, drop, rest ?? '')
-    if (route === 'hook') return this.send(res, 200, this.hook(raw, granted!.watch, granted!.drop, granted!.inbox))
+    if (route === 'hook') return this.send(res, 200, await this.hook(raw, granted!))
     const tools = granted!.tools
     let body: Rpc | Rpc[]
     try { body = JSON.parse(raw) } catch { return this.send(res, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }) }
@@ -122,8 +148,8 @@ export class Hands {
   }
 
   // Called by the agent before each of its tool calls.
-  private hook(raw: string, watch: Watch | undefined, drop: string, inbox?: () => string | null) {
-    let o: { hook_event_name?: string; tool_name?: string; tool_input?: Record<string, unknown> }
+  private async hook(raw: string, { watch, drop, inbox, guard }: { watch?: Watch; drop: string; inbox?: () => string | null; guard?: Guard }) {
+    let o: { hook_event_name?: string; tool_name?: string; tool_input?: Record<string, unknown>; cwd?: string }
     try { o = JSON.parse(raw) } catch { return {} }
     if (o.hook_event_name === 'PostToolUse') {
       const sent = inbox?.()
@@ -131,11 +157,20 @@ export class Hands {
     }
     if (watch?.kind === 'refuse') return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'No tools in this turn. Reply in words only.' } }
     const command = o.tool_input?.command
+    // The room's mode decides about the command before anything else is done with it. No answer
+    // in time counts as a no.
+    if (guard && o.tool_name === 'Bash' && typeof command === 'string') {
+      let timer: NodeJS.Timeout | undefined
+      const late = new Promise<string>((done) => { timer = setTimeout(() => done('Nobody answered in time, so Lunchbox did not run this.'), GUARD_WAIT) })
+      const no = await Promise.race([guard(command, typeof o.cwd === 'string' ? o.cwd : undefined).catch(() => 'Lunchbox could not check this command, so it did not run.'), late])
+      clearTimeout(timer)
+      if (no) return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: no } }
+    }
     if (watch?.kind !== 'shorten' || o.tool_name !== 'Bash' || typeof command !== 'string' || o.tool_input?.run_in_background || !logs(command)) return {}
     // Forward slashes work in every shell the agents use, Git Bash on Windows included.
     const dir = watch.dir.replace(/\\/g, '/')
     if (/['\n]/.test(dir)) return {}
-    try { mkdirSync(watch.dir, { recursive: true }) } catch { return {} }
+    if (!privateDir(watch.dir)) return {}
     const id = `${Date.now().toString(36)}-${++this.outputs}`
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...o.tool_input, command: wrap(command, `${dir}/${id}.txt`, `http://127.0.0.1:${this.port}/output/${drop}/${id}`) } } }
   }
