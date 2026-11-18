@@ -40,7 +40,12 @@ export async function execute(req: { id: string; command: string; cwd: string; r
   }
   const t0 = Date.now()
   const { file, args, raw } = shellFor(req.command)
-  const child = launch(file, args, { windowsVerbatimArguments: raw, cwd: req.cwd, env: await env({ CI: '1' }), stdio: ['ignore', 'pipe', 'pipe'] })
+  // A command let through as a read must not start a program the repository's own git config
+  // names: its file watcher or its diff tool.
+  const quiet: Record<string, string> = verdict.kind === 'read' && /\bgit\b/.test(req.command)
+    ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false', GIT_CONFIG_KEY_1: 'diff.external', GIT_CONFIG_VALUE_1: '' }
+    : {}
+  const child = launch(file, args, { windowsVerbatimArguments: raw, cwd: req.cwd, env: await env({ CI: '1', ...quiet }), stdio: ['ignore', 'pipe', 'pipe'] })
   running.set(req.id, child)
   hooks.start()
   let out = ''
