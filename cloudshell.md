@@ -22,11 +22,10 @@ link to yourself: it has your key in it.
 
 ## Next time
 
-Open [shell.cloud.google.com](https://shell.cloud.google.com), then run:
+Click **Start in Cloud Shell** on the Lunchbox website, or open
+[shell.cloud.google.com](https://shell.cloud.google.com). Lunchbox starts by itself when the
+terminal opens and prints a new link.
 
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox)
-```
-
-Cloud Shell is free for about 50 hours a week. It stops after a while without use; your rooms and
-your Claude sign in are kept, and `./lunchbox` starts it again.
+Lunchbox stops by itself after 20 minutes with no Lunchbox page open, so Cloud Shell can sleep and
+does not use up your free hours (about 50 a week). Your rooms and your Claude sign in are kept.
+To stop it starting by itself, run the launcher with `--no-autostart`.

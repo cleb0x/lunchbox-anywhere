@@ -3,6 +3,7 @@
 # usually a free Google Cloud Shell, and gives you the link to open it in the browser.
 #   ./lunchbox            start (installs what is missing the first time)
 #   ./lunchbox --update   fetch the newest Lunchbox first, even if one is already here
+#   ./lunchbox --no-autostart   stop starting Lunchbox by itself when Cloud Shell opens
 set -euo pipefail
 
 REPO="${LUNCHBOX_REPO:-cleb0x/lunchbox-anywhere}"
@@ -10,7 +11,7 @@ APP="$HOME/.lunchbox-app"
 PORT="${PORT:-8080}"
 export PATH="$HOME/.local/bin:$PATH"
 
-VERSION="4"
+VERSION="5"
 bold() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\n\033[31m%s\033[0m\n' "$1"; exit 1; }
 
@@ -25,6 +26,27 @@ if [ -z "${LUNCHBOX_NO_SELF_UPDATE:-}" ]; then
     if [ -w "$0" ]; then printf '%s\n' "$latest" > "$0"; chmod +x "$0"; fi
     exec env LUNCHBOX_NO_SELF_UPDATE=1 bash -c "$latest" lunchbox "$@"
   fi
+fi
+
+# In Cloud Shell, Lunchbox starts by itself whenever a terminal opens, unless it already runs.
+MARK="# >>> lunchbox autostart >>>"
+if [ "${1:-}" = "--no-autostart" ]; then
+  [ -f "$HOME/.bashrc" ] && sed -i '/# >>> lunchbox autostart >>>/,/# <<< lunchbox autostart <<</d' "$HOME/.bashrc"
+  echo "Lunchbox no longer starts by itself. Run it with: bash <(curl -fsSL https://raw.githubusercontent.com/$REPO/main/lunchbox)"
+  exit 0
+fi
+if { [ -n "${WEB_HOST:-}" ] || [ -n "${CLOUD_SHELL:-}" ]; } && [ -z "${LUNCHBOX_NO_AUTOSTART:-}" ] && ! grep -qF "$MARK" "$HOME/.bashrc" 2>/dev/null; then
+  cat >> "$HOME/.bashrc" <<RC
+
+$MARK
+# Starts Lunchbox when Cloud Shell opens. To stop that, run the launcher with --no-autostart.
+if [[ \$- == *i* ]] && [ -z "\${LUNCHBOX_AUTOSTARTED:-}" ] && ! pgrep -f "lunchbox-app/main.cjs" >/dev/null 2>&1; then
+  export LUNCHBOX_AUTOSTARTED=1
+  bash <(curl -fsSL https://raw.githubusercontent.com/$REPO/main/lunchbox)
+fi
+# <<< lunchbox autostart <<<
+RC
+  echo "From now on Lunchbox starts by itself when you open Cloud Shell."
 fi
 
 # Node 20 or newer. Cloud Shell has it.
@@ -94,7 +116,9 @@ LOG="$(mktemp)"
 cleanup() { [ -n "${TPID:-}" ] && kill "$TPID" 2>/dev/null; [ -n "${SPID:-}" ] && kill "$SPID" 2>/dev/null; rm -f "$LOG"; }
 trap cleanup EXIT INT TERM
 
-env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" LUNCHBOX_KEY="$KEY" LUNCHBOX_QUIET=1 node "$APP/main.cjs" &
+# In Cloud Shell it stops after 20 minutes without an open page, so the shell can sleep.
+idle="${LUNCHBOX_IDLE_MINUTES:-}"; [ -z "$idle" ] && [ -n "${WEB_HOST:-}${CLOUD_SHELL:-}" ] && idle=20
+env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" LUNCHBOX_KEY="$KEY" LUNCHBOX_QUIET=1 LUNCHBOX_IDLE_MINUTES="${idle:-0}" node "$APP/main.cjs" &
 SPID=$!
 
 if [ -n "${CF:-}" ] && [ -x "$CF" ]; then

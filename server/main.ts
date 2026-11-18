@@ -496,6 +496,21 @@ async function main() {
   })
 }
 
+// With LUNCHBOX_IDLE_MINUTES set, Lunchbox stops itself when no page has been open for that long
+// and no agent or flow is working, so a cloud shell can go to sleep and stop using its hours.
+const IDLE = Number(process.env.LUNCHBOX_IDLE_MINUTES || 0) * 60e3
+let lastSeen = Date.now()
+if (IDLE > 0) {
+  setInterval(() => {
+    const busy = engine?.summaries().some((r) => r.busy) || (flows?.states().length ?? 0) > 0
+    if (clients.size || busy) { lastSeen = Date.now(); return }
+    if (Date.now() - lastSeen > IDLE) {
+      console.log(`\nLunchbox stopped after ${IDLE / 60e3} minutes without use, to save your Cloud Shell hours. Start it again any time.`)
+      quit()
+    }
+  }, 30e3).unref()
+}
+
 const quit = () => { engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush(); finishStops(); process.exit(0) }
 process.on('SIGINT', quit)
 process.on('SIGTERM', quit)

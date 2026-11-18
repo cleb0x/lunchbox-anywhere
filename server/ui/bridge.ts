@@ -52,9 +52,14 @@ function connect(): Promise<void> {
     // The engine keeps running when the page loses its connection; the page finds it again.
     ws.onclose = () => {
       tries++
-      setStatus(connected || tries < 6 ? 'Connecting to Lunchbox…' : 'Lunchbox is not answering. If it stopped, run ./lunchbox in Cloud Shell again and open the new link it prints.')
+      if (connected || tries < 6) setStatus(connected ? 'Reconnecting to Lunchbox… If it stopped, open Cloud Shell to start it again.' : 'Connecting to Lunchbox…')
+      else setStatus(null)
       const boot = document.getElementById('lb-boot')
-      if (boot && !connected && tries >= 6) boot.textContent = 'Lunchbox is not answering. Start it again in Cloud Shell with ./lunchbox and open the new link it prints.'
+      if (boot && !connected && tries === 6) {
+        boot.innerHTML = '<div style="display:grid;gap:14px;justify-items:center;max-width:460px;line-height:1.6"><div>Your Lunchbox in Cloud Shell is not running. Start it, then open the new link it prints.</div><div style="display:flex;gap:10px"><a id="lb-start" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:#f2f0ea;color:#0d0d0c;text-decoration:none">Start in Cloud Shell</a><a href="#local" id="lb-local" style="padding:7px 14px;border-radius:8px;color:#a8a59d;text-decoration:none">Use it in this browser instead</a></div></div>'
+        ;(document.getElementById('lb-start') as HTMLAnchorElement).href = 'https://shell.cloud.google.com/?show=terminal'
+        document.getElementById('lb-local')!.onclick = () => { sessionStorage.removeItem('lb-connect'); setTimeout(() => location.reload(), 0) }
+      }
       setTimeout(() => { void connect() }, 1500)
     }
   })

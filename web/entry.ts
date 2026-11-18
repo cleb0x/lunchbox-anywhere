@@ -24,8 +24,9 @@ if (saved) {
   import('../server/ui/bridge')
     .then(({ startBridge }) => startBridge({ base, key }))
     .then(() => import('../src/main'))
-    .then(() => document.getElementById('lb-boot')?.remove())
+    .then(() => { document.getElementById('lb-boot')?.remove(); return import('./cloudshell') })
+    .then(({ markUsed }) => markUsed())
     .catch(fail)
 } else {
-  import('./local').then(({ boot }) => boot()).catch(fail)
+  import('./local').then(({ boot }) => boot()).then(() => import('./cloudshell')).then(({ offer }) => offer()).catch(fail)
 }
