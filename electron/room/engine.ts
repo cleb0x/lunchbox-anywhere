@@ -326,6 +326,20 @@ export class Engine {
     return meta
   }
 
+  // A chat held in an agent's own app, brought in as a room. An agent handed its old session picks
+  // it up there, so it is marked as having heard everything already in the room.
+  adopt(opts: { name: string; crew: string[]; workspace: string; events: Event[]; about: string; session?: { who: string; id: string } }): RoomMeta {
+    const s = opts.session
+    const meta: RoomMeta = {
+      id: uid(), name: opts.name, created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace,
+      sessions: s ? { [s.who]: s.id } : {}, seen: s ? { [s.who]: { imported: 1 } } : {}, heard: s ? { [s.who]: opts.events.length } : {},
+      blocks: [{ id: 'imported', title: 'Imported chat', text: opts.about, v: 1, at: Date.now() }], saved: { full: 0, sent: 0 },
+    }
+    this.store.create(meta, opts.events)
+    this.list()
+    return meta
+  }
+
   // Expert's starting points for a room: three drawn at random, and the gist of the directions the
   // last few Expert rooms wrote, so a new room looks somewhere else.
   private inspire(room: string) {

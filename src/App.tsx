@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import type { Hit, RoomSummary, Skill } from '../shared/types'
 import { Loader, Sure } from './ui/bits'
 import { Logo } from './ui/Logo'
-import { IconAgents, IconBrowser, IconClock, IconFlows, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings } from './ui/icons'
+import { IconAgents, IconBrowser, IconClock, IconFlows, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings } from './ui/icons'
 import { Onboarding } from './views/Onboarding'
 import { RoomView } from './views/Room'
 import { NewRoom } from './views/NewRoom'
@@ -22,6 +22,7 @@ import { FreeModels } from './views/Free'
 import { Library } from './views/Library'
 import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
+import { ImportSheet } from './views/Import'
 import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
 import { loadTune, saveTune, tuned, type Tune } from './lib/tune'
@@ -90,6 +91,9 @@ export function App() {
   const [arriving, setArriving] = useState(false)
   // Every launch starts at home, except right after an update, which reopens the page it left.
   const [view, setView] = useState<View>(() => {
+    // A window opened on a room starts in it.
+    const room = new URLSearchParams(location.search).get('room')
+    if (room) return { name: 'room', id: room }
     const back = saved<View | null>('resume', null)
     try { localStorage.removeItem('lb.resume') } catch {}
     return back && typeof back === 'object' && VIEWS.includes(back.name) && (back.name !== 'room' || typeof back.id === 'string') ? back : { name: 'new' }
@@ -97,6 +101,7 @@ export function App() {
   const [palette, setPalette] = useState(false)
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null)
   const [report, setReport] = useState<ReportOpen | null>(null)
+  const [importing, setImporting] = useState(false)
   useEffect(() => {
     const leaving = () => keep('resume', view)
     addEventListener('lb:restarting', leaving)
@@ -170,6 +175,24 @@ export function App() {
     desk.call('theme', mode === 'dark')
   }, [theme, mode, ascii, custom, preview, tune])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
+  // Every window shares one saved appearance, so a change made in one is put on in the others.
+  useEffect(() => {
+    const sync = (e: StorageEvent) => {
+      const key = e.key?.startsWith('lb.') ? e.key.slice(3) : ''
+      if (key === 'theme') setModeState(saved<string>('theme', 'dark') === 'light' ? 'light' : 'dark')
+      if (key === 'palette' || key === 'themes') {
+        const list = loadCustom()
+        setCustom(list)
+        setThemeState(themeOf(saved('palette', 'lunchbox'), list).id)
+      }
+      if (key === 'ascii') setAscii(asciiOf(saved('ascii', 'theme')).id)
+      if (key === 'tune') setTuneState(loadTune())
+      if (key === 'look') setLookState(saved<string>('look', 'lunchbox') === 'neyra' ? 'neyra' : 'lunchbox')
+      if (key === 'ready') setReady(saved<unknown>('ready', false) === true)
+    }
+    addEventListener('storage', sync)
+    return () => removeEventListener('storage', sync)
+  }, [])
   useLayoutEffect(() => { document.documentElement.dataset.platform = /^Win/.test(navigator.platform) ? 'win32' : /Mac/.test(navigator.platform) ? 'darwin' : 'linux' }, [])
   const searchButton = useRef<HTMLButtonElement>(null)
   const listed = useRef(new Set<string>())
@@ -223,13 +246,20 @@ export function App() {
   const go = (v: View) => { setPalette(false); setView(v) }
   const openPalette = (open: boolean) => setPalette(open)
   useEffect(() => desk.on('open-room', (id: string) => go({ name: 'room', id })), [])
+  // The main process is told which room this window is on, and the window is named after it, so
+  // the Window menu and a notification can find it.
+  const here = view.name === 'room' ? view.id : null
+  const title = here ? all.find((r) => r.id === here)?.name : ''
+  useEffect(() => { desk.call('window:view', here) }, [here])
+  useEffect(() => { document.title = title || 'Lunchbox' }, [title])
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (!ready || !(e.metaKey || e.ctrlKey)) return
       const k = e.key.toLowerCase()
       if (k === 'k') { e.preventDefault(); if (!palette) openPalette(true) }
-      if (k === 'n') { e.preventDefault(); go({ name: 'new' }) }
+      if (k === 'n' && e.shiftKey) { e.preventDefault(); desk.call('window:new') }
+      else if (k === 'n') { e.preventDefault(); go({ name: 'new' }) }
       if (k === ',') { e.preventDefault(); go({ name: 'settings' }) }
       if (e.shiftKey && k === 'f') { e.preventDefault(); go({ name: 'flows' }) }
       if (e.shiftKey && k === 'p') { e.preventDefault(); go({ name: 'pool' }) }
@@ -254,6 +284,7 @@ export function App() {
 
   const commands: Command[] = [
     { group: 'Actions', label: 'New room', hint: `${mod}N`, run: () => go({ name: 'new' }) },
+    { group: 'Actions', label: 'New window', hint: `${mod}⇧N`, run: () => { desk.call('window:new') } },
     ...rooms.map((r) => ({ group: 'Rooms' as const, label: r.name, hint: r.waiting ? 'needs you' : r.busy ? 'working' : ago(r.updated), run: () => go({ name: 'room', id: r.id }) })),
     ...skills.map((s) => ({ group: 'Skills' as const, label: s.name, hint: steps(s.steps.length), run: () => go({ name: 'new', skill: s }) })),
     ...flows.map((f) => ({ group: 'Flows' as const, label: `Run ${f.name}`, hint: steps(f.steps.length), run: async () => { const room = await desk.call('flows:run', f.id); if (room) go({ name: 'room', id: room }) } })),
@@ -263,6 +294,7 @@ export function App() {
     { group: 'Go to', label: 'Library', hint: `${mod}⇧L`, run: () => go({ name: 'library' }) },
     { group: 'Go to', label: 'Browser', hint: `${mod}⇧B`, run: () => go({ name: 'browser' }) },
     { group: 'Actions', label: 'New flow', hint: 'Flows', run: () => go({ name: 'flows', edit: 'new' }) },
+    { group: 'Actions', label: 'Import a chat', hint: 'From Claude Code, Codex, Gemini CLI or Grok', run: () => setImporting(true) },
     { group: 'Go to', label: 'Agents', hint: 'Connected agents, models and budgets', run: () => go({ name: 'agents' }) },
     { group: 'Go to', label: 'Settings', hint: `${mod},`, run: () => go({ name: 'settings' }) },
     { group: 'Actions', label: mode === 'dark' ? 'Switch to day' : 'Switch to night', hint: 'Appearance', run: () => setMode(mode === 'dark' ? 'light' : 'dark') },
@@ -298,7 +330,7 @@ export function App() {
         <button className={`sbitem${on('library') ? ' on' : ''}`} onClick={() => go({ name: 'library' })}>{on('library') && sel}<IconLibrary />Library</button>
         <button className={`sbitem${on('browser') ? ' on' : ''}`} onClick={() => go({ name: 'browser' })}>{on('browser') && sel}<IconBrowser />Browser{web.tabs.some((t) => t.busy) && <i className="livedot" title="An agent is using the browser" />}</button>
         {needs > 0 && <button className={`sbitem needsyou${on('waiting') ? ' on' : ''}`} onClick={() => go({ name: 'waiting' })}>{on('waiting') && sel}<IconInbox />Needs you<small>{needs}</small></button>}
-        <div className="sblabel">Rooms</div>
+        <div className="sblabel">Rooms<button className="sbimport" onClick={() => setImporting(true)} title="Import a chat from Claude Code, Codex, Gemini CLI or Grok" aria-label="Import a chat"><IconImport /></button></div>
         <div className="sbrooms">
           {rooms.map((r) => (
             <button key={r.id} className={`sbroom${on('room', r.id) ? ' on' : ''}`} onClick={() => go({ name: 'room', id: r.id })} onContextMenu={menuFor(r)} title={r.name}>
@@ -346,6 +378,7 @@ export function App() {
 
       <Notices say={say} />
       {ctx && <RoomContext key={ctx.room.id + ctx.x + ctx.y} {...ctx} close={() => setCtx(null)} say={say} />}
+      {importing && <ImportSheet close={() => setImporting(false)} open={(id) => go({ name: 'room', id })} say={say} />}
       {report && <ReportSheet open={report} close={() => setReport(null)} say={say} />}
       {palette && <Palette commands={commands} close={() => openPalette(false)} openHit={openHit} anchor={searchButton} />}
       {toast && (
@@ -358,7 +391,7 @@ export function App() {
   )
 }
 
-// Right click on a room in the sidebar, for the two things people look for there. Delete asks twice,
+// Right click on a room in the sidebar, for the few things people look for there. Delete asks twice,
 // the same way the room's own menu does.
 function RoomContext({ room, x, y, from, close, say }: { room: RoomSummary; x: number; y: number; from: HTMLElement; close: () => void; say: (t: string) => void }) {
   const box = useRef<HTMLDivElement>(null)
@@ -388,6 +421,10 @@ function RoomContext({ room, x, y, from, close, say }: { room: RoomSummary; x: n
     <div ref={box} className="menu ctx" role="menu" aria-label={room.name} style={{ left: x, top: y }}
       onKeyDown={(e) => rove(e, box.current)}
       onBlur={(e) => { if (e.relatedTarget && !box.current?.contains(e.relatedTarget as Node)) done(false) }}>
+      <button className="item" onClick={() => { desk.call('window:new', room.id); done(false) }}>
+        <span className="grow"><b>Open in new window</b><span>Beside this one, and the two stay in step</span></span>
+      </button>
+      <div className="sep" />
       <button className="item" onClick={archive}>
         <span className="grow"><b>{room.archived ? 'Unarchive' : 'Archive'}</b><span>{room.archived ? 'Bring it back to your rooms' : 'Out of the list, nothing deleted'}</span></span>
       </button>
