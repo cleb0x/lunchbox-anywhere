@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <title>Lunchbox terminal</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0d0d0c; color: #f2f0ea; font: 12px 'IBM Plex Mono', ui-monospace, monospace; }
+      header { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #222; }
+      header a { color: #f2f0ea; }
+      header span { color: #8a8780; }
+      #term { position: absolute; inset: 41px 0 0 0; padding: 6px 10px; }
+    </style>
+  </head>
+  <body>
+    <header><b>Terminal</b><span>Sign in to an agent here, for example run <code>claude</code> and follow the steps. Then go back.</span><a href="./">Back to Lunchbox</a></header>
+    <div id="term"></div>
+    <script type="module" src="./terminal.ts"></script>
+  </body>
+</html>
