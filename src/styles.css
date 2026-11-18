@@ -163,6 +163,17 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .tolatest{position:absolute;left:50%;bottom:14px;z-index:2;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px 0 9px;border-radius:14px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 8px 24px -8px rgb(0 0 0/calc(.5*var(--shade)));font-size:12px;color:var(--dim);translate:-50% 0;animation:fadein 200ms var(--out) both;transition:color 140ms var(--out)}
 @media (hover:hover){.tolatest:hover{color:var(--ink)}}
 .tolatest:active{scale:.97}
+/* Find in the room: a small bar over the top right of the transcript, on the sheet like the
+   way back to the latest message. Matches are marked by the browser, so the text is never redrawn. */
+.find{position:absolute;top:8px;right:20px;z-index:3;display:flex;align-items:center;gap:2px;height:36px;padding:0 4px 0 12px;border-radius:10px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 8px 24px -8px rgb(0 0 0/calc(.5*var(--shade)));animation:fadein 160ms var(--out) both}
+.find input{width:176px;height:28px;font-size:13px;background:none;color:var(--ink)}
+.find input::placeholder{color:var(--faint)}
+.find .count{min-width:64px;padding:0 6px;font:11px var(--mono);color:var(--faint);text-align:right;white-space:nowrap}
+.find .iconbtn:disabled{opacity:.35}
+.find .iconbtn.up svg{rotate:180deg}
+.find .iconbtn svg{width:12px;height:12px}
+::highlight(lb-find){background-color:color-mix(in oklab,var(--accent) 26%,transparent)}
+::highlight(lb-find-at){background-color:var(--accent);color:var(--on-accent)}
 .dock{padding:0 24px 20px;flex:none}
 .dock .composer{max-width:var(--col);margin:0 auto}
 

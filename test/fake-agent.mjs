@@ -10,6 +10,11 @@ if (args[0] === '--version') {
   console.log(`${name} 1.0.0`)
   process.exit(0)
 }
+// Asked for plain text, the way one agent starts another from a shell: a short written answer.
+if (args[args.indexOf('--output-format') + 1] === 'text') {
+  console.log('The plan holds up. One risk: step 3 assumes the API key is already set.')
+  process.exit(0)
+}
 const file = args[args.indexOf('--prompt-file') + 1]
 let input = ''
 if (args.includes('--prompt-file')) input = readFileSync(file, 'utf8')
@@ -125,6 +130,26 @@ if (process.env.FAKE_SCRIPT === 'rich' && name === 'claude') {
   say({ type: 'system', subtype: 'init', session_id: 'rich', model: 'claude-sonnet-5-5' })
   say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
   say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'rich', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
+  process.exit(0)
+}
+
+// FAKE_SCRIPT=code: one reply with code in the languages people paste most, for the colours, and
+// words that repeat, for find. A later message gets a short answer.
+if (process.env.FAKE_SCRIPT === 'code' && name === 'claude' && !/^Shell: /m.test(input)) {
+  const first = !args.includes('--resume')
+  const reply = first ? [
+    'The parser reads the month before the day. Here is the fix, the config it needs and how to check it.',
+    '```ts\n// Picks the order from the locale, so 13/02 is a date again.\nexport function parseDate(text: string, locale = \'en-GB\'): Date | null {\n  const [a, b, year] = text.split(\'/\').map(Number)\n  if (!year) return null\n  const dayFirst = locale !== \'en-US\'\n  return new Date(year, (dayFirst ? b : a) - 1, dayFirst ? a : b)\n}\n```',
+    '```json\n{\n  "name": "dates",\n  "version": "1.4.0",\n  "strict": true,\n  "retries": 3,\n  "locales": ["en-GB", "sv-SE"]\n}\n```',
+    '```py\ndef parse_date(text: str, day_first: bool = True) -> date | None:\n    """Same rule as the parser in the app."""\n    a, b, year = (int(p) for p in text.split("/"))  # raises on junk\n    return date(year, b if day_first else a, a if day_first else b)\n```',
+    '```bash\n# Run the parser tests, then the whole suite\nnpm test -- parseDate && echo "parser ok: $?"\nfor f in src/*.ts; do wc -l "$f"; done\n```',
+    '```css\n@media (hover: hover) {\n  .date:hover { color: #f2f0ea; padding: 4px 12px; }\n}\n/* the field */\n.date::after { content: "dd/mm"; opacity: .5 }\n```',
+    '```diff\n@@ -3,2 +3,3 @@ export function parseDate\n-  return new Date(year, a - 1, b)\n+  const dayFirst = locale !== \'en-US\'\n+  return new Date(year, (dayFirst ? b : a) - 1, dayFirst ? a : b)\n```',
+    'The parser now takes the locale from the form. I ran the parser tests and the rest of the suite.',
+  ].join('\n\n') : 'Yes. The parser falls back to en-GB when the form sends no locale, so old forms keep working.'
+  say({ type: 'system', subtype: 'init', session_id: 'code', model: 'claude-sonnet-5-5' })
+  say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'code', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
   process.exit(0)
 }
 

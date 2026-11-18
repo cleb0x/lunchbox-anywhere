@@ -18,6 +18,7 @@ import { IconBranches, IconCheck, IconChevron, IconDown, IconClock, IconCopy, Ic
 import { agentOf, clock, desk, KIND_LABEL, mod, money, reason, short, tail, tokens, unavailable, useApp, type Access } from '../lib/desk'
 import { Changes } from './Changes'
 import { Composer } from './Composer'
+import { Find } from './Find'
 
 type Data = { meta: RoomMeta; events: Event[]; live: Live }
 type Say = Extract<Event, { kind: 'say' }>
@@ -321,6 +322,18 @@ const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'sa
 // handoffs reads as one piece of work; your messages sit on the right and break the thread.
 function Transcript({ events, live, agents, actions, focus, empty }: { events: Event[]; live: Live | null; agents: AgentInfo[]; actions: Actions; focus?: string; empty: boolean }) {
   const box = useRef<HTMLDivElement>(null)
+  const [finding, setFinding] = useState(false)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f' || document.querySelector('.scrim')) return
+      e.preventDefault()
+      // Pressed again while open, it goes back to the field with the words selected.
+      if (finding) dispatchEvent(new Event('lb:find'))
+      else setFinding(true)
+    }
+    addEventListener('keydown', key)
+    return () => removeEventListener('keydown', key)
+  }, [finding])
   const stick = useRef(true)
   // Far enough up that the newest message is out of sight: a way back down is offered.
   const [away, setAway] = useState(false)
@@ -501,6 +514,7 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
 
   return (
     <div className="transwrap">
+    {finding && <Find box={box} close={() => setFinding(false)} moving={() => { stick.current = false }} />}
     <div className="transcript" ref={box}
       onScroll={(e) => {
         // Following stops on any move up the reader makes, by wheel, scrollbar, keys or j and k,
