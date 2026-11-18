@@ -560,7 +560,7 @@ export async function chat(name: string, key: string, model: string, system: str
   const usage: Usage = { input: 0, output: 0, cached: 0, cost: 0 }
   const acts: Act[] = []
   const near = local(p.base)
-  const tools = hands ? specs(hands.bench.access) : null
+  const tools = hands ? specs(hands.bench.access, hands.bench.extra) : null
   const info = p.style === 'ollama' ? await ollamaInfo(p.base, id, signal) : null
   // Text calls from the start when the server says the model has none of its own.
   let native = !!tools && info?.tools !== false

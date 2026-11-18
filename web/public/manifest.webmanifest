@@ -1,0 +1,11 @@
+{
+  "name": "Lunchbox",
+  "short_name": "Lunchbox",
+  "description": "A shared agent room that runs entirely in your browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080807",
+  "theme_color": "#080807",
+  "icons": [{ "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }]
+}

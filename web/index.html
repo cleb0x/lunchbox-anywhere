@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Lunchbox: Claude, GPT, Grok, Gemini and more working as one team on one task. Runs entirely in your browser." />
+    <meta name="theme-color" content="#080807" />
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Lunchbox</title>
+    <style>
+      html, body { background: #080807; }
+      @media (prefers-color-scheme: light) { html:not([data-theme=dark]) body { background: #f4f3ef; } }
+      #lb-boot { position: fixed; inset: 0; display: grid; place-items: center; font: 13px 'IBM Plex Mono', ui-monospace, monospace; color: #8a8780; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="lb-boot">Opening Lunchbox…</div>
+    <script type="module" src="./entry.ts"></script>
+  </body>
+</html>

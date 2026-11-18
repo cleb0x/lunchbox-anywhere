@@ -13,6 +13,10 @@ export type Bench = {
   run(command: string): Promise<{ code: number | null; out: string; how: string; reason: string }>
   // Asks the person before a change in Ask mode. False when they say no.
   confirm(what: string): Promise<boolean>
+  // More tools from the room, such as asking a crewmate or the browser. The desktop app gives
+  // these to command line agents; the browser version, where every agent talks over HTTP, gives
+  // them here.
+  extra?: Tool[]
 }
 
 export type Done = { text: string; ok: boolean; act?: Act }
@@ -171,8 +175,14 @@ export async function use(b: Bench, name: string, a: Record<string, unknown>): P
         const out = r.out.length > OUT_MAX ? `(earlier output cut)\n${r.out.slice(-OUT_MAX)}` : r.out
         return { ok: r.code === 0, text: `${out.trim() || '(no output)'}\nexit code ${r.code}`, act: { t: 'cmd', command, exit: r.code, out: r.out.slice(-1500) } }
       }
-      default:
-        return { ok: false, text: `There is no tool called ${name}. The tools are: ${names(b.access).join(', ')}.` }
+      default: {
+        const tool = b.extra?.find((t) => t.name === name)
+        if (tool) {
+          const text = await tool.run(a)
+          return { ok: true, text, act: { t: 'tool', name, detail: str(a.url ?? a.target ?? a.ask ?? a.question ?? a.task ?? a.expression ?? '').slice(0, 120), ok: true } }
+        }
+        return { ok: false, text: `There is no tool called ${name}. The tools are: ${[...names(b.access), ...(b.extra ?? []).map((t) => t.name)].join(', ')}.` }
+      }
     }
   } catch (e) {
     return { ok: false, text: e instanceof Error ? e.message : String(e), act: name === 'run_command' ? undefined : { t: 'tool', name, detail: path, ok: false } }
@@ -194,5 +204,5 @@ const READS = new Set(['list_directory', 'read_file', 'search_file_content', 'ru
 
 // Plan mode sees the tools that read. run_command stays, since the room refuses anything in it
 // that is not a read.
-export const specs = (access: Access) => (access === 'plan' ? SPECS.filter((s) => READS.has(s.name)) : SPECS)
+export const specs = (access: Access, extra: Spec[] = []) => [...(access === 'plan' ? SPECS.filter((s) => READS.has(s.name)) : SPECS), ...extra]
 export const names = (access: Access) => specs(access).map((s) => s.name)

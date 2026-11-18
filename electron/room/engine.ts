@@ -58,6 +58,7 @@ const MAX_HOPS = 24
 const FLOW_ASK = 15 * 60e3
 // Grok Build only loads MCP servers from config files, which the room does not touch.
 const BORROWS = new Set(['claude', 'codex', 'gemini'])
+const WEB = process.env.LUNCHBOX_WEB === '1'
 const LOST_SESSION = /(session|conversation|thread|rollout)[^\n]{0,60}(not found|no such|invalid|expired|unknown|missing|does not exist|could not be (found|loaded|resumed))|no (conversation|session|thread|rollout) found|(could not|cannot|can't|failed to|unable to) (find|load|resume)[^\n]{0,40}(session|conversation|thread|rollout)|--resume|unexpected[^\n]{0,30}(session|resume)/i
 // What "always" remembers for edits in Ask mode, in the place command prefixes are kept.
 const EDITS = '\u0000edits'
@@ -848,12 +849,14 @@ export class Engine {
 
     // Help this turn calls for is shown inside it, where it was asked for, not above it.
     const inner: Ctx = !ctx.host && !ctx.arena && lt.kind === 'say' ? { ...ctx, host: { turn: lt.id, mark: () => lt.text.length } } : ctx
-    const tools = this.hands && me.via === 'cli' && BORROWS.has(who)
+    // In the browser version every agent talks over HTTP, so the room's own tools go to them too.
+    const borrows = me.via === 'cli' ? BORROWS.has(who) : WEB
+    const tools = this.hands && borrows
       ? [...kit(this.host(room, me, crew, access, inner)), ...(this.hooks.tools?.(who, meta.workspace, access, room) ?? []).filter((t) => meta.studio || !t.name.startsWith('expert_'))]
       : []
     const http = me.via !== 'cli'
     // A model behind an API has no file tools of its own, so the room gives it some.
-    const bench = http ? this.bench(room, who, access) : undefined
+    const bench = http ? { ...this.bench(room, who, access), extra: WEB ? tools : undefined } : undefined
     const fails = new Map<string, number>()
     let looped = ''
     const system = protocol(meta, me, crew, access, pack, tools.map((t) => t.name), this.store.settings.habits, ctx.main ?? this.main(meta), meta.studio ? meta.design ?? [] : null)
