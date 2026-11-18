@@ -7,6 +7,7 @@ Lunchbox is an Electron app. The main process runs the agents and holds the rule
 ```
 electron/
   main.ts           windows, IPC, keychain
+  import.ts         chats read from Claude Code, Codex, Gemini CLI and Grok, made into rooms
   signed.ts         the key the app trusts, and the check every update has to pass
   store.ts          rooms as JSONL logs that only grow, settings, the usage ledger
   system.ts         PATH, shells and processes on each platform
@@ -44,6 +45,14 @@ Three things lower what a turn costs. Each one is counted on its own turn in the
 - **Not sent twice.** A resumed session gets only the memory that changed, and a crewmate gets a briefing instead of the conversation.
 
 `npm run bench` runs the same tasks in plain Claude Code and in a room and prints what each cost. It uses real agents and real usage.
+
+## Windows
+
+One process runs per profile, because two would write the same rooms over each other. That one process opens as many windows as wanted (New Window in the File menu, or a room's Open in new window), and each room has its own queue in the engine, so rooms work at the same time. Everything the main process sends goes to every window, which is what keeps two windows on one room in step. Only the app's own windows may call the main process; pages in the agent browser and the sign in windows it opens are refused. The browser's pages are drawn in one window at a time, the last one to open the Browser page.
+
+## Imported chats
+
+`import.ts` lists the sessions each agent keeps on the computer and turns one into a room: the person's messages, the agent's answers and a count of the commands and edits, never the raw records. The room is made in the folder the chat was held in. Claude Code, Codex and Grok are handed their own session back, so they remember all of it and are not sent it again. Gemini CLI cannot take a session back, and neither can any agent when the folder is gone, so those read the conversation from the room, the newest part first, with a short summary in shared memory.
 
 ## Updates
 
