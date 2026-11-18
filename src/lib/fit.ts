@@ -26,7 +26,12 @@ export function shift(left: number, width: number, min: number, max: number) {
 // The nearest box that would cut a floating surface off, or the window.
 function bounds(el: HTMLElement) {
   for (let p = el.parentElement; p; p = p.parentElement) {
-    if (getComputedStyle(p).overflowY !== 'visible') { const r = p.getBoundingClientRect(); return { top: Math.max(0, r.top), bottom: Math.min(innerHeight, r.bottom) } }
+    if (getComputedStyle(p).overflowY !== 'visible') {
+      const r = p.getBoundingClientRect()
+      // A box that fades out at its edges, as the transcript does, would fade the surface with it.
+      const [top = 0, bottom = 0] = (p.dataset.fade ?? '').split(' ').map(Number)
+      return { top: Math.max(0, r.top + top), bottom: Math.min(innerHeight, r.bottom - bottom) }
+    }
   }
   return { top: 0, bottom: innerHeight }
 }

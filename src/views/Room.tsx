@@ -525,7 +525,7 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
     <div className="transwrap" ref={wrap}>
     {finding && <Find box={box} close={() => setFinding(false)} moving={() => { stick.current = false }} />}
     <Quote wrap={wrap} />
-    <div className="transcript" ref={box}
+    <div className="transcript" ref={box} data-fade="24 32"
       onScroll={(e) => {
         // Following stops on any move up the reader makes, by wheel, scrollbar, keys or j and k,
         // and starts again once they come back within reach of the bottom.
