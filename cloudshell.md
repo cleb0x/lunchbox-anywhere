@@ -25,7 +25,7 @@ link to yourself: it has your key in it.
 Open [shell.cloud.google.com](https://shell.cloud.google.com), then run:
 
 ```bash
-cd ~/lunchbox-anywhere && ./lunchbox
+bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox)
 ```
 
 Cloud Shell is free for about 50 hours a week. It stops after a while without use; your rooms and

@@ -103,7 +103,7 @@ Each person runs their own copy in their own Cloud Shell, signed in with their o
 `./lunchbox` opens a free Cloudflare quick tunnel (no account) so this website can reach it, and
 makes a secret key that only the printed link carries, after the `#`, which browsers never send to
 GitHub. Without the key nothing gets in, so there is no sign in to set up for Lunchbox itself. Next time, open
-shell.cloud.google.com and run `cd ~/lunchbox-anywhere && ./lunchbox`.
+shell.cloud.google.com and run `bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox)`.
 
 The Lunchbox browser view is not in this mode yet; everything else is. `./lunchbox` runs on any
 Linux or Mac computer too. `server/` holds the code: the desktop engine on Node

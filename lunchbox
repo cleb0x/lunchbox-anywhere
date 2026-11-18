@@ -10,11 +10,22 @@ APP="$HOME/.lunchbox-app"
 PORT="${PORT:-8080}"
 export PATH="$HOME/.local/bin:$PATH"
 
-VERSION="3"
+VERSION="4"
 bold() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\n\033[31m%s\033[0m\n' "$1"; exit 1; }
 
 echo "Lunchbox launcher $VERSION"
+
+# The launcher keeps itself up to date: the newest one from GitHub runs instead when it differs.
+# (A folder opened with "Open in Cloud Shell" does not pull from GitHub by itself.)
+if [ -z "${LUNCHBOX_NO_SELF_UPDATE:-}" ]; then
+  latest="$(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/lunchbox" 2>/dev/null || true)"
+  if [ -n "$latest" ] && printf '%s' "$latest" | head -n1 | grep -q '^#!/usr/bin/env bash' && [ "$latest" != "$(cat "$0" 2>/dev/null)" ]; then
+    echo "Updating the launcher…"
+    if [ -w "$0" ]; then printf '%s\n' "$latest" > "$0"; chmod +x "$0"; fi
+    exec env LUNCHBOX_NO_SELF_UPDATE=1 bash -c "$latest" lunchbox "$@"
+  fi
+fi
 
 # Node 20 or newer. Cloud Shell has it.
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
