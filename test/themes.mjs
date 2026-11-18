@@ -62,6 +62,8 @@ for (const mode of ['night', 'day']) {
     await page.click('.sbitem >> text=Settings')
     await page.waitForSelector('.themecard')
     await pick('.themecard', id)
+    // The switch runs inside a view transition, so the root changes a moment after the click.
+    await page.waitForTimeout(600)
     const { palette, theme } = await page.evaluate(() => ({ palette: document.documentElement.dataset.palette ?? '', theme: document.documentElement.dataset.theme }))
     console.log(`${id} ${mode}: mode ${theme}, palette ${palette || '(lunchbox)'}`)
     await page.click('.sbitem >> text=New room')
