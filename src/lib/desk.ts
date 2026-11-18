@@ -77,6 +77,9 @@ export function boot() {
     desk.call('limits').then((limits) => limits && set({ limits }))
     desk.on('skills', (skills) => set({ skills }))
     desk.on('flows', (f) => set({ flows: f.flows, running: f.running }))
+    // Saved in another window.
+    desk.on('settings', (settings) => settings && set({ settings }))
+    desk.on('packs', (packs) => set({ packs: packs ?? [] }))
     // One part failing to load must not leave the app on its loading screen for good: the rest
     // opens, and that part starts empty.
     const [env, agents, rooms, settings, ledger, skills, packs, flows] = await Promise.all(

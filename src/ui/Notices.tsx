@@ -6,7 +6,7 @@ import { desk, useApp } from '../lib/desk'
 
 // Messages pushed from the signed feed, and the app's own update state, in three forms: a toast in
 // the corner, a designed card for big news, and a banner across the top of the page.
-export function Notices() {
+export function Notices({ say }: { say: (text: string) => void }) {
   const [list, setList] = useState<Notice[]>([])
   const [update, setUpdate] = useState<UpdateState>({ state: 'idle' })
   const [later, setLater] = useState(false)
@@ -34,7 +34,11 @@ export function Notices() {
       if (update.state === 'ready') { if (busy) setQueued(true); else restart() }
       else if (update.state === 'available') desk.call('update:download')
       else if (update.state === 'manual') window.open(update.url, '_blank')
-      else desk.call('update:check')
+      // Asked for by hand, so a refusal is said out loud; a routine check keeps it to the log.
+      else desk.call('update:check').then((u: UpdateState) => {
+        if (u?.state === 'refused') say(`Not updated: ${u.error}. Lunchbox only installs releases signed by its maker.`)
+        else if (u?.state === 'none') say('This is the newest version')
+      }).catch(() => {})
     } else if (n.action) window.open(n.action.url, '_blank')
     dismiss(n.id)
   }

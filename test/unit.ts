@@ -17,7 +17,8 @@ import { createServer } from 'node:http'
 import { pull, suggest } from '../electron/local'
 import type { Pull } from '../shared/types'
 import { asks, foldChecklists, plan, plansBefore, sincePlan } from '../shared/plan'
-import { canReplace, parseFeed, pick } from '../electron/macfeed'
+import { canReplace, pick } from '../electron/macfeed'
+import { newer, onList, sha512, signedBytes, signedRelease, type Release } from '../electron/signed'
 import { classify, rating, route, score } from '../shared/route'
 import { fill, nextRun } from '../shared/flow'
 import { merge, section, strip } from '../electron/room/project'
@@ -30,6 +31,7 @@ import { testConnector } from '../electron/agents'
 import type { Event, RoomMeta } from '../shared/types'
 import { shift, side } from '../src/lib/fit'
 import { evict } from '../shared/tabs'
+import { allowed, claudeChat, claudeDir, codexChat, fit, found, geminiChat, grokChat, person, read as readChat, room as chatRoom } from '../electron/import'
 
 const fixture = (name: string) =>
   readFileSync(join(process.cwd(), 'test', 'fixtures', `${name}.jsonl`), 'utf8').split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l))
@@ -726,26 +728,81 @@ test('cmdLine: arguments reach a .cmd shim intact through both of cmd.exe\'s pas
   assert.equal(cmdLine('C:\\Program Files\\nodejs\\npx.cmd', []), 'C:\\Program^ Files\\nodejs\\npx.cmd')
 })
 
-test('mac update: the feed is read and the zip for this chip is picked', () => {
-  const yml = `version: 0.1.2
-files:
-  - url: Lunchbox-0.1.2-mac-x64.zip
-    sha512: aaa==
-    size: 121715767
-  - url: Lunchbox-0.1.2-mac-arm64.zip
-    sha512: bbb==
-    size: 117619996
-  - url: Lunchbox-0.1.2-mac-arm64.dmg
-    sha512: ccc==
-    size: 121192433
-path: Lunchbox-0.1.2-mac-x64.zip
-releaseDate: '2026-11-11T10:00:00.000Z'`
-  const feed = parseFeed(yml)!
-  assert.equal(feed.version, '0.1.2')
-  assert.equal(feed.files.length, 3)
-  assert.deepEqual(pick(feed, 'arm64'), { url: 'Lunchbox-0.1.2-mac-arm64.zip', sha512: 'bbb==', size: 117619996 })
-  assert.equal(pick(feed, 'x64')!.url, 'Lunchbox-0.1.2-mac-x64.zip')
-  assert.equal(parseFeed('nothing here'), null)
+test('mac update: the zip for this chip is picked from the signed file list', () => {
+  const files = [
+    { name: 'Lunchbox-0.1.2-mac-x64.zip', sha512: 'aaa==', size: 121715767 },
+    { name: 'Lunchbox-0.1.2-mac-arm64.zip', sha512: 'bbb==', size: 117619996 },
+    { name: 'Lunchbox-0.1.2-mac-arm64.dmg', sha512: 'ccc==', size: 121192433 },
+  ]
+  assert.deepEqual(pick(files, 'arm64'), files[1])
+  assert.equal(pick(files, 'x64')!.name, 'Lunchbox-0.1.2-mac-x64.zip')
+  assert.equal(pick(files.slice(2), 'arm64'), undefined)
+})
+
+// A key made for the test and thrown away with it. The real one is never read here.
+function signer() {
+  const { generateKeyPairSync, sign } = require('node:crypto') as typeof import('node:crypto')
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  const seal = (r: Release) => ({ ...r, sig: sign(null, signedBytes(r), privateKey).toString('base64') })
+  return { publicKey, seal }
+}
+const RELEASE: Release = { version: '0.2.0', issued: 1_800_000_000_000, files: [{ name: 'Lunchbox-0.2.0-mac-arm64.zip', sha512: 'abc=', size: 10 }, { name: 'Lunchbox-Setup-0.2.0.exe', sha512: 'def=', size: 20 }] }
+const LATER = RELEASE.issued + 1000
+
+test('updates: a release signed with the trusted key is accepted, whole', () => {
+  const { publicKey, seal } = signer()
+  const got = signedRelease(JSON.parse(JSON.stringify(seal(RELEASE))), '0.1.6', publicKey, LATER)
+  assert.deepEqual(got, { release: RELEASE })
+})
+
+test('updates: no signature, a wrong key or a changed list means no install', () => {
+  const { publicKey, seal } = signer()
+  const other = signer()
+  const good = seal(RELEASE)
+  const refused = (body: unknown) => 'refused' in signedRelease(body, '0.1.6', publicKey, LATER)
+  assert.ok(refused(null))
+  assert.ok(refused({ version: '0.2.0', issued: RELEASE.issued, files: RELEASE.files }), 'no signature')
+  assert.ok(refused({ ...good, sig: 'AAAA' }), 'a signature that is not one')
+  assert.ok(refused(other.seal(RELEASE)), 'signed by somebody else')
+  assert.ok(refused({ ...good, version: '0.3.0' }), 'another version under the same signature')
+  assert.ok(refused({ ...good, files: [{ ...RELEASE.files[0], sha512: 'zzz=' }, RELEASE.files[1]] }), 'a swapped hash')
+  assert.ok(refused({ ...good, files: [...RELEASE.files, { name: 'extra.exe', sha512: 'q=', size: 1 }] }), 'a file added to the list')
+  assert.ok(refused({ ...good, files: [{ ...RELEASE.files[0], name: '../../evil.zip' }, RELEASE.files[1]] }), 'a name that is a path')
+  // The real key did not sign this, so the app as shipped refuses it.
+  assert.ok('refused' in signedRelease(good, '0.1.6'))
+})
+
+test('updates: a signed release older than the running version is refused', () => {
+  const { publicKey, seal } = signer()
+  const good = seal(RELEASE)
+  assert.match((signedRelease(good, '0.2.1', publicKey, LATER) as { refused: string }).refused, /older/)
+  assert.match((signedRelease(good, '1.0.0', publicKey, LATER) as { refused: string }).refused, /older/)
+  // The running version itself is fine: there is simply nothing to install.
+  assert.ok('release' in signedRelease(good, '0.2.0', publicKey, LATER))
+  assert.equal(newer('0.2.0', '0.2.0'), false)
+  assert.ok('refused' in signedRelease(seal({ ...RELEASE, issued: LATER + 2 * 3600e3 }), '0.1.6', publicKey, LATER), 'dated in the future')
+})
+
+test('updates: a signed message feed cannot stand in for a signed release', () => {
+  const { generateKeyPairSync, sign } = require('node:crypto') as typeof import('node:crypto')
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  const issued = RELEASE.issued
+  const feed = { notices: [], issued }
+  const sig = sign(null, Buffer.from(JSON.stringify(feed)), privateKey).toString('base64')
+  assert.ok('refused' in signedRelease({ version: '0.2.0', issued, files: RELEASE.files, notices: [], sig }, '0.1.6', publicKey, LATER))
+})
+
+test('updates: a downloaded installer counts only when its hash is on the signed list', async () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const dir = mkdtempSync(join(tmpdir(), 'lunchbox-signed-'))
+  const file = join(dir, 'Lunchbox-Setup-0.2.0.exe')
+  fs.writeFileSync(file, 'the installer')
+  const release: Release = { ...RELEASE, files: [{ name: 'Lunchbox-Setup-0.2.0.exe', sha512: await sha512(file), size: 13 }] }
+  assert.equal(await onList(release, file), true)
+  fs.writeFileSync(file, 'the installer, with something added')
+  assert.equal(await onList(release, file), false)
+  assert.equal(await onList(release, join(dir, 'missing.exe')), false)
+  fs.rmSync(dir, { recursive: true, force: true })
 })
 
 test('mac update: an app on the disk image or moved by Gatekeeper never tries to replace itself', () => {
@@ -1900,4 +1957,184 @@ test('code colour: every theme gives colours that read on its code block, by nig
   const plain = codeColours({ glyphs: ember.dark, well: '#161614', mode: 'dark' })
   assert.ok(plain['--code-str'] && !plain['--code-key'])
   assert.deepEqual(codeColours({ well: '#161614', mode: 'dark' }), {}, 'no theme colours: the stylesheet draws code in ink')
+})
+
+// Chats brought in from the agents' own apps. Every fixture is made up for the test.
+const chatFixture = (name: string) => readFileSync(join(process.cwd(), 'test', 'fixtures', 'import', name), 'utf8')
+
+test('import: a Claude Code session becomes the person\'s messages and the agent\'s answers', () => {
+  const chat = claudeChat(chatFixture('claude-session.jsonl').split('\n'))
+  assert.equal(chat.id, '0f3c9a52-7d1e-4b8a-9c11-5e2f6a7b8c9d')
+  assert.equal(chat.folder, '/Users/sam/recipe-site')
+  assert.equal(chat.title, 'Fix the sourdough baking time')
+  assert.deepEqual(chat.turns.map((t) => t.you), [true, false, true, false])
+  // The reminder, the slash command, the tool's own notes and the subagent are gone.
+  assert.equal(chat.turns[0].text, 'The sourdough page shows the wrong baking time. Can you find out why and fix it?')
+  const answer = chat.turns[1]
+  assert.match(answer.text, /^I will look at how the recipe times are read\.\n\nFixed\. The time was stored/)
+  assert.ok(!/\x1b|helper is looking|cut off/.test(answer.text), 'colour codes, the subagent and the broken line stay out')
+  assert.ok(answer.text.includes('```ts\nconst bakeTime = minutes(raw.time)\n```'), 'code is kept as written')
+  assert.deepEqual(answer.acts, [
+    { t: 'cmd', command: 'grep -rn "bakeTime" src', exit: 0 },
+    { t: 'edit', path: '/Users/sam/recipe-site/src/recipe.ts', change: 'edit' },
+    { t: 'cmd', command: 'npm test', exit: 1 },
+  ])
+  assert.deepEqual(chat.turns[3].acts, [{ t: 'edit', path: '/Users/sam/recipe-site/recipes/rye.json', change: 'write' }])
+})
+
+test('import: a Codex rollout keeps commands with their exit codes and files changed, once each', () => {
+  const chat = codexChat(chatFixture('codex-rollout.jsonl').split('\n'))
+  assert.equal(chat.id, '6b1d2c3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e')
+  assert.equal(chat.folder, '/Users/sam/recipe-site')
+  assert.deepEqual(chat.turns.map((t) => t.you), [true, false])
+  assert.equal(chat.turns[0].text, 'Add a search box to the recipe list that filters by name.')
+  assert.match(chat.turns[1].text, /^I will read the list component first\.\n\nThe search box is in\./)
+  assert.deepEqual(chat.turns[1].acts, [
+    { t: 'cmd', command: 'cat src/List.tsx', exit: 0 },
+    { t: 'edit', path: '/Users/sam/recipe-site/src/List.tsx', change: 'edit' },
+    { t: 'edit', path: '/Users/sam/recipe-site/src/Search.tsx', change: 'write' },
+    { t: 'cmd', command: 'npm test -- search', exit: 1 },
+  ])
+})
+
+test('import: an older Codex rollout is read from its raw tool calls', () => {
+  const chat = codexChat(chatFixture('codex-old.jsonl').split('\n'))
+  assert.deepEqual(chat.turns[1].acts, [
+    { t: 'cmd', command: 'rg -l Loaf src', exit: null },
+    { t: 'edit', path: 'src/types.ts', change: 'update' },
+    { t: 'edit', path: 'src/bread.ts', change: 'write' },
+  ])
+  assert.equal(chat.turns[1].text, 'Renamed in src/types.ts.')
+})
+
+test('import: Gemini CLI chats are read as a log and as a saved checkpoint', () => {
+  const log = geminiChat(chatFixture('gemini-session.jsonl'))
+  assert.equal(log.id, '9a8b7c6d-1111-4222-8333-444455556666')
+  assert.deepEqual(log.turns.map((t) => [t.you, t.text]), [[true, 'Which recipes have no photo yet?'], [false, 'Three have none: rye, focaccia and bagels.']])
+  assert.deepEqual(log.turns[1].acts.map((a) => a.t), ['tool', 'cmd'])
+  assert.equal((log.turns[1].acts[1] as { exit: number }).exit, 1)
+  const saved = geminiChat(chatFixture('gemini-checkpoint.json'))
+  assert.deepEqual(saved.turns.map((t) => [t.you, t.text]), [[true, 'Make the photo grid three columns wide.'], [false, 'The grid is three columns now.']])
+  assert.deepEqual(saved.turns[1].acts, [{ t: 'edit', path: 'src/grid.css', change: 'edit' }])
+})
+
+test('import: a Grok session leaves out what Grok wrote in the person\'s name', () => {
+  const chat = grokChat(chatFixture('grok/%2FUsers%2Fsam%2Frecipe-site/7e6d5c4b-aaaa-4bbb-8ccc-ddddeeeeffff/chat_history.jsonl').split('\n'))
+  assert.deepEqual(chat.turns.map((t) => t.you), [true, false])
+  assert.match(chat.turns[0].text, /^What are people on X saying/)
+  assert.deepEqual(chat.turns[1].acts, [
+    { t: 'tool', name: 'x_search', detail: 'sourdough starter', ok: true },
+    { t: 'cmd', command: 'ls notes', exit: 1 },
+  ])
+})
+
+test('import: sessions on the computer are listed newest first, and a broken or empty one is left out', async () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const home = mkdtempSync(join(tmpdir(), 'lunchbox-import-'))
+  const put = (rel: string, body: string, at: number) => {
+    const file = join(home, rel)
+    fs.mkdirSync(join(file, '..'), { recursive: true })
+    fs.writeFileSync(file, body)
+    fs.utimesSync(file, at, at)
+    return file
+  }
+  const work = join(home, 'recipe-site')
+  fs.mkdirSync(work)
+  const here = (name: string) => chatFixture(name).replaceAll('/Users/sam/recipe-site', work)
+  put(`.claude/projects/${claudeDir(work)}/0f3c9a52-7d1e-4b8a-9c11-5e2f6a7b8c9d.jsonl`, here('claude-session.jsonl'), 1_800_000_300)
+  put('.claude/projects/-gone/aaaaaaaa-0000-4000-8000-000000000000.jsonl', '{"type":"session-owner"}\n{broken\n', 1_800_000_900)
+  put('.codex/sessions/2026/11/02/rollout-2026-11-02T09-14-03-6b1d2c3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e.jsonl', chatFixture('codex-rollout.jsonl'), 1_800_000_200)
+  put('.codex/session_index.jsonl', '{"id":"6b1d2c3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e","thread_name":"Recipe search box","updated_at":"2026-11-02"}\n', 1)
+  put('.gemini/tmp/recipes/chats/session-2026-11-03T10-00-9a8b7c6d.jsonl', chatFixture('gemini-session.jsonl'), 1_800_000_100)
+  put('.gemini/tmp/recipes/.project_root', work, 1)
+  fs.cpSync(join(process.cwd(), 'test', 'fixtures', 'import', 'grok'), join(home, '.grok', 'sessions'), { recursive: true })
+  const grokFile = join(home, '.grok/sessions/%2FUsers%2Fsam%2Frecipe-site/7e6d5c4b-aaaa-4bbb-8ccc-ddddeeeeffff/chat_history.jsonl')
+  fs.utimesSync(grokFile, 1_800_000_000, 1_800_000_000)
+
+  const list = await found(home)
+  assert.deepEqual(list.map((f) => f.agent), ['claude', 'codex', 'gemini', 'grok'])
+  assert.deepEqual(list.map((f) => f.there), [true, false, true, false], 'whether the folder is still there')
+  assert.equal(list[0].folder, work)
+  assert.match(list[0].first, /^The sourdough page shows the wrong baking time/)
+  assert.equal(list[1].title, 'Recipe search box')
+  assert.equal(list[3].title, 'Sourdough starters on X')
+  assert.ok(list.every((f) => f.size > 0 && f.at > 0))
+  assert.deepEqual((await found(home, 150, (id) => id.startsWith('0f3c'))).map((f) => f.agent), ['codex', 'gemini', 'grok'], 'a session a room already continues is not offered twice')
+
+  // Only files where sessions are kept may be read.
+  assert.equal(allowed(list[0].file, 'claude', home), true)
+  assert.equal(allowed(join(home, '.codex', 'session_index.jsonl'), 'codex', home), false)
+  assert.equal(allowed(join(home, '.claude/projects/../../.codex/sessions/2026/11/02/rollout-2026-11-02T09-14-03-6b1d2c3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e.jsonl'), 'claude', home), false)
+  assert.equal(allowed('/etc/passwd', 'claude', home), false)
+
+  const grok = await readChat('grok', grokFile, home)
+  assert.equal(grok.id, '7e6d5c4b-aaaa-4bbb-8ccc-ddddeeeeffff')
+  assert.equal(grok.folder, '/Users/sam/recipe-site')
+  assert.ok(grok.turns[0].at < grok.turns[1].at, 'undated messages are spread over the session')
+  const gem = await readChat('gemini', list[2].file, home)
+  assert.equal(gem.folder, work)
+  fs.rmSync(home, { recursive: true, force: true })
+})
+
+test('import: the room opens with a line on where the chat came from and how it carries on', () => {
+  const chat = { agent: 'claude' as const, ...claudeChat(chatFixture('claude-session.jsonl').split('\n')) }
+  const resumed = chatRoom(chat, { resumed: true, folderGone: false, ready: true })
+  assert.equal(resumed.name, 'Fix the sourdough baking time')
+  assert.deepEqual(resumed.events.map((e) => e.kind), ['note', 'you', 'say', 'you', 'say'])
+  const note = resumed.events[0] as Extract<Event, { kind: 'note' }>
+  assert.match(note.text, /^Brought in from Claude Code: 4 messages, 2 Nov 2026\. Claude Code carries on in the same session/)
+  assert.ok(resumed.events.every((e, i, all) => !i || e.at > all[i - 1].at), 'in the order they were said')
+  assert.ok(!JSON.stringify(resumed.events).includes('tool_use'), 'no raw records')
+  assert.match(resumed.about, /What the person asked for, oldest first:\n- The sourdough page.*\n- Good\. Now add a rye loaf/)
+  assert.match((chatRoom(chat, { resumed: false, folderGone: true, ready: true }).events[0] as { text: string }).text, /folder is no longer there/)
+  assert.match((chatRoom({ ...chat, agent: 'gemini' }, { resumed: false, folderGone: false, ready: true }).events[0] as { text: string }).text, /Gemini CLI cannot pick an old session up again/)
+})
+
+test('import: a very long chat keeps its newest part and says what it left out', () => {
+  const turns = Array.from({ length: 3000 }, (_, i) => ({ you: i % 2 === 0, at: 1_800_000_000_000 + i * 1000, text: `${i % 2 ? 'Answer' : 'Question'} ${i} ${'x'.repeat(900)}`, acts: [] }))
+  const { kept, dropped } = fit(turns)
+  assert.ok(kept.length <= 400 && kept.length > 100)
+  assert.equal(kept.length + dropped, 3000)
+  assert.equal(kept[0].you, true, 'starts on one of the person\'s messages')
+  assert.equal(kept.at(-1)!.text, turns.at(-1)!.text)
+  const long = fit([{ you: true, at: 1, text: 'hello', acts: [] }, { you: false, at: 2, text: 'y'.repeat(900_000), acts: Array.from({ length: 500 }, () => ({ t: 'cmd' as const, command: 'ls', exit: 0 })) }])
+  assert.equal(long.dropped, 0)
+  assert.ok(long.kept[1].text.length < 41_000 && long.kept[1].text.endsWith('was left out when the chat was imported.]'))
+  assert.equal(long.kept[1].acts.length, 150)
+  const made = chatRoom({ agent: 'codex', id: 'x', folder: '/tmp/x', title: '', turns }, { resumed: true, folderGone: false, ready: true })
+  assert.match((made.events[0] as { text: string }).text, /The first [\d,]+ messages are not shown; Codex still has them\./)
+  assert.ok(made.about.length <= 5800)
+})
+
+test('import: what tools add to the person\'s messages is taken out, and a typed command is kept', () => {
+  assert.equal(person('<system-reminder>Be brief.</system-reminder>\nShip it'), 'Ship it')
+  assert.equal(person('<command-name>/review</command-name><command-message>review</command-message><command-args>the last commit</command-args>'), '/review the last commit')
+  assert.equal(person('<command-name>/clear</command-name><command-args></command-args>'), '')
+  assert.equal(person('<environment_context><cwd>/x</cwd></environment_context>'), '')
+  assert.equal(person('[Request interrupted by user for tool use]'), '')
+  assert.equal(person('<div>keep my html</div>'), '<div>keep my html</div>')
+})
+
+test('import: a room made from a chat hands the agent its session and nothing it already has', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'lunchbox-adopt-'))
+  const { Store } = await import('../electron/store')
+  const { Engine } = await import('../electron/room/engine')
+  const store = new Store(join(root, 'data'), { seal: (t: string) => t, open: (t: string) => t })
+  const engine = new Engine(store, { emit: () => {}, notify: () => {}, packs: () => [] })
+  const chat = { agent: 'claude' as const, ...claudeChat(chatFixture('claude-session.jsonl').split('\n')) }
+  const made = chatRoom(chat, { resumed: true, folderGone: false, ready: true })
+  const meta = engine.adopt({ name: made.name, crew: ['claude'], workspace: root, events: made.events, about: made.about, session: { who: 'claude', id: chat.id } })
+  assert.equal(meta.sessions.claude, chat.id)
+  assert.equal(store.events(meta.id).length, 5)
+  const name = (id: string) => id
+  // Resumed: nothing of the old conversation is sent again.
+  const again = prompt(store.room(meta.id)!, store.events(meta.id), 'claude', 'Carry on', name, true)
+  assert.ok(!again.text.includes('sourdough'))
+  // Another agent, or the same one without its session, reads the conversation and the summary.
+  const cold = prompt(store.room(meta.id)!, store.events(meta.id), 'codex', 'Carry on', name, false)
+  assert.ok(cold.text.includes('The sourdough page shows the wrong baking time'))
+  assert.ok(cold.text.includes('Imported chat'))
+  // Saved first, or the store keeps trying to write into a folder that is gone.
+  store.flush()
+  require('node:fs').rmSync(root, { recursive: true, force: true })
 })

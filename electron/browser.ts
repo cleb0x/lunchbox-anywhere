@@ -11,7 +11,8 @@ import { AXE_RUN, CONTROLS, FOCUSED, MEASURE, STRETCH, report, type Axe, type Me
 import { describeModel, imagePage, modelPage, type View } from './viewer'
 
 export type TabState = { id: string; who: string; room?: string; url: string; title: string; loading: boolean; back: boolean; forward: boolean; device: Device; action?: string; busy: boolean }
-export type BrowserState = { tabs: TabState[]; active: string | null; shown: boolean }
+// host: the window the pages are drawn in, by the id of its contents.
+export type BrowserState = { tabs: TabState[]; active: string | null; shown: boolean; host?: number }
 export type Device = 'desktop' | 'tablet' | 'phone'
 
 const DEVICES: Record<Device, { ua?: string }> = {
@@ -194,7 +195,7 @@ export class Browser {
         device: t.device, action: t.action, busy: t.busy,
       }
     })
-    return { tabs, active: this.active, shown: this.shown }
+    return { tabs, active: this.active, shown: this.shown, host: this.host && !this.host.isDestroyed() ? this.host.webContents.id : undefined }
   }
 
   private changed() {
@@ -211,10 +212,16 @@ export class Browser {
 
   private layout() {
     const win = this.win()
-    // A window opened again after the last one closed takes the pages over.
+    // The pages follow the window that shows them: another window that opens the Browser page,
+    // or one opened again after the last one closed.
     if (win && this.host !== win) {
+      const old = this.host
       this.host = win
-      for (const t of this.tabs.values()) if (this.alive(t)) win.contentView.addChildView(t.view)
+      for (const t of this.tabs.values()) {
+        if (!this.alive(t)) continue
+        try { if (old && !old.isDestroyed()) old.contentView.removeChildView(t.view) } catch {}
+        win.contentView.addChildView(t.view)
+      }
     }
     const b = this.bounds
     const size = b.width > 0 ? b : { x: 0, y: 0, width: 1280, height: 800 }
@@ -829,6 +836,15 @@ ${crops.map((c) => `<div class="r"><b>${c.kind}</b><span>${esc(c.label)}</span><
         }),
       },
     ]
+  }
+
+  // The window the pages were in has closed while others are open. They move, out of sight,
+  // until a window opens the Browser page again.
+  rehome(closed: BrowserWindow) {
+    if (this.host !== closed) return
+    this.shown = false
+    this.layout()
+    this.changed()
   }
 
   destroy() {
