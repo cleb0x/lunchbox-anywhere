@@ -103,7 +103,8 @@ export function build(raw: unknown, id?: string): { theme: Theme; fixed: string[
     if (own.frame) g.ground = own.frame
     let ink = own.text || (own.sheet || own.box ? (mode === 'dark' ? fallback(0.96, tint * 0.6) : fallback(0.25, tint * 2.4)) : '')
     if (ink) {
-      for (const bg of [g.sheet, own.box].filter(Boolean)) ink = lift(ink, bg, 4.5, mode)
+      // The frame too: the sidebar's labels are this text on it.
+      for (const bg of [g.sheet, own.box, g.ground].filter(Boolean)) ink = lift(ink, bg, 4.5, mode)
       if (contrast(ink, g.sheet) < 4.5) ink = on(g.sheet)
       if (own.text && ink !== own.text) fixed.push(`The ${word} text was hard to read, so it is a shade ${mode === 'dark' ? 'lighter' : 'darker'}.`)
     }
