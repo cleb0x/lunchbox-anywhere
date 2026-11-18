@@ -193,6 +193,8 @@ test('limits: short waits are read in their own unit, not as minutes or an hour'
 test('stderr is reduced to the line that matters', () => {
   const err = 'Error: This client is no longer supported. Please migrate.\n    at throwIneligible (file:///x.js:1:1)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)'
   assert.equal(reason(err), 'This client is no longer supported. Please migrate.')
+  const google = 'An unexpected critical error occurred:IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google\n    at throwIneligibleOrProjectIdError (file:///x.js:1:1)'
+  assert.match(reason(google), /^Google no longer lets Gemini CLI sign in with a personal Google account/)
 })
 
 const ev = (e: Record<string, unknown>, i: number) => ({ id: `e${i}`, at: i, ...e }) as Event
