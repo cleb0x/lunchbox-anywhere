@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { asRaw, build, type Draft } from '../lib/custom'
 import type { Mode, Theme } from '../lib/themes'
+import { useModal } from '../lib/modal'
 
 // Making or changing a theme. Every change shows on the whole app at once, through the preview
 // event App listens to; Cancel puts the app back as it was. The text on blocks and buttons, and any
@@ -10,13 +11,14 @@ export function ThemeEditor({ start, id, mode, setMode, close, save }: {
   start: Draft; id?: string; mode: Mode; setMode: (m: Mode) => void; close: () => void; save: (t: Theme) => void
 }) {
   const [draft, setDraft] = useState(start)
+  useModal()
   const built = useMemo(() => build(asRaw(draft), id ?? 'custom-draft'), [draft, id])
   useEffect(() => {
     if (built) dispatchEvent(new CustomEvent('lb:theme-preview', { detail: built.theme }))
   }, [built])
   useEffect(() => () => { dispatchEvent(new CustomEvent('lb:theme-preview', { detail: null })) }, [])
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close() } }
     addEventListener('keydown', esc)
     return () => removeEventListener('keydown', esc)
   }, [close])

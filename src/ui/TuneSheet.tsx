@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { hexOfCss, PARTS, warnings, type Part, type Tune } from '../lib/tune'
 import type { Mode } from '../lib/themes'
+import { useModal } from '../lib/modal'
 
 // Fine tuning one colour at a time on top of the theme that is on. Changes apply at once and are
 // kept; each has its own reset. The colours shown are read back from the window after App has
@@ -10,13 +11,14 @@ export function TuneSheet({ tune, setTune, mode, setMode, close, theme }: {
   tune: Tune; setTune: (t: Tune) => void; mode: Mode; setMode: (m: Mode) => void; close: () => void; theme: string
 }) {
   const [seen, setSeen] = useState<Record<string, string>>({})
+  useModal()
   useEffect(() => {
     const css = getComputedStyle(document.documentElement)
     const sheet = hexOfCss(css.getPropertyValue('--sheet').trim())
     setSeen(Object.fromEntries(PARTS.map((p) => [p.key, hexOfCss(css.getPropertyValue(p.key).trim(), sheet)])))
   }, [tune, mode, theme])
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close() } }
     addEventListener('keydown', esc)
     return () => removeEventListener('keydown', esc)
   }, [close])

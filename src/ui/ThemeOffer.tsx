@@ -5,9 +5,13 @@ import { ThemeMini } from './ThemeCards'
 // A theme an agent designed, sent as a code block marked lunchbox-theme. While the block is still
 // arriving, or if it is not a theme, it shows as the code it is. Using it saves the theme with the
 // others and switches to it; Fine tune it does the same and opens it in the theme editor.
+const hash = (text: string) => { let h = 2166136261; for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619); return (h >>> 0).toString(36) }
+
 export function ThemeOffer({ code }: { code: string }) {
-  const built = useMemo(() => { try { return build(JSON.parse(code)) } catch { return null } }, [code])
-  const [used, setUsed] = useState(false)
+  // The same offer is the same theme however often the room is opened, so using it twice never
+  // leaves two copies in Settings.
+  const built = useMemo(() => { try { return build(JSON.parse(code), `custom-offer-${hash(code)}`) } catch { return null } }, [code])
+  const [used, setUsed] = useState(() => !!built && document.documentElement.dataset.palette === built.theme.id)
   const [open, setOpen] = useState(false)
   if (!built) return <pre className="codeblock" data-lang="lunchbox-theme">{code}</pre>
   const { theme, fixed } = built
