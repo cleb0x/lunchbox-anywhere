@@ -10,8 +10,11 @@ APP="$HOME/.lunchbox-app"
 PORT="${PORT:-8080}"
 export PATH="$HOME/.local/bin:$PATH"
 
+VERSION="3"
 bold() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\n\033[31m%s\033[0m\n' "$1"; exit 1; }
+
+echo "Lunchbox launcher $VERSION"
 
 # Node 20 or newer. Cloud Shell has it.
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
@@ -68,7 +71,8 @@ if [ "${LUNCHBOX_TUNNEL:-1}" = "1" ]; then
   if [ ! -x "$CF" ]; then
     case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) arch="" ;; esac
     if [ "$(uname -s)" = "Linux" ] && [ -n "$arch" ]; then
-      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch" -o "$CF.part" && chmod +x "$CF.part" && mv "$CF.part" "$CF" || true
+      bold "Getting the tunnel (cloudflared)…"
+      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch" -o "$CF.part" && chmod +x "$CF.part" && mv "$CF.part" "$CF" || echo "Could not download cloudflared."
     elif command -v cloudflared >/dev/null; then CF="$(command -v cloudflared)"; fi
   fi
 fi
@@ -85,7 +89,8 @@ SPID=$!
 if [ -n "${CF:-}" ] && [ -x "$CF" ]; then
   "$CF" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" >"$LOG" 2>&1 &
   TPID=$!
-  for _ in $(seq 1 60); do
+  echo "Opening the tunnel…"
+  for _ in $(seq 1 120); do
     TUNNEL="$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG" | head -n1 || true)"
     [ -n "$TUNNEL" ] && break
     sleep 0.5
@@ -97,7 +102,13 @@ if [ -n "$TUNNEL" ]; then
   printf '\n    \033[4m%s#connect=%s&key=%s\033[0m\n\n' "$SITE" "$TUNNEL" "$KEY"
   echo "(Ctrl+click it, or copy it into a new tab. Keep the link to yourself: it opens your Lunchbox.)"
 else
-  [ -n "${CF:-}" ] && echo "The tunnel did not start, so use the link below instead."
+  if [ -n "${CF:-}" ] && [ -x "${CF:-}" ]; then
+    echo "The tunnel did not start. What cloudflared said:"
+    tail -n 15 "$LOG" | sed 's/^/    /'
+  else
+    echo "The tunnel is not available (cloudflared could not be downloaded)."
+  fi
+  echo "Use the link below instead for now."
   if [ -n "${WEB_HOST:-}" ]; then
     bold "Lunchbox is ready. Open it with Web Preview (the eye icon above), port $PORT, then add #key=$KEY"
     printf '\n    \033[4mhttps://%s-%s/#key=%s\033[0m\n\n' "$PORT" "$WEB_HOST" "$KEY"
