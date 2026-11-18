@@ -20,6 +20,7 @@ const queue: string[] = []
 const uploads = new Set<Promise<unknown>>()
 let uploadsDir = ''
 let connected = false
+let lost: (() => void) | null = null
 let tries = 0
 
 const setStatus = (text: string | null) => {
@@ -34,35 +35,47 @@ const setStatus = (text: string | null) => {
   el.textContent = text
 }
 
+// The first time a socket opens, connect() resolves; later drops reconnect on their own. A new
+// tunnel can take a few seconds to answer, so early failures are expected and retried.
+let opened: () => void = () => {}
+const firstOpen = new Promise<void>((r) => { opened = r })
 function connect(): Promise<void> {
-  return new Promise((ready) => {
-    const url = at('ws')
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    ws = new WebSocket(url)
-    ws.onopen = () => { connected = true; tries = 0; setStatus(null); for (const m of queue.splice(0)) ws.send(m); ready() }
-    ws.onmessage = (e) => {
-      const m = JSON.parse(String(e.data))
-      if (m.ev) { local(m.ev, m.value); listeners.get(m.ev)?.forEach((f) => f(m.value)); return }
-      const p = pending.get(m.id)
-      if (!p) return
-      pending.delete(m.id)
-      if (m.error) p.no(new Error(m.error))
-      else p.ok(m.value)
+  const url = at('ws')
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  ws = new WebSocket(url)
+  ws.onopen = () => {
+    connected = true
+    tries = 0
+    setStatus(null)
+    for (const m of queue.splice(0)) ws.send(m)
+    opened()
+  }
+  ws.onmessage = (e) => {
+    const m = JSON.parse(String(e.data))
+    if (m.ev) { local(m.ev, m.value); listeners.get(m.ev)?.forEach((f) => f(m.value)); return }
+    const p = pending.get(m.id)
+    if (!p) return
+    pending.delete(m.id)
+    if (m.error) p.no(new Error(m.error))
+    else p.ok(m.value)
+  }
+  // The engine keeps running when the page loses its connection; the page finds it again.
+  ws.onclose = () => {
+    // Questions asked on the lost socket get no answer; they fail rather than wait forever.
+    for (const [id, p] of pending) { if (!queue.some((m) => m.startsWith(`{"id":${id},`))) { pending.delete(id); p.no(new Error('The connection to Lunchbox dropped. Try again.')) } }
+    tries++
+    if (connected || tries < 12) setStatus(connected ? 'Reconnecting to Lunchbox… If it stopped, start it again.' : 'Connecting to Lunchbox…')
+    else setStatus(null)
+    const boot = document.getElementById('lb-boot')
+    if (boot && !connected && tries === 12) {
+      boot.innerHTML = '<div style="display:grid;gap:14px;justify-items:center;max-width:460px;line-height:1.6"><div>Your Lunchbox is not running. Start it on your computer or in Cloud Shell; this page connects as soon as it is up.</div><div style="display:flex;gap:10px"><a id="lb-start" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:#f2f0ea;color:#0d0d0c;text-decoration:none">Start in Cloud Shell</a><a href="#local" id="lb-local" style="padding:7px 14px;border-radius:8px;color:#a8a59d;text-decoration:none">Use it in this browser instead</a></div></div>'
+      ;(document.getElementById('lb-start') as HTMLAnchorElement).href = 'https://shell.cloud.google.com/?show=terminal'
+      document.getElementById('lb-local')!.onclick = () => { sessionStorage.removeItem('lb-connect'); try { localStorage.setItem('lb-mode', 'local') } catch {} ; setTimeout(() => location.reload(), 0) }
     }
-    // The engine keeps running when the page loses its connection; the page finds it again.
-    ws.onclose = () => {
-      tries++
-      if (connected || tries < 6) setStatus(connected ? 'Reconnecting to Lunchbox… If it stopped, open Cloud Shell to start it again.' : 'Connecting to Lunchbox…')
-      else setStatus(null)
-      const boot = document.getElementById('lb-boot')
-      if (boot && !connected && tries === 6) {
-        boot.innerHTML = '<div style="display:grid;gap:14px;justify-items:center;max-width:460px;line-height:1.6"><div>Your Lunchbox in Cloud Shell is not running. Start it, then open the new link it prints.</div><div style="display:flex;gap:10px"><a id="lb-start" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:#f2f0ea;color:#0d0d0c;text-decoration:none">Start in Cloud Shell</a><a href="#local" id="lb-local" style="padding:7px 14px;border-radius:8px;color:#a8a59d;text-decoration:none">Use it in this browser instead</a></div></div>'
-        ;(document.getElementById('lb-start') as HTMLAnchorElement).href = 'https://shell.cloud.google.com/?show=terminal'
-        document.getElementById('lb-local')!.onclick = () => { sessionStorage.removeItem('lb-connect'); setTimeout(() => location.reload(), 0) }
-      }
-      setTimeout(() => { void connect() }, 1500)
-    }
-  })
+    if (connected && lost && tries >= 8) { lost(); return }
+    setTimeout(() => { void connect() }, Math.min(5000, 1000 + tries * 300))
+  }
+  return firstOpen
 }
 
 const raw = (ch: string, args: unknown[]) => new Promise<any>((ok, no) => {
@@ -179,9 +192,10 @@ window.lb = {
 }
 
 // Connects, sets window.lb, and resolves once the engine has answered.
-export async function startBridge(o: { base?: string; key?: string } = {}) {
+export async function startBridge(o: { base?: string; key?: string; lost?: () => void } = {}) {
   if (o.base) base = o.base.endsWith('/') ? o.base : `${o.base}/`
   key = o.key ?? ''
+  lost = o.lost ?? null
   await connect()
   const env = await raw('env', []) as { uploads?: string }
   uploadsDir = env.uploads ?? ''

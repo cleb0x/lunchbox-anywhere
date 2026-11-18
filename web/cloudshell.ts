@@ -25,19 +25,20 @@ const button = (text: string, primary: boolean) => {
 
 // A small offer on the site running on its own: the same Lunchbox with Claude Code and a Claude
 // subscription, in Cloud Shell. Dismissed for good with "Not now".
-export function offer() {
-  if (store.get(HIDE)) return
+// known: this device has a Lunchbox it connects to, which is not running right now.
+export function offer(known = false) {
+  if (store.get(HIDE) && !known) return
   const bar = document.createElement('div')
   bar.style.cssText = `${css};right:16px;bottom:16px`
   const text = document.createElement('span')
-  text.textContent = 'Use Claude Code with your Claude subscription'
+  text.textContent = known ? 'Your Lunchbox is not running. Start it on your computer, or here:' : 'Use Claude Code with your Claude subscription'
   const go = button('Start in Cloud Shell', true)
   go.href = startLink()
   go.target = '_blank'
   go.rel = 'noopener'
   go.title = 'Opens your free Google Cloud Shell. Lunchbox starts there and prints a link that connects this site to it.'
   const no = button('Not now', false)
-  no.onclick = () => { store.set(HIDE, '1'); bar.remove() }
+  no.onclick = () => { if (!known) store.set(HIDE, '1'); bar.remove() }
   bar.append(text, go, no)
   document.body.appendChild(bar)
 }

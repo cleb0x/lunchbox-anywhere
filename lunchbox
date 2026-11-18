@@ -4,6 +4,8 @@
 #   ./lunchbox            start (installs what is missing the first time)
 #   ./lunchbox --update   fetch the newest Lunchbox first, even if one is already here
 #   ./lunchbox --no-autostart   stop starting Lunchbox by itself when Cloud Shell opens
+#   ./lunchbox --at-login       on your own computer: start Lunchbox whenever you log in
+#   ./lunchbox --not-at-login   undo that
 set -euo pipefail
 
 REPO="${LUNCHBOX_REPO:-cleb0x/lunchbox-anywhere}"
@@ -11,7 +13,7 @@ APP="$HOME/.lunchbox-app"
 PORT="${PORT:-8080}"
 export PATH="$HOME/.local/bin:$PATH"
 
-VERSION="5"
+VERSION="6"
 bold() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\n\033[31m%s\033[0m\n' "$1"; exit 1; }
 
@@ -35,6 +37,46 @@ if [ "${1:-}" = "--no-autostart" ]; then
   echo "Lunchbox no longer starts by itself. Run it with: bash <(curl -fsSL https://raw.githubusercontent.com/$REPO/main/lunchbox)"
   exit 0
 fi
+# On your own computer: start at login, in the background, logging to ~/.config/Lunchbox/server.log.
+RUN="bash <(curl -fsSL https://raw.githubusercontent.com/$REPO/main/lunchbox)"
+if [ "${1:-}" = "--at-login" ] || [ "${1:-}" = "--not-at-login" ]; then
+  mkdir -p "$HOME/.config/Lunchbox"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    plist="$HOME/Library/LaunchAgents/dev.lunchbox.server.plist"
+    if [ "$1" = "--at-login" ]; then
+      mkdir -p "$(dirname "$plist")"
+      cat > "$plist" <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>dev.lunchbox.server</string>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>-lc</string><string>$RUN</string></array>
+<key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+<key>StandardOutPath</key><string>$HOME/.config/Lunchbox/server.log</string>
+<key>StandardErrorPath</key><string>$HOME/.config/Lunchbox/server.log</string>
+</dict></plist>
+PL
+      launchctl unload "$plist" 2>/dev/null || true
+      launchctl load "$plist"
+      echo "Lunchbox now starts when you log in to this Mac, and is starting now."
+    else
+      launchctl unload "$plist" 2>/dev/null || true; rm -f "$plist"; echo "Lunchbox no longer starts at login."
+    fi
+  else
+    unit="$HOME/.config/systemd/user/lunchbox.service"
+    if [ "$1" = "--at-login" ]; then
+      mkdir -p "$(dirname "$unit")"
+      printf '[Unit]\nDescription=Lunchbox\nAfter=network-online.target\n\n[Service]\nExecStart=/bin/bash -lc "%s"\nRestart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n' "$RUN" > "$unit"
+      systemctl --user daemon-reload && systemctl --user enable --now lunchbox.service
+      echo "Lunchbox now starts when you log in, and is starting now. Its output: journalctl --user -u lunchbox"
+    else
+      systemctl --user disable --now lunchbox.service 2>/dev/null || true; rm -f "$unit"; echo "Lunchbox no longer starts at login."
+    fi
+  fi
+  echo "The link to open on another device once is in ~/.config/Lunchbox/pair-link.txt after it has started."
+  exit 0
+fi
+
 if { [ -n "${WEB_HOST:-}" ] || [ -n "${CLOUD_SHELL:-}" ]; } && [ -z "${LUNCHBOX_NO_AUTOSTART:-}" ] && ! grep -qF "$MARK" "$HOME/.bashrc" 2>/dev/null; then
   cat >> "$HOME/.bashrc" <<RC
 
@@ -97,16 +139,30 @@ mkdir -p "$(dirname "$KEYFILE")"
 [ -s "$KEYFILE" ] || (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$KEYFILE")
 KEY="$(cat "$KEYFILE")"
 
+# The desktop app keeps its rooms in the same place; two at once would write over each other.
+# (Matched by where the app lives, not by name: this launcher is called lunchbox too.)
+if [ -z "${WEB_HOST:-}${CLOUD_SHELL:-}" ] && pgrep -f 'Lunchbox\.app/Contents/MacOS/Lunchbox|/tmp/\.mount_Lunch|/opt/Lunchbox/lunchbox' >/dev/null 2>&1; then
+  bold "The Lunchbox desktop app is open. Quit it first: both use the same rooms and would get in each other's way."
+  exit 1
+fi
+
 # A free Cloudflare quick tunnel, so the Lunchbox website can reach this computer. No account.
 TUNNEL=""
+CF=""
 if [ "${LUNCHBOX_TUNNEL:-1}" = "1" ]; then
-  CF="$APP/cloudflared"
-  if [ ! -x "$CF" ]; then
-    case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) arch="" ;; esac
-    if [ "$(uname -s)" = "Linux" ] && [ -n "$arch" ]; then
+  if command -v cloudflared >/dev/null; then CF="$(command -v cloudflared)"
+  else
+    CF="$APP/cloudflared"
+    if [ ! -x "$CF" ]; then
+      case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) arch="" ;; esac
+      base="https://github.com/cloudflare/cloudflared/releases/latest/download"
       bold "Getting the tunnel (cloudflared)…"
-      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch" -o "$CF.part" && chmod +x "$CF.part" && mv "$CF.part" "$CF" || echo "Could not download cloudflared."
-    elif command -v cloudflared >/dev/null; then CF="$(command -v cloudflared)"; fi
+      if [ "$(uname -s)" = "Linux" ] && [ -n "$arch" ]; then
+        curl -fsSL "$base/cloudflared-linux-$arch" -o "$CF.part" && chmod +x "$CF.part" && mv "$CF.part" "$CF" || echo "Could not download cloudflared."
+      elif [ "$(uname -s)" = "Darwin" ] && [ -n "$arch" ]; then
+        curl -fsSL "$base/cloudflared-darwin-$arch.tgz" | tar -xzf - -C "$APP" && chmod +x "$CF" || echo "Could not download cloudflared."
+      fi
+    fi
   fi
 fi
 
@@ -116,15 +172,11 @@ LOG="$(mktemp)"
 cleanup() { [ -n "${TPID:-}" ] && kill "$TPID" 2>/dev/null; [ -n "${SPID:-}" ] && kill "$SPID" 2>/dev/null; rm -f "$LOG"; }
 trap cleanup EXIT INT TERM
 
-# In Cloud Shell it stops after 20 minutes without an open page, so the shell can sleep.
-idle="${LUNCHBOX_IDLE_MINUTES:-}"; [ -z "$idle" ] && [ -n "${WEB_HOST:-}${CLOUD_SHELL:-}" ] && idle=20
-env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" LUNCHBOX_KEY="$KEY" LUNCHBOX_QUIET=1 LUNCHBOX_IDLE_MINUTES="${idle:-0}" node "$APP/main.cjs" &
-SPID=$!
-
-if [ -n "${CF:-}" ] && [ -x "$CF" ]; then
+# The tunnel first, so Lunchbox knows its address and can tell the website where it is.
+if [ -n "$CF" ] && [ -x "$CF" ]; then
+  echo "Opening the tunnel…"
   "$CF" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" >"$LOG" 2>&1 &
   TPID=$!
-  echo "Opening the tunnel…"
   for _ in $(seq 1 120); do
     TUNNEL="$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG" | head -n1 || true)"
     [ -n "$TUNNEL" ] && break
@@ -132,25 +184,44 @@ if [ -n "${CF:-}" ] && [ -x "$CF" ]; then
   done
 fi
 
+# In Cloud Shell it stops after 20 minutes without an open page, so the shell can sleep.
+idle="${LUNCHBOX_IDLE_MINUTES:-}"; [ -z "$idle" ] && [ -n "${WEB_HOST:-}${CLOUD_SHELL:-}" ] && idle=20
+env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" LUNCHBOX_KEY="$KEY" LUNCHBOX_QUIET=1 LUNCHBOX_IDLE_MINUTES="${idle:-0}" \
+  LUNCHBOX_PUBLIC_URL="${TUNNEL:+$TUNNEL/}" node "$APP/main.cjs" &
+SPID=$!
+
 if [ -n "$TUNNEL" ]; then
+  # A new tunnel takes a few seconds to answer; the link is shown once it does.
+  echo "Waiting for the tunnel to answer…"
+  for _ in $(seq 1 60); do
+    curl -fsS -m 4 "$TUNNEL/health?key=$KEY" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  LINK="$SITE#connect=$TUNNEL&key=$KEY"
+  PAIR="$SITE#pair=$KEY"
+  printf '%s\n' "$PAIR" > "$HOME/.config/Lunchbox/pair-link.txt"
   bold "Lunchbox is ready. Open this link:"
-  printf '\n    \033[4m%s#connect=%s&key=%s\033[0m\n\n' "$SITE" "$TUNNEL" "$KEY"
-  echo "(Ctrl+click it, or copy it into a new tab. Keep the link to yourself: it opens your Lunchbox.)"
+  printf '\n    \033[4m%s\033[0m\n\n' "$LINK"
+  echo "(Ctrl+click it, or copy it into a new tab.)"
+  echo
+  echo "Once you have opened a link like this on a device, that device finds this Lunchbox by itself:"
+  echo "just go to $SITE"
+  [ -z "${WEB_HOST:-}${CLOUD_SHELL:-}" ] && echo "To use it from your Chromebook, open the link above there once (send it to yourself)."
+  echo "Keep these links to yourself: they open your Lunchbox."
 else
-  if [ -n "${CF:-}" ] && [ -x "${CF:-}" ]; then
+  if [ -n "$CF" ] && [ -x "$CF" ]; then
     echo "The tunnel did not start. What cloudflared said:"
     tail -n 15 "$LOG" | sed 's/^/    /'
   elif [ "${LUNCHBOX_TUNNEL:-1}" = "1" ]; then
     echo "The tunnel is not available (cloudflared could not be downloaded)."
   fi
-  echo "Use the link below instead for now."
   if [ -n "${WEB_HOST:-}" ]; then
-    bold "Lunchbox is ready. Open it with Web Preview (the eye icon above), port $PORT, then add #key=$KEY"
+    bold "Lunchbox is ready. Open it with Web Preview (the eye icon above), port $PORT:"
     printf '\n    \033[4mhttps://%s-%s/#key=%s\033[0m\n\n' "$PORT" "$WEB_HOST" "$KEY"
   else
-    bold "Lunchbox is ready. Open it here:"
+    bold "Lunchbox is ready on this computer. Open it here:"
     printf '\n    \033[4mhttp://localhost:%s/#key=%s\033[0m\n\n' "$PORT" "$KEY"
   fi
 fi
-echo "Keep this tab open while you use Lunchbox. Press Ctrl+C to stop it."
+echo "Keep this window open while you use Lunchbox. Press Ctrl+C to stop it."
 wait "$SPID"

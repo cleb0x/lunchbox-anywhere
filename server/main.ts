@@ -5,10 +5,10 @@
 //
 // Made for a cloud shell such as Google Cloud Shell, whose web preview lets only its owner in.
 // Anywhere else, set LUNCHBOX_PASSWORD so the page asks for it.
-import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { appendFileSync, copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { homedir } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { app } from 'electron'
@@ -38,6 +38,10 @@ const PASSWORD = process.env.LUNCHBOX_PASSWORD || ''
 // With a key, the engine can be reached from another address (the GitHub Pages site through a
 // tunnel) by whoever has the link with the key in it, and by nobody else.
 const KEY = process.env.LUNCHBOX_KEY || ''
+// Where this Lunchbox can be reached from the website, and what it is called there.
+const PUBLIC_URL = (process.env.LUNCHBOX_PUBLIC_URL || '').replace(/\/?$/, '/')
+const KIND = process.env.WEB_HOST || process.env.CLOUD_SHELL ? 'cloudshell' : 'computer'
+const NAME = process.env.LUNCHBOX_NAME || (KIND === 'cloudshell' ? 'Cloud Shell' : hostname())
 const UI = resolve(__dirname, 'ui')
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml' }
 
@@ -51,9 +55,11 @@ const emit = (channel: string, value: unknown) => { for (const ws of clients) se
 let asking: WebSocket | null = null
 const toPage = (ev: string, value: unknown) => { if (asking && clients.has(asking)) sendTo(asking, { ev, value }); else emit(ev, value) }
 
+// Keys the desktop app sealed with the system keychain (v1) can only be opened by the desktop app;
+// those are skipped here and can be entered again. Command line agents need no keys.
 const cipher: Cipher = {
   seal: (t) => 'v0:' + Buffer.from(t).toString('base64'),
-  open: (s) => Buffer.from(s.slice(3), 'base64').toString(),
+  open: (s) => { if (!s.startsWith('v0:')) throw new Error('Sealed by the desktop app'); return Buffer.from(s.slice(3), 'base64').toString() },
 }
 
 let store: Store
@@ -383,6 +389,12 @@ const server = createServer(async (req, res) => {
       res.writeHead(204, { 'access-control-allow-methods': 'POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '600' }).end()
       return
     }
+    // The website checks a computer is there, and which it is, before connecting.
+    if (url.pathname.endsWith('/health')) {
+      if (!keyed(req)) { res.writeHead(403).end(); return }
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ ok: true, name: NAME, kind: KIND, version: app.getVersion() }))
+      return
+    }
     const isUpload = url.pathname.endsWith('/upload')
     if (!signedIn(req, !isUpload)) {
       if (isUpload) { res.writeHead(403).end('Not allowed'); return }
@@ -487,6 +499,7 @@ async function main() {
   remote.start()
   toolbox.startAll()
   server.listen(PORT, HOST, () => {
+    void beFound()
     console.log(`Lunchbox is running on port ${PORT}.`)
     const shell = process.env.WEB_HOST || process.env.CLOUD_SHELL
     if (process.env.LUNCHBOX_QUIET) return
@@ -494,6 +507,35 @@ async function main() {
       : HOST === '127.0.0.1' || HOST === 'localhost' ? `Open http://localhost:${PORT}`
       : `Open http://<this computer>:${PORT}${PASSWORD ? '' : '. No password is set, so anyone who can reach this port can use it: set LUNCHBOX_PASSWORD.'}`)
   })
+}
+
+// --- Being found ------------------------------------------------------------------------------
+// The tunnel's address changes every start. So the website can find this computer without a new
+// link each time, the address is posted to ntfy.sh, a free public message service, on a topic
+// named after the key and encrypted with it. Only browsers that have the key can read it.
+const RELAY = process.env.LUNCHBOX_RELAY || 'https://ntfy.sh'
+const topic = () => 'lunchbox-' + createHash('sha256').update(`${KEY}:topic`).digest('hex').slice(0, 32)
+function sealed(o: unknown) {
+  const iv = randomBytes(12)
+  const c = createCipheriv('aes-256-gcm', createHash('sha256').update(`${KEY}:seal`).digest(), iv)
+  const body = Buffer.concat([c.update(JSON.stringify(o)), c.final(), c.getAuthTag()])
+  return Buffer.concat([iv, body]).toString('base64')
+}
+async function announce(online: boolean) {
+  if (!KEY || !PUBLIC_URL || process.env.LUNCHBOX_NO_RELAY) return
+  try {
+    await fetch(`${RELAY}/${topic()}`, { method: 'POST', body: sealed({ v: 1, url: online ? PUBLIC_URL : '', name: NAME, kind: KIND, at: Date.now(), online }), signal: AbortSignal.timeout(8000) })
+  } catch {}
+}
+// Said once the tunnel answers, and again now and then so it never looks stale.
+async function beFound() {
+  if (!KEY || !PUBLIC_URL) return
+  for (let i = 0; i < 60; i++) {
+    try { if ((await fetch(`${PUBLIC_URL}health?key=${KEY}`, { signal: AbortSignal.timeout(4000) })).ok) break } catch {}
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  await announce(true)
+  setInterval(() => { void announce(true) }, 30 * 60e3).unref()
 }
 
 // With LUNCHBOX_IDLE_MINUTES set, Lunchbox stops itself when no page has been open for that long
@@ -511,7 +553,9 @@ if (IDLE > 0) {
   }, 30e3).unref()
 }
 
-const quit = () => { engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush(); finishStops(); process.exit(0) }
+let quitting = false
+const quit = () => { if (quitting) return; quitting = true; void announce(false).finally(() => stop()); setTimeout(stop, 3000) }
+const stop = () => { engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush(); finishStops(); process.exit(0) }
 process.on('SIGINT', quit)
 process.on('SIGTERM', quit)
 

@@ -4,12 +4,17 @@ import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 
 const home = homedir()
-const DATA = process.env.LUNCHBOX_DATA || join(home, '.config', 'Lunchbox')
+// The same folder the desktop app keeps its rooms, settings and agents in, so on a computer that
+// has the desktop app, the website picks up right where it left off.
+const appData = process.platform === 'win32' ? process.env.APPDATA || join(home, 'AppData', 'Roaming')
+  : process.platform === 'darwin' ? join(home, 'Library', 'Application Support')
+  : process.env.XDG_CONFIG_HOME || join(home, '.config')
+const DATA = process.env.LUNCHBOX_DATA || join(appData, 'Lunchbox')
 let version = '0.0.0'
 for (const p of [join(__dirname, 'package.json'), join(__dirname, '..', '..', 'package.json')]) { try { version = JSON.parse(readFileSync(p, 'utf8')).version; break } catch {} }
 
 const paths: Record<string, string> = {
-  home, userData: DATA, appData: join(home, '.config'), documents: join(home, 'Documents'), downloads: join(home, 'Downloads'), temp: '/tmp', desktop: join(home, 'Desktop'),
+  home, userData: DATA, appData, documents: join(home, 'Documents'), downloads: join(home, 'Downloads'), temp: '/tmp', desktop: join(home, 'Desktop'),
 }
 
 export const app = {

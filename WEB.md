@@ -1,5 +1,8 @@
 # Lunchbox in the browser
 
+> The [README](README.md) has the short version, including using Lunchbox on your own computer at
+> home from the website. This page is the detail on the browser version.
+
 The same app as the desktop version, running entirely in a browser tab. You can use it on a
 Chromebook, or any computer with Chrome or Edge. Nothing runs on a server: the site is static
 files, and your rooms, settings and keys stay in your browser.

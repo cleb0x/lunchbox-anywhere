@@ -1,191 +1,161 @@
 <p align="center">
-  <img src=".github/assets/icon.png" width="112" height="112" alt="Lunchbox">
+  <img src=".github/assets/icon.png" width="96" height="96" alt="Lunchbox">
 </p>
 
-<h1 align="center">Lunchbox</h1>
+<h1 align="center">Lunchbox Anywhere</h1>
 
 <p align="center">
-  A shared agent room: Claude Code, Codex, Grok, Gemini and local models work as one team on one task, with the logins you already have.
-</p>
-
-<p align="center">
-  <a href="https://github.com/noah-thing/lunchbox/actions/workflows/ci.yml"><img src="https://github.com/noah-thing/lunchbox/raw/badges/ci.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-0.1.6-F2F0EA?style=flat-square&labelColor=121110" alt="Version 0.1.6">
-  <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-F2F0EA?style=flat-square&labelColor=121110&label=runs%20on" alt="Runs on macOS, Windows and Linux">
-  <img src="https://img.shields.io/badge/Electron-45-F2F0EA?style=flat-square&labelColor=121110&logo=electron&logoColor=F2F0EA" alt="Electron 45">
-  <img src="https://img.shields.io/badge/license-all%20rights%20reserved-F2F0EA?style=flat-square&labelColor=121110" alt="All rights reserved">
-  <a href="https://x.com/fsconfig"><img src="https://img.shields.io/badge/follow-%40fsconfig-F2F0EA?style=flat-square&labelColor=121110&logo=x&logoColor=F2F0EA" alt="Follow @fsconfig on X"></a>
-</p>
-
-<p align="center">
-  <a href="https://x.com/fsconfig">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/made-by-dark.svg">
-      <img src=".github/assets/made-by-light.svg" width="178" height="44" alt="Made by Noah, @fsconfig on X">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <a href="#quick-start"><b>Quick start</b></a>
-  &nbsp;·&nbsp;
-  <a href="#how-it-works"><b>How it works</b></a>
-  &nbsp;·&nbsp;
-  <a href="#your-data"><b>Your data</b></a>
-  &nbsp;·&nbsp;
-  <a href="CONTRIBUTING.md"><b>Contributing</b></a>
+  Lunchbox as a website, so it works on a Chromebook too.<br>
+  <a href="https://cleb0x.github.io/lunchbox-anywhere/"><b>cleb0x.github.io/lunchbox-anywhere</b></a>
 </p>
 
 <br>
 
-https://github.com/user-attachments/assets/92e057ae-6206-4a41-ae07-bffed98bee19
+I use [Lunchbox](https://github.com/noah-thing/lunchbox) on my PC at home: Claude Code, Codex and
+the other agents working together in one room. At school I only have a Chromebook, and it can't
+install desktop apps or turn on Linux, so I couldn't use it there. So I made Lunchbox into a
+website.
 
-<p align="center"><sub>A recording of a real room: Claude plans a hackathon announcement, Grok searches X, and Codex draws the banner, builds the event page and runs the tests.</sub></p>
+The website is the real Lunchbox: the same screens, rooms, crews, shared memory, handoffs, proof
+checks, rewind and flows. It can use the Lunchbox on my PC at home, with my Claude Code login and my
+files there, from any browser.
 
-<br>
+Lunchbox is made by Noah ([@fsconfig](https://x.com/fsconfig)). This is a fork, made with his
+permission. His original README is in [docs/original-README.md](docs/original-README.md).
 
-## What it is
+## Three ways to use it
 
-Lunchbox is a shared agent room: a desktop app where AI agents from different vendors work in one conversation with one memory, hand tasks to each other, and check each other's results. Most tools for running several agents start each one in its own window or copy of the code. In Lunchbox they work on the same task together, and when one hits its usage limit the next carries on with the same memory.
+The website picks for you: your computer at home if it is running, otherwise your Cloud Shell, and
+otherwise it runs on its own in the browser.
 
-It supports Claude Code, Codex, Grok Build and Gemini CLI, OpenCode and other command line agents, local models through Ollama, LM Studio or llama.cpp, and API keys from 16 providers including Anthropic, OpenAI, xAI and Google. Lunchbox is free; get it at [mylunchbox.dev](https://mylunchbox.dev).
+| | What runs the agents | Claude | Files |
+| --- | --- | --- | --- |
+| **1. Your computer at home** (best) | Your PC, with Lunchbox and Claude Code as they already are | Your subscription, the login already on the PC | Your PC's files and your Lunchbox rooms from the desktop app |
+| **2. Google Cloud Shell** (when the PC is off) | A free Linux computer from Google, about 50 hours a week | Your subscription, signed in once there | Cloud Shell's 5 GB home folder |
+| **3. Just the website** | The browser tab itself | An API key (Gemini has a free one) | Kept in the browser, or a folder you link on the Chromebook |
 
-Each tool uses your own login and plan. Your work goes from your computer to the company behind the tool, with no Lunchbox server in between. Once a day Lunchbox sends an anonymous count: a random ID, the version and the system. Nothing about your rooms, files, prompts or keys. Turn it off in Settings.
+### 1. Your computer at home
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/room-dark.png">
-  <img alt="A Lunchbox room: Grok has searched X, Codex has designed the banner and is running the tests" src=".github/assets/room-light.png">
-</picture>
+On the PC, quit the Lunchbox desktop app first. Then run this once:
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <b>You pick who leads</b><br>
-      Your messages go to the agent you choose. It brings in a crewmate for the parts that crewmate does better, such as Grok for a search on X.
-    </td>
-    <td width="50%" valign="top">
-      <b>Short briefings</b><br>
-      A crewmate starts with the goal, what the room has learned, the files changed and its task. Only the lead reads the whole conversation.
-    </td>
-  </tr>
-  <tr>
-    <td valign="top">
-      <b>Limits handled</b><br>
-      If an agent hits its usage limit, the next one in the crew takes the same task and gets a briefing on where it stands.
-    </td>
-    <td valign="top">
-      <b>Proof for claims</b><br>
-      An agent that says the tests pass needs a passing test run after its last edit. Without one, Lunchbox asks you what to do.
-    </td>
-  </tr>
-  <tr>
-    <td valign="top">
-      <b>Saving</b><br>
-      Lunchbox orders each request so the provider can reuse what it read last time, keeps a room's cache alive while you are away, and shortens long test and build output before an agent reads it. The Savings page shows what each of these saved.
-    </td>
-    <td valign="top">
-      <b>Flows</b><br>
-      Run steps on a schedule, such as a nightly test run or a weekly SEO check. Lunchbox comes with 25 templates to start from.
-    </td>
-  </tr>
-</table>
-
-## Quick start
-
-**1. Install Lunchbox.** Paste one line into a terminal. The script installs the latest version for your computer and opens it.
-
-```sh
-# macOS and Linux
-curl -fsSL https://raw.githubusercontent.com/noah-thing/lunchbox-releases/main/install.sh | sh
-```
+**Windows** (PowerShell):
 
 ```powershell
-# Windows, in PowerShell
-irm https://raw.githubusercontent.com/noah-thing/lunchbox-releases/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox.ps1 | iex
 ```
 
-You can also download the dmg, the Windows installer, the deb or the AppImage from [Releases](https://github.com/noah-thing/lunchbox-releases/releases/latest). After the first install, Lunchbox updates itself.
+**Mac or Linux** (Terminal):
 
-**2. Have at least one agent.** Lunchbox finds the ones you have on first launch.
-
-| Agent | Install | Sign in |
-| --- | --- | --- |
-| Claude Code | `npm install -g @anthropic-ai/claude-code` | `claude` |
-| Codex | `npm install -g @openai/codex` | `codex login` |
-| Gemini CLI | `npm install -g @google/gemini-cli` | `gemini` |
-| Grok Build | [x.ai/cli](https://x.ai/cli) | `grok login` |
-| Local models | [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai) or `llama-server` | none |
-| API keys | Anthropic, OpenAI, xAI, Google, OpenRouter and more | Agents page in the app |
-
-**3. Type what you want done** and press Enter.
-
-## How it works
-
-### Rooms
-
-A room is a task with its own crew and folder. If you don't pick a folder, Lunchbox makes one inside `Documents/Lunchbox` and names it after your request.
-
-| | |
-| --- | --- |
-| **Main agent** | The first agent in the crew answers your messages unless you name another agent. Make main in the agent menu changes it for the room; Settings sets it for new rooms. |
-| **Bringing others in** | The main agent can ask a crewmate a question or hand it a piece of work. The room shows a line when a crewmate joins, with the task, and another when it steps out. Writing `@codex` yourself brings Codex in the same way. |
-| **Memory** | Lunchbox keeps the brief, answers between agents, changed files and your pins as versioned blocks, and sends each agent only the blocks that changed since its last turn. |
-| **Proof** | If an agent says the build works, Lunchbox looks for a matching command that exited 0 after the last edit. If there isn't one, you decide what happens next. |
-| **Side by side** | Send one message to the whole crew and keep the answer you like. Each pick counts toward that agent's rating for the kind of work. |
-| **Rewind** | Lunchbox saves the folder before each message, so you can undo any change. You can also fork a room, replay it or export it. |
-
-### Access
-
-You choose the mode for each message in the composer.
-
-| Mode | Agents can | Commands you run with `!` |
-| --- | --- | --- |
-| Plan | Read only | Reads run, Lunchbox refuses the rest |
-| Ask | Read anything, edits wait for you | Anything that writes asks first |
-| Auto | Edit and run inside the folder | Free inside the folder, outside asks |
-| Full access | Anything on the computer, without asking | Free, except wiping the disk or the home folder |
-
-Lunchbox blocks a few commands in all four modes, such as `rm -rf ~`. You can read the rules in [`electron/policy.ts`](electron/policy.ts) and their tests in `scripts/test-policy.mjs`.
-
-### Pool, Savings, Packs and Flows
-
-- **Pool** adds up your plans and keys: what is left in each five hour and weekly window, when it resets, and which agent your picks rate highest for each kind of work.
-- **Savings** shows what Lunchbox saved and what your agents' own prompt caching saved, per agent and per room. The two are counted apart.
-- **Packs** give a room instructions for one kind of work, such as software, research, SEO or writing. [docs/packs.md](docs/packs.md) shows how to write your own.
-- **Flows** run a few steps on a schedule, each in a room of its own.
-
-## Your data
-
-Lunchbox keeps its data on your computer.
-
-| What | Where |
-| --- | --- |
-| Rooms, settings and usage | `~/Library/Application Support/Lunchbox` on macOS, `%APPDATA%\Lunchbox` on Windows, `~/.config/Lunchbox` on Linux |
-| API keys | The system keychain |
-| Agent logins | With each tool, untouched |
-
-Each room is one `.jsonl` file you can open in any editor. To show plan limits, Lunchbox reads them with the login each tool already has and sends that login only to the company that issued it. Settings has a switch to turn this off.
-
-## Development
-
-You need [Node 24](https://nodejs.org).
-
-```sh
-git clone https://github.com/noah-thing/lunchbox.git
-cd lunchbox
-npm install
-npm run dev         # Vite and Electron with hot reload
-npm test            # policy rules, parsers, caching, limits and full rooms run with fake agents
-npm run typecheck
-npm run tour        # drives the real app and saves screenshots to test/shots
-npm run bench       # the same tasks in plain Claude Code and in a room, with real agents and real usage
-npm run dist        # installers for the current platform in release/
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox)
 ```
 
-CI runs the type check, the tests and the build on macOS, Windows and Linux for each pull request. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to propose a change, and [docs/architecture.md](docs/architecture.md) how the code is laid out.
+It uses the Claude Code that is already signed in on the PC (and installs it if it isn't there),
+starts Lunchbox and prints a link. **Open that link once on your Chromebook** (send it to yourself).
+From then on, just go to the website on the Chromebook and it finds your PC by itself.
+
+To have it start whenever you log in to the PC, so it is always there when you are at school:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox.ps1))) -AtLogin
+```
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox) --at-login
+```
+
+`-NotAtLogin` / `--not-at-login` undo it. The PC has to be on and awake.
+
+### 2. Google Cloud Shell
+
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2Fcleb0x%2Flunchbox-anywhere&cloudshell_git_branch=main&cloudshell_tutorial=cloudshell.md)
+
+Click it, choose **Trust**, and run `./lunchbox`. The first time it installs Claude Code and asks
+you to sign in to Claude. It prints a link; Ctrl+click it. After that, the website's **Start in
+Cloud Shell** button opens Cloud Shell, and Lunchbox starts there by itself.
+
+### 3. Just the website
+
+Open [the website](https://cleb0x.github.io/lunchbox-anywhere/), go to **Agents** and paste an API
+key: Claude, OpenAI, xAI, Gemini (free at aistudio.google.com/apikey) or OpenRouter. **Choose
+folder** links a real folder on the Chromebook.
+
+## What I changed
+
+The screens in `src/` are Noah's and are not changed at all. Everything else is in new folders:
+
+**`web/`: Lunchbox running inside a browser tab.** The desktop app's engine (`electron/`) runs in
+the page, with the parts of Node.js it uses swapped for browser versions:
+
+- `vfs.ts`: a file system kept in the browser's storage, which can also link a real folder
+- `bash.ts`: a bash shell written in JavaScript ([just-bash](https://github.com/vercel-labs/just-bash))
+  for commands, with `grep`, `sed`, `jq` and the rest
+- `node.ts`: a small built-in `node` and `npm test`, so agents can run JavaScript tests and proof
+  checks still work
+- `snap.ts`: rewind and changes without git
+- `browser.ts` + `public/sw.js`: the Lunchbox browser panel, showing pages from the room's folder
+- `main.ts`: everything the desktop app's main process answered, now answered in the page
+
+**`server/`: Lunchbox on a computer, used from the website.** The desktop app's engine runs on
+Node.js without Electron (`main.ts`), so the real Claude Code and the other agents run with their
+own logins and the computer's files. The website talks to it over a WebSocket (`ui/bridge.ts`).
+
+**`lunchbox` and `lunchbox.ps1`: the launchers.** They fetch the ready-made build, install Claude
+Code if needed, open the tunnel, make the key, start Lunchbox and print the link.
+
+**In `electron/`** there are only three small edits: in the browser, where every agent talks over an
+API, API agents also get the room's tools (asking a crewmate, the browser). They only switch on in
+the browser build, so the desktop app works exactly as before.
+
+**`.github/workflows/`**: `web.yml` publishes the website to GitHub Pages and `server.yml` publishes
+the ready-made build the launchers download, on every push to `main`.
+
+## Problems and workarounds
+
+| Problem | Workaround |
+| --- | --- |
+| A Chromebook can't install desktop apps or turn on Linux | Lunchbox as a website |
+| A browser tab can't run programs like Claude Code | Claude Code runs on your PC or in Cloud Shell; the website connects to it |
+| Anthropic doesn't let other apps sign in with a Claude subscription | Lunchbox never touches your Claude login. The real Claude Code runs on your own computer, signed in by you, and Lunchbox just gives it the task, as the desktop app does |
+| A website can't reach a computer at home | A free [Cloudflare quick tunnel](https://try.cloudflare.com) (no account) gives the computer an address for as long as Lunchbox runs |
+| Anyone could use that address | Each computer has a secret key. Only links with the key get in |
+| The tunnel's address changes every start | The computer posts its new address to [ntfy.sh](https://ntfy.sh), encrypted with the key. A device that has opened a link once reads it and finds the computer by itself |
+| A website can't start Cloud Shell | The **Start in Cloud Shell** button opens it, and Lunchbox starts there when the terminal opens |
+| Cloud Shell's free hours run out | Lunchbox stops by itself after 20 minutes with no page open, so Cloud Shell can sleep |
+| API keys the desktop app saved are locked with the PC's keychain | Enter them again on the website; Claude Code and the other command line agents don't need them |
+| The desktop app and the website use the same rooms on the PC | Only one can run at a time; the launcher says so |
+| Some providers (NVIDIA) block requests from websites | Use them through OpenRouter, or from your PC |
+
+## What doesn't work yet
+
+- The **Browser** panel when connected to a computer or Cloud Shell (it works in "just the website").
+- In "just the website": `npm install`, `git` and `python`, local models (Ollama), and dev servers on
+  localhost. Agents open the HTML file instead.
+- Flows only run while the computer (or the tab, on its own) is running.
+
+## Safety
+
+- **Keep your links to yourself.** A link with your key can use your Lunchbox, and through it your
+  computer's files. To make a new key, delete `~/.config/Lunchbox/server-key` (on Windows
+  `%USERPROFILE%\.config\Lunchbox\server-key`) and start the launcher again; old links stop working.
+- The key is after the `#` in the link, which browsers never send to GitHub.
+- What is posted to ntfy.sh is encrypted with the key; it only says where to find the computer.
+- In "just the website", keys and rooms stay in your browser. Nothing goes to a server of mine.
+
+## For developers
+
+```bash
+npm ci
+npm run web:dev        # the website on http://localhost:4420
+npm run web:build      # the website in out/web
+npm run server:build   # server mode in server/dist
+npm run server:start   # start it (PORT, LUNCHBOX_KEY, LUNCHBOX_PASSWORD)
+```
+
+[WEB.md](WEB.md) has more detail on the browser version.
 
 ## License
 
-Copyright © 2026 noah-thing. All rights reserved.
-
-Agent marks come from [Lobe Icons](https://github.com/lobehub/lobe-icons) under the MIT license, see [licenses/lobe-icons.txt](licenses/lobe-icons.txt). The llama.cpp, Aider and Crush marks come from those projects' own files, and the terminal and server icons from [Phosphor](https://phosphoricons.com) under the MIT license, see [licenses/phosphor-icons.txt](licenses/phosphor-icons.txt). Product names and logos belong to their owners.
+Lunchbox is © Noah, all rights reserved, and is used here with his permission. The agent marks come
+from [Lobe Icons](https://github.com/lobehub/lobe-icons) and the icons from
+[Phosphor](https://phosphoricons.com), both under the MIT license (see [licenses/](licenses)).
