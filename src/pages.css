@@ -120,7 +120,7 @@ input[type=number].select{width:64px}
 .tcard small,.card small{font:10.5px var(--mono);color:var(--faint)}
 .tcard .crewmarks{margin-bottom:8px}
 .tcard small{margin-top:auto;padding-top:8px}
-@media (hover:hover){.tcard:hover,.card:not(.static):hover{box-shadow:inset 0 0 0 1px var(--line2),0 8px 24px -16px rgba(0,0,0,.6);transform:translateY(-1px)}}
+@media (hover:hover){.tcard:hover,.card:not(.static):hover{box-shadow:inset 0 0 0 1px var(--line2),0 8px 24px -16px rgb(0 0 0/calc(.6*var(--shade)));transform:translateY(-1px)}}
 .tcard:active,.card:not(.static):active{transform:scale(.985)}
 .steps{list-style:none;display:flex;flex-direction:column;gap:10px}
 .step{display:flex;align-items:flex-start;gap:14px;padding:14px 12px 12px 16px;border-radius:12px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);animation:land 300ms var(--out) both;transition:box-shadow 160ms var(--out)}
@@ -181,7 +181,7 @@ input[type=number].select{width:64px}
 /* Sheet over the page */
 .scrim.center{display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.45);-webkit-app-region:no-drag}
 [data-theme=light] .scrim.center{background:rgba(14,14,13,.2)}
-.sheetcard{width:min(560px,calc(100vw - 48px));max-height:calc(100vh - 96px);overflow:auto;display:flex;flex-direction:column;gap:14px;padding:22px 24px;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgba(0,0,0,.6);animation:menu 260ms var(--out) both}
+.sheetcard{width:min(560px,calc(100vw - 48px));max-height:calc(100vh - 96px);overflow:auto;display:flex;flex-direction:column;gap:14px;padding:22px 24px;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgb(0 0 0/calc(.6*var(--shade)));animation:menu 260ms var(--out) both}
 /* Taller than the window, the card scrolls; its parts keep their size instead of squashing. */
 .sheetcard>*{flex-shrink:0}
 .sheetcard h2{font-size:17px;font-weight:500;letter-spacing:-.01em}
@@ -224,7 +224,7 @@ input[type=number].select{width:64px}
 .receipt .amount{width:52px;text-align:right;color:var(--ink)}
 
 /* Room: changes per message */
-.changes{width:min(1120px,calc(100vw - 64px));height:min(760px,calc(100vh - 80px));display:flex;flex-direction:column;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgba(0,0,0,.6);overflow:hidden;animation:menu 260ms var(--out) both}
+.changes{width:min(1120px,calc(100vw - 64px));height:min(760px,calc(100vh - 80px));display:flex;flex-direction:column;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgb(0 0 0/calc(.6*var(--shade)));overflow:hidden;animation:menu 260ms var(--out) both}
 .changeshead{display:flex;align-items:center;gap:12px;height:56px;padding:0 12px 0 20px;border-bottom:1px solid var(--line);flex:none}
 .changeshead .grow{display:flex;align-items:baseline;gap:10px;min-width:0}
 .changeshead b{font-weight:500;font-size:14px}
@@ -284,11 +284,11 @@ input[type=number].select{width:64px}
 @keyframes bload{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
 .seg.small button{height:22px;padding:0 9px;font-size:11.5px}
 .bstage{position:relative;flex:1;min-height:0;display:flex;padding:14px;background:var(--ground)}
-.bdevice{position:relative;flex:1;display:flex;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line2),0 16px 48px -24px rgba(0,0,0,.7);overflow:hidden;background:#fff;transition:box-shadow 300ms var(--out),max-width 420ms var(--out);margin:0 auto;max-width:100%;width:100%}
+.bdevice{position:relative;flex:1;display:flex;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line2),0 16px 48px -24px rgb(0 0 0/calc(.7*var(--shade)));overflow:hidden;background:#fff;transition:box-shadow 300ms var(--out),max-width 420ms var(--out);margin:0 auto;max-width:100%;width:100%}
 .bdevice.tablet,.bdevice.phone{max-width:calc(var(--w) + 2px);border-radius:22px}
 .bdevice.phone{border-radius:28px}
 .bhole{flex:1;display:grid;place-items:center;margin:1px;border-radius:inherit;background:var(--sheet)}
-.browser.driven .bdevice{box-shadow:inset 0 0 0 1px var(--ink),0 0 0 4px var(--hover),0 16px 48px -24px rgba(0,0,0,.7)}
+.browser.driven .bdevice{box-shadow:inset 0 0 0 1px var(--ink),0 0 0 4px var(--hover),0 16px 48px -24px rgb(0 0 0/calc(.7*var(--shade)))}
 /* One page per agent, as tabs. The mark lights while its agent is at work, and the words beside
    it say what the agent is doing, then go back to the page's title. */
 .btabs{display:flex;align-items:center;gap:4px;height:38px;padding:0 14px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none;animation:fadein 220ms var(--out) both}
@@ -340,7 +340,7 @@ input[type=number].select{width:64px}
 .savings .sv-card>header h2{font-size:13.5px;font-weight:500;margin:0}
 .savings .sv-info{position:relative;display:inline-flex;color:var(--faint);cursor:help;outline:none}
 .savings .sv-info:hover,.savings .sv-info:focus-visible{color:var(--dim)}
-.savings .sv-tip{position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:8px 10px;border-radius:8px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 12px 32px -12px rgba(0,0,0,.6);font:400 12px/1.5 var(--sans);color:var(--ink);text-align:left;white-space:normal;pointer-events:none;opacity:0;transform:translate(-50%,4px);transition:opacity 140ms var(--out),transform 140ms var(--out)}
+.savings .sv-tip{position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:8px 10px;border-radius:8px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 12px 32px -12px rgb(0 0 0/calc(.6*var(--shade)));font:400 12px/1.5 var(--sans);color:var(--ink);text-align:left;white-space:normal;pointer-events:none;opacity:0;transform:translate(-50%,4px);transition:opacity 140ms var(--out),transform 140ms var(--out)}
 .savings .sv-info:hover>.sv-tip,.savings .sv-info:focus-visible>.sv-tip,.savings .sv-stack:hover>.sv-tip,.savings .sv-stack:focus-visible>.sv-tip{opacity:1;transform:translate(-50%,0)}
 .savings .sv-legend{display:flex;gap:14px;font-size:12px;color:var(--dim)}
 .savings .sv-legend span{display:flex;align-items:center;gap:6px}

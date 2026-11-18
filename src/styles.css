@@ -12,12 +12,14 @@
   --out:cubic-bezier(.23,1,.32,1);--move:cubic-bezier(.77,0,.175,1);
   --sans:"Helvetica Neue",Helvetica,Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
   --col:704px;
+  /* How strong a drop shadow is: full on a dark ground, a third by day, where black reads as dirt. */
+  --shade:1;
   color-scheme:dark;
 }
 [data-theme=light]{
   --ground:#efeee9;--sheet:#fbfaf7;--well:#f3f2ee;--ink:#0e0e0d;
   --dim:rgba(14,14,13,.6);--faint:rgba(14,14,13,.38);--line:rgba(14,14,13,.08);--line2:rgba(14,14,13,.15);--cell:rgba(14,14,13,.1);--hover:rgba(14,14,13,.04);
-  --bad:#e23d17;--warn:#b98a0a;color-scheme:light;
+  --bad:#d43a16;--warn:#8f6a00;--shade:.36;color-scheme:light;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
@@ -34,6 +36,9 @@ textarea,input{font:inherit;color:inherit;background:none;border:0;outline:0;res
 ::selection{background:var(--ink);color:var(--ground)}
 :focus-visible{outline:1px solid var(--ink);outline-offset:2px;border-radius:4px}
 textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
+/* Fields drawn as a quiet box show focus on the box, since the outline is off for inputs. */
+:is(.titleedit,.titleinput,.modelfind,.freekey input,.memtext textarea,.tfield input:not([type])):focus-visible{box-shadow:inset 0 0 0 1px var(--ink)}
+:is(.swatch,.tunepick):has(input:focus-visible){box-shadow:inset 0 0 0 1px var(--ink)}
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-corner{background:transparent}
 ::-webkit-scrollbar-thumb{background:transparent;border-radius:4px;border:2px solid transparent;background-clip:padding-box}
@@ -88,16 +93,12 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .meter i{width:3px;height:10px;border-radius:1px;background:var(--cell)}
 .meter i.on{background:var(--ink)}
 .meter.warn i.on{background:var(--warn)}
-.strip{font:11px/1 var(--mono);color:var(--faint);white-space:pre}
-.resolve{white-space:pre-wrap}
-.resolve .ghost{visibility:hidden}
 .field{display:block;width:100%}
 .modeicon{flex:none;color:var(--ink)}
 .modeicon.full{color:var(--bad)}
 .stack{display:inline-flex}
 .stack>span{display:flex;padding:2px;border-radius:4px;background:var(--sheet);margin-left:-4px;transition:transform 200ms var(--out)}
 .stack>span:first-child{margin-left:0}
-.stack>span.talking{transform:translateY(-2px)}
 
 /* Window: a dark frame holding one sheet. The frame is chrome, the sheet is work. */
 .app{height:100%;display:grid;grid-template-columns:232px 1fr}
@@ -174,8 +175,6 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .ev p{font-size:14px;line-height:1.6;max-width:620px}
 .word{animation:word 260ms var(--out) both;animation-delay:calc(var(--w) * 22ms)}
 @keyframes word{from{opacity:0}}
-.extras{display:flex;flex-direction:column;gap:8px;margin-top:2px}
-.extras.late{animation:land 360ms var(--out) both;animation-delay:var(--after)}
 .mine{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin:32px 0 8px;animation:land 380ms var(--out) both}
 .column>.mine:first-child{margin-top:0}
 .mine .bubble{max-width:78%;padding:9px 14px;border-radius:14px 14px 4px 14px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);font-size:14px;line-height:1.55}
@@ -190,11 +189,6 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .mine .qback:hover{color:var(--ink)}
 .files{display:flex;gap:6px;flex-wrap:wrap}
 .files code{padding:2px 8px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line2);color:var(--dim)}
-.proof{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500}
-.proof i{width:8px;height:8px;border-radius:2px;background:var(--ink);flex:none}
-.proof span{font:11px var(--mono);font-weight:400;color:var(--faint)}
-.proof.bad{color:var(--bad)}
-.proof.bad i{background:none;box-shadow:inset 0 0 0 1.5px var(--bad)}
 
 /* A handoff: who answered whom, the question as it was asked, and what came back. */
 .handhead{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);line-height:20px}
@@ -237,10 +231,8 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .decide.settled .needs{color:var(--faint)}
 
 /* Thinking: the mark pulses, a light passes over the words, the agent's alphabet drifts after them. */
-.thinking .evbody{flex-direction:row;align-items:center;gap:12px;line-height:20px}
 .shimmer{font-size:13px;color:transparent;background:linear-gradient(90deg,var(--faint) 0%,var(--faint) 40%,var(--ink) 50%,var(--faint) 60%,var(--faint) 100%) 0 0/250% 100%;-webkit-background-clip:text;background-clip:text;animation:shimmer 1.8s linear infinite}
 @keyframes shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
-.thinking .strip{opacity:.6}
 
 /* A command: one bordered block, its verdict in the header, the question inside. */
 .term{margin-top:16px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);overflow:hidden;animation:land 360ms var(--out) both}
@@ -285,7 +277,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .shellnote{font:11px var(--mono);color:var(--faint);margin-left:8px}
 .send{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--ink);color:var(--ground);transition:opacity 160ms var(--out),transform 120ms var(--out)}
 .send:disabled{opacity:.2}
-.send span,.newsub{display:none}
+.send span{display:none}
 .send:active:not(:disabled){transform:scale(.94)}
 .menuwrap{position:relative}
 .pill{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:7px;font-size:12px;color:var(--dim);transition:color 140ms var(--out),background-color 140ms var(--out)}
@@ -294,7 +286,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .pill.open{color:var(--ink);background:var(--hover)}
 @media (hover:hover){.pill:hover{color:var(--ink);background:var(--hover)}}
 .menuwrap.full .pill{color:var(--ink)}
-.menu{position:absolute;left:0;bottom:calc(100% + 6px);z-index:20;width:300px;padding:4px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 16px 40px rgba(0,0,0,.4);transform-origin:bottom left;animation:menu 140ms var(--out) both}
+.menu{position:absolute;left:0;bottom:calc(100% + 6px);z-index:20;width:300px;padding:4px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 16px 40px rgb(0 0 0/calc(.4*var(--shade)));transform-origin:bottom left;animation:menu 140ms var(--out) both}
 .cbar .menuwrap:not(:first-child) .menu{left:auto;right:0;transform-origin:bottom right}
 .menuwrap.right .menu{left:auto;right:0;top:calc(100% + 6px);bottom:auto;width:280px;transform-origin:top right}
 .menu .sep{height:1px;margin:4px 8px;background:var(--line)}
@@ -313,7 +305,6 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .fit{overflow:hidden;transition:height 220ms var(--out)}
 .slide{animation:slidein 200ms var(--out) both}
 .slide.returning{animation-name:slideback}
-@keyframes slidein{from{opacity:0;transform:translateX(10px)}}
 @keyframes slideback{from{opacity:0;transform:translateX(-10px)}}
 .crewrow{position:relative}
 .crewrow .modelchip{position:absolute;right:30px;top:8px;display:inline-flex;align-items:center;gap:4px;max-width:130px;height:20px;padding:0 6px 0 8px;border-radius:6px;font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color 140ms var(--out),background-color 140ms var(--out)}
@@ -366,7 +357,8 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .panel{border-left:1px solid var(--line);overflow:auto;min-width:0;display:flex;flex-direction:column;animation:slidein 640ms cubic-bezier(.65,0,.35,1) both}
 @keyframes slidein{from{opacity:0;transform:translateX(8px)}}
 /* The panel's header lines up with the room header, so one hairline runs across both panes. */
-.panelhead{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-app-region:drag}
+.panelhead{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink);white-space:nowrap;-webkit-app-region:drag}
+.panelhead span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .panelhead i{width:6px;height:6px;border-radius:1.5px;background:var(--faint);flex:none;transition:background-color 300ms var(--out)}
 .panelhead.working i{background:var(--ink);animation:breathe 1.4s ease-in-out infinite}
 .panelhead.waiting{color:var(--warn)}
@@ -424,7 +416,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .aleft span{font:11px var(--mono);color:var(--faint)}
 .agentbody{display:flex;flex-direction:column;gap:16px;padding:16px 20px 20px 58px;border-top:1px solid var(--line);animation:land 260ms var(--out) both}
 .anote{font-size:12.5px;line-height:1.5;color:var(--warn)}
-.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
+label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
 .field>span{font-size:12px;font-weight:500}
 .field input{height:32px;min-height:32px;padding:0 10px;border-radius:7px;box-shadow:inset 0 0 0 1px var(--line2);font:12px var(--mono);transition:box-shadow 140ms var(--out);flex:1}
 .field input:focus{box-shadow:inset 0 0 0 1px var(--ink)}
@@ -451,7 +443,6 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .obdrag{position:absolute;inset:0 0 auto;height:44px;-webkit-app-region:drag;z-index:2}
 .obcol{width:100%;max-width:768px;margin:0 auto;padding:16vh 24px 48px;display:flex;flex-direction:column}
 .band{display:block;width:100%}
-.fade{animation:land 600ms var(--out) both;animation-delay:var(--d)}
 .obpage{display:flex;flex-direction:column;gap:10px;animation:land 500ms var(--out) both}
 .obpage h1{font-size:30px;font-weight:500;letter-spacing:-.02em;line-height:1.15}
 .obpage>p{max-width:520px;color:var(--dim);font-size:14px;margin-bottom:14px}
@@ -460,8 +451,6 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .arow{display:flex;align-items:center;gap:12px;height:44px;border-bottom:1px solid var(--line);animation:land 300ms var(--out) both}
 .arow b{font-weight:500}
 .arow code{color:var(--faint)}
-.amissing{padding-top:12px;font-size:12px;color:var(--faint);animation:land 300ms var(--out) both}
-.obnote{font:11px var(--mono);color:var(--faint)}
 .folderpick{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line2);transition:background-color 140ms var(--out)}
 .folderpick code{font-size:12px}
 .folderpick span{font-size:12px;color:var(--dim)}
@@ -499,7 +488,8 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .plist button.hit span{font-size:12.5px}
 .plist button.on{background:var(--hover);color:var(--ink)}
 .plist small{margin-left:auto;flex:none;max-width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:11px var(--mono);color:var(--faint)}
-.plist .empty{padding:20px 12px;color:var(--faint);text-align:center}
+.plist .empty{display:block;padding:20px 12px;border-radius:0;box-shadow:none;color:var(--faint);text-align:center}
+/* By the clock, not by animation: with reduced motion the fade would end at once and hide it. */
 .toast{position:fixed;left:50%;bottom:24px;z-index:50;transform:translateX(-50%);padding:8px 14px;border-radius:8px;background:var(--ink);color:var(--ground);font-size:12.5px;animation:toast 2.6s var(--out) both}
 .toast.long{animation:landmid 260ms var(--out) both;display:flex;align-items:center;max-width:min(620px,calc(100vw - 48px))}
 .toast .reportbtn{color:var(--ground);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ground) 30%,transparent);flex:none}
@@ -569,7 +559,6 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 @keyframes caretsoft{0%,100%{opacity:.9}50%{opacity:.15}}
 
 .busyline{display:flex;align-items:center;gap:12px;height:22px;font-size:12.5px}
-.busyline .strip{color:var(--faint);font-size:11px}
 .acts{display:flex;flex-direction:column;gap:6px;margin-top:2px}
 .actsum{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:22px;padding:0;font-size:12.5px;color:var(--faint);font-feature-settings:"tnum";transition:color 140ms var(--out)}
 @media (hover:hover){.actsum:hover{color:var(--dim)}}
@@ -605,7 +594,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .arenacol.dim{opacity:.5}
 .arenacol .keep{align-self:flex-start;margin-top:auto}
 
-.suggest{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);z-index:15;display:flex;flex-direction:column;padding:4px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 16px 40px rgba(0,0,0,.35);animation:menu 160ms var(--out) both;transform-origin:bottom left}
+.suggest{position:absolute;left:8px;right:8px;bottom:calc(100% + 6px);z-index:15;display:flex;flex-direction:column;padding:4px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 16px 40px rgb(0 0 0/calc(.35*var(--shade)));animation:menu 160ms var(--out) both;transform-origin:bottom left}
 .suggest button{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;text-align:left}
 .suggest button b{font-weight:500;flex:none}
 .suggest button span{color:var(--faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -671,12 +660,11 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .arow.ghost code{width:72px;height:10px;border-radius:3px;background:var(--hover)}
 .arow.ghost{animation:ghost 1.4s ease-in-out infinite both;animation-delay:calc(var(--i) * 120ms)}
 @keyframes ghost{0%,100%{opacity:.5}50%{opacity:1}}
-.amissing{padding-top:12px;font-size:12px;color:var(--faint);animation:fadein 400ms var(--out) both}
 .obnote{font-size:12px;color:var(--faint)}
 .onboard.leaving{opacity:0;transform:translateY(-8px) scale(.995)}
 
 /* One pass, not a loop: a looping animation cut to a millisecond would flicker a thousand times a second. */
-@media (prefers-reduced-motion:reduce){*,::before,::after{animation-duration:1ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
+@media (prefers-reduced-motion:reduce){.toast:not(.long){animation:none}*,::before,::after{animation-duration:1ms!important;animation-delay:0ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
 
 /* Local model setup */
 .localbox{display:flex;flex-direction:column;gap:10px}
@@ -712,7 +700,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .seg button:has(.modeicon){display:inline-flex;align-items:center;gap:6px}
 .seg button.on .modeicon:not(.full){color:inherit}
 /* The beat between pressing stop and the engine confirming: motion halts and the text settles. */
-.room.stopping .caret,.room.stopping .strip{display:none}
+.room.stopping .caret{display:none}
 .room.stopping .shimmer{animation:none;color:var(--faint)}
 /* The folder picker on the new room page sits with the chips, so it wears their shape. */
 .foldermenu .pill{height:28px;padding:0 10px 0 12px;border-radius:14px;box-shadow:inset 0 0 0 1px var(--line)}
@@ -829,18 +817,18 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .kfocus::before{content:"";position:absolute;left:-14px;top:2px;bottom:2px;width:2px;border-radius:1px;background:var(--ink);opacity:.5}
 
 /* Pushed messages and updates: a banner over the page, toasts in the corner, a card for big news. */
-.nbanner{position:fixed;top:14px;left:50%;z-index:45;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:min(720px,calc(100vw - 48px));padding:8px 8px 8px 16px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 14px 40px rgba(0,0,0,.35);font-size:13px;animation:landmid 320ms var(--out) both}
+.nbanner{position:fixed;top:14px;left:50%;z-index:45;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:min(720px,calc(100vw - 48px));padding:8px 8px 8px 16px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 14px 40px rgb(0 0 0/calc(.35*var(--shade)));font-size:13px;animation:landmid 320ms var(--out) both}
 /* Banners and toasts float over the draggable strip at the top of the window; without this the
    window takes their clicks as a drag on macOS and the buttons never fire. */
 .nbanner,.ntoasts{-webkit-app-region:no-drag}
 .nbanner b{font-weight:500}
 .nbanner span span{color:var(--dim)}
 .ntoasts{position:fixed;top:14px;right:14px;z-index:46;display:flex;flex-direction:column;gap:8px;width:320px}
-.ntoast{display:flex;align-items:flex-start;gap:8px;padding:12px 8px 12px 14px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 14px 40px rgba(0,0,0,.35);font-size:13px;animation:land 320ms var(--out) both}
+.ntoast{display:flex;align-items:flex-start;gap:8px;padding:12px 8px 12px 14px;border-radius:12px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 14px 40px rgb(0 0 0/calc(.35*var(--shade)));font-size:13px;animation:land 320ms var(--out) both}
 .ntoast b{font-weight:500}
 .ntoast p{margin-top:3px;font-size:12.5px;line-height:1.45;color:var(--dim)}
 .ntoast .linkbtn{margin-top:6px}
-.ncard{position:relative;width:min(480px,calc(100vw - 48px));border-radius:16px;overflow:hidden;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 30px 80px -10px rgba(0,0,0,.6);animation:menu 320ms var(--out) both}
+.ncard{position:relative;width:min(480px,calc(100vw - 48px));border-radius:16px;overflow:hidden;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 30px 80px -10px rgb(0 0 0/calc(.6*var(--shade)));animation:menu 320ms var(--out) both}
 .ncard img{display:block;width:100%;max-height:260px;object-fit:cover}
 .ncard .nclose{position:absolute;top:10px;right:10px;background:color-mix(in srgb,var(--sheet) 80%,transparent)}
 .ncard .nbody{display:flex;flex-direction:column;gap:10px;padding:20px 22px 18px}
@@ -951,8 +939,6 @@ html[data-platform=win32] .ntoasts,html[data-platform=win32] .nbanner{top:60px}
    breathing dot. Only strokes, opacity and transforms move. */
 .plan{margin:8px 0 4px;max-width:600px;overflow:hidden}
 .plan ol{list-style:none;margin:0;padding:0}
-.planfold{display:block;margin:0 0 4px;font-size:11.5px;color:var(--faint)}
-.planfold:hover{color:var(--ink)}
 .planrow{display:flex;align-items:flex-start;gap:10px;padding:4px 0;font-size:13.5px;line-height:21px;color:var(--ink)}
 .planbox{flex:none;width:16px;height:16px;margin-top:2.5px;overflow:visible}
 /* The dash is a fifth longer than the outline: the traced line closes while it is still moving,

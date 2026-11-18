@@ -77,8 +77,7 @@ export function tokens(t: Theme, mode: Mode): Record<string, string> {
   }
 }
 
-// The ASCII on its own: the welcome band, the room's field, the strips an agent draws while it
-// works and the dot fields. Theme follows the theme; Ink is plain; the rest are ramps from faint
+// The ASCII on its own: the welcome band, the room's field and the dot fields. Theme follows the theme; Ink is plain; the rest are ramps from faint
 // to loud, one set for dark grounds and one for light, so each reads on both.
 export type AsciiId = 'theme' | 'ink' | 'lagoon' | 'cobalt' | 'dusk' | 'meadow' | 'koi' | 'ember' | 'aurora' | 'riso' | 'phosphor' | 'amber' | 'sakura' | 'brass'
 export type Ascii = { id: AsciiId; name: string; dark?: Ramp; light?: Ramp }

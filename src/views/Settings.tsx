@@ -114,7 +114,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             <div className="seg">{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
           </div>
           <div className="setting col">
-            <div className="grow"><b>ASCII colour</b><span>The characters on the home screen, in the room's field and beside a working agent. Follow the theme, or give them a palette of their own.</span></div>
+            <div className="grow"><b>ASCII colour</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own.</span></div>
             <div className="asciis" role="radiogroup" aria-label="ASCII colour">
               {ASCII.map((a) => {
                 const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme, custom)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!

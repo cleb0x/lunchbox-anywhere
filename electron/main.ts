@@ -94,7 +94,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: dark ? '#080807' : '#f4f3ef',
+    backgroundColor: dark ? '#080807' : '#efeee9',
     // Windows draws its own buttons into the header, as tall as the room header so they sit level
     // with it. Linux keeps the desktop's own title bar: each desktop draws overlay buttons in its
     // own size and style, and they never line up.
