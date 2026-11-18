@@ -1488,7 +1488,9 @@ test('hands: a shortened command posts its output with a token that opens nothin
   const hands = new Hands()
   await hands.start()
   t.after(() => hands.stop())
-  const dir = mkdtempSync(join(tmpdir(), 'lunchbox-drop-'))
+  // One room's folder inside the app's own output folder, as the engine lays it out. On Linux the
+  // temp folder itself belongs to root, so it can never be the private parent.
+  const dir = join(mkdtempSync(join(tmpdir(), 'lunchbox-drop-')), 'room')
   let cut = 0
   const tool = { name: 'remember', description: '', input: {}, run: async () => 'kept' }
   const grant = hands.grant([tool], { kind: 'shorten', dir, cut: (n) => { cut += n } })
