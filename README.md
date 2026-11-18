@@ -70,13 +70,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/mai
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2Fcleb0x%2Flunchbox-anywhere&cloudshell_git_branch=main&cloudshell_tutorial=cloudshell.md)
 
-Click it, choose **Trust**, and run `./lunchbox`. The first time it installs Claude Code and asks
-you to sign in to Claude. It prints a link; Ctrl+click it.
+Click it, choose **Trust**, and run `./lunchbox`. A guide opens next to the terminal and tells you
+what to do at each step: signing in to Claude the first time, then an **Open Lunchbox** button.
 
 **Every day after that:** open the website. If Cloud Shell is asleep, it shows **Start in Cloud
-Shell**; click it, wait for **Lunchbox is ready** in the Cloud Shell tab, then reload the website and
-it connects by itself. When you close the Lunchbox tab, Lunchbox stops after 20 minutes so Cloud
-Shell can sleep and save your free hours. Updates come by themselves; to force one, run
+Shell**; click it. Lunchbox starts there by itself, and the guide shows **Open Lunchbox** when it's
+ready (or reload the website, which finds it by itself). When you close the Lunchbox tab, Lunchbox
+stops after 20 minutes so Cloud Shell can sleep and save your free hours. Updates come by
+themselves; to force one, run
 `bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox) --update`.
 
 ### 3. Just the website
@@ -125,7 +126,7 @@ the ready-made build the launchers download, on every push to `main`.
 | A website can't reach a computer at home | A free [Cloudflare quick tunnel](https://try.cloudflare.com) (no account) gives the computer an address for as long as Lunchbox runs |
 | Anyone could use that address | Each computer has a secret key. Only links with the key get in |
 | The tunnel's address changes every start | The computer posts its new address to [ntfy.sh](https://ntfy.sh), encrypted with the key. A device that has opened a link once reads it and finds the computer by itself |
-| A website can't start Cloud Shell | The **Start in Cloud Shell** button opens it, and Lunchbox starts there when the terminal opens |
+| A website can't start Cloud Shell | The **Start in Cloud Shell** button opens it, Lunchbox starts there by itself, and a guide next to the terminal shows the button to open it |
 | Cloud Shell's free hours run out | Lunchbox stops by itself after 20 minutes with no page open, so Cloud Shell can sleep |
 | API keys the desktop app saved are locked with the PC's keychain | Enter them again on the website; Claude Code and the other command line agents don't need them |
 | The desktop app and the website use the same rooms on the PC | Only one can run at a time; the launcher says so |

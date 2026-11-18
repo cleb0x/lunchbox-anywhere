@@ -69,7 +69,7 @@ function connect(): Promise<void> {
     const boot = document.getElementById('lb-boot')
     if (boot && !connected && tries === 12) {
       boot.innerHTML = '<div style="display:grid;gap:14px;justify-items:center;max-width:460px;line-height:1.6"><div>Your Lunchbox is not running. Start it on your computer or in Cloud Shell; this page connects as soon as it is up.</div><div style="display:flex;gap:10px"><a id="lb-start" target="_blank" rel="noopener" style="padding:7px 14px;border-radius:8px;background:#f2f0ea;color:#0d0d0c;text-decoration:none">Start in Cloud Shell</a><a href="#local" id="lb-local" style="padding:7px 14px;border-radius:8px;color:#a8a59d;text-decoration:none">Use it in this browser instead</a></div></div>'
-      ;(document.getElementById('lb-start') as HTMLAnchorElement).href = 'https://shell.cloud.google.com/?show=terminal'
+      ;(document.getElementById('lb-start') as HTMLAnchorElement).href = 'https://shell.cloud.google.com/?show=ide%2Cterminal'
       document.getElementById('lb-local')!.onclick = () => { sessionStorage.removeItem('lb-connect'); try { localStorage.setItem('lb-mode', 'local') } catch {} ; setTimeout(() => location.reload(), 0) }
     }
     if (connected && lost && tries >= 8) { lost(); return }

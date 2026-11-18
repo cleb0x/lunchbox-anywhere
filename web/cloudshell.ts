@@ -12,7 +12,7 @@ export const markUsed = () => store.set(SEEN, '1')
 // The first time: clone the project with the guide open. After that: just the terminal, where
 // Lunchbox starts by itself.
 export const startLink = () => store.get(SEEN)
-  ? 'https://shell.cloud.google.com/?show=terminal'
+  ? 'https://shell.cloud.google.com/?show=ide%2Cterminal'
   : `https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=${encodeURIComponent(REPO)}&cloudshell_git_branch=main&cloudshell_tutorial=cloudshell.md`
 
 const css = 'position:fixed;z-index:9999;display:flex;gap:10px;align-items:center;padding:8px 8px 8px 14px;border-radius:10px;background:#1b1a18;color:#f2f0ea;font:12px "IBM Plex Mono",ui-monospace,monospace;box-shadow:0 8px 30px rgba(0,0,0,.35)'
