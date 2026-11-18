@@ -89,9 +89,15 @@ try {
   const copyShots = async (tag) => {
     for (const [name, sel] of [['code', '.codewrap:not(.prose) >> nth=0'], ['prompt', '.codewrap.prose']]) {
       const wrap = page.locator(sel).first()
+      // Scrolled by hand first, so the room stops following and the block stays under the pointer.
+      await page.$eval('.transcript', (el) => { el.scrollTop = 0 })
+      await page.waitForTimeout(400)
       await wrap.scrollIntoViewIfNeeded()
+      await page.waitForTimeout(400)
       await wrap.hover()
-      await page.waitForTimeout(600)
+      await page.waitForTimeout(500)
+      const shown = await wrap.evaluate((el) => [getComputedStyle(el.querySelector('.codecopy')).opacity, el.dataset.lang ? getComputedStyle(el, '::after').opacity : '0'].join(' '))
+      if (shown !== '1 0') errors.push(`${name}: hovering the block shows the button at ${shown.split(' ')[0]} and the label at ${shown.split(' ')[1]}`)
       await page.screenshot({ path: `${out}08-copy-${name}-${tag}.png`, clip: await wrap.boundingBox() })
       await page.waitForTimeout(1600)
       await wrap.locator('.codecopy').click()
