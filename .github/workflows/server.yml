@@ -1,0 +1,36 @@
+name: Server
+
+# Builds server mode and publishes it as the "server-latest" release, which ./lunchbox downloads.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: server-release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix server --ignore-scripts
+      - run: npm run server:build
+      - run: tar -czf lunchbox-server.tar.gz -C server/dist .
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view server-latest >/dev/null 2>&1 || gh release create server-latest --title "Server mode (latest)" --notes "Built from main by the Server workflow. ./lunchbox downloads this." --latest=false
+          gh release upload server-latest lunchbox-server.tar.gz --clobber

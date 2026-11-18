@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 const home = homedir()
 const DATA = process.env.LUNCHBOX_DATA || join(home, '.config', 'Lunchbox')
 let version = '0.0.0'
-try { version = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8')).version } catch {}
+for (const p of [join(__dirname, 'package.json'), join(__dirname, '..', '..', 'package.json')]) { try { version = JSON.parse(readFileSync(p, 'utf8')).version; break } catch {} }
 
 const paths: Record<string, string> = {
   home, userData: DATA, appData: join(home, '.config'), documents: join(home, 'Documents'), downloads: join(home, 'Downloads'), temp: '/tmp', desktop: join(home, 'Desktop'),

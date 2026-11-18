@@ -467,7 +467,10 @@ async function main() {
   toolbox.startAll()
   server.listen(PORT, HOST, () => {
     console.log(`Lunchbox is running on port ${PORT}.`)
-    console.log(process.env.CLOUD_SHELL ? 'Open it with Web Preview (the eye icon above the terminal) on that port.' : `Open http://localhost:${PORT}${PASSWORD ? '' : ' (no password set: anyone who can reach this port can use it)'}`)
+    const shell = process.env.WEB_HOST || process.env.CLOUD_SHELL
+    console.log(shell ? 'Open the link above, or Web Preview on this port. Only your Google account can open it.'
+      : HOST === '127.0.0.1' || HOST === 'localhost' ? `Open http://localhost:${PORT}`
+      : `Open http://<this computer>:${PORT}${PASSWORD ? '' : '. No password is set, so anyone who can reach this port can use it: set LUNCHBOX_PASSWORD.'}`)
   })
 }
 

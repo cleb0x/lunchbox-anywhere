@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Starts Lunchbox with your own command line agents (Claude Code and others) on this computer,
+# usually a free Google Cloud Shell, and gives you the link to open it in the browser.
+#   ./lunchbox            start (installs what is missing the first time)
+#   ./lunchbox --update   fetch the newest Lunchbox first, even if one is already here
+set -euo pipefail
+
+REPO="${LUNCHBOX_REPO:-cleb0x/lunchbox-anywhere}"
+APP="$HOME/.lunchbox-app"
+PORT="${PORT:-8080}"
+export PATH="$HOME/.local/bin:$PATH"
+
+bold() { printf '\n\033[1m%s\033[0m\n' "$1"; }
+fail() { printf '\n\033[31m%s\033[0m\n' "$1"; exit 1; }
+
+# Node 20 or newer. Cloud Shell has it.
+if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
+  fail "Lunchbox needs Node.js 20 or newer. Install it from https://nodejs.org and run ./lunchbox again."
+fi
+
+# Lunchbox itself: a small ready-made build, fetched from the project's releases.
+if [ ! -f "$APP/main.cjs" ] || [ "${1:-}" = "--update" ] || [ -z "$(find "$APP/main.cjs" -mtime -1 2>/dev/null)" ]; then
+  bold "Getting Lunchbox…"
+  tmp="$(mktemp -d)"
+  if curl -fsSL "https://github.com/$REPO/releases/download/server-latest/lunchbox-server.tar.gz" -o "$tmp/app.tgz"; then
+    rm -rf "$APP.new" && mkdir -p "$APP.new" && tar -xzf "$tmp/app.tgz" -C "$APP.new"
+    rm -rf "$APP" && mv "$APP.new" "$APP"
+  elif [ ! -f "$APP/main.cjs" ]; then
+    fail "Could not download Lunchbox. Check the connection and try again."
+  else
+    echo "Could not check for a newer Lunchbox; starting the one already here."
+  fi
+  rm -rf "$tmp"
+fi
+
+# Claude Code, installed with Anthropic's own installer.
+if ! command -v claude >/dev/null; then
+  bold "Installing Claude Code…"
+  curl -fsSL https://claude.ai/install.sh | bash
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+# Signing in to Claude, once. The login stays in this computer's home folder.
+if [ ! -s "$HOME/.claude/.credentials.json" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  bold "Sign in to Claude"
+  cat <<'TXT'
+Claude Code opens now. Choose "Claude account with subscription", open the link it shows,
+sign in, and paste the code back here. When it says you are logged in, type /exit and press
+Enter, and Lunchbox starts.
+TXT
+  read -r -p "Press Enter to continue… " _
+  claude || true
+  [ -s "$HOME/.claude/.credentials.json" ] || echo "Not signed in yet. Lunchbox starts anyway; run ./lunchbox again to sign in."
+fi
+
+# Codex, Gemini CLI and the others are picked up too when you install them yourself.
+
+if [ -n "${WEB_HOST:-}" ]; then
+  link="https://$PORT-$WEB_HOST"
+else
+  link="http://localhost:$PORT"
+fi
+bold "Lunchbox is starting. Open it here:"
+printf '\n    \033[4m%s\033[0m\n\n' "$link"
+[ -n "${WEB_HOST:-}" ] && echo "(Or use Web Preview above the terminal: Preview on port $PORT. Only your Google account can open it.)"
+echo "Keep this tab open while you use Lunchbox. Press Ctrl+C to stop it."
+echo
+# Cloud Shell reaches the page through its own proxy, which only you can use; elsewhere it stays
+# on this computer alone.
+host="127.0.0.1"; [ -n "${WEB_HOST:-}" ] && host="0.0.0.0"
+exec env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" node "$APP/main.cjs"

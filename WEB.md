@@ -83,3 +83,26 @@ need a desktop replaced by the files in `web/`:
 
 The desktop app is unchanged. The only edits under `electron/` let API agents use the room's tools,
 and they switch on only in the browser build (`LUNCHBOX_WEB`).
+
+## With your Claude subscription: Lunchbox in Cloud Shell
+
+A browser tab cannot run Claude Code, and Anthropic does not allow other apps to sign in with a
+Claude subscription. Claude Code itself can run in **Google Cloud Shell**, a free Linux computer
+in the browser that comes with every Google account (about 50 hours a week, no card). There
+Lunchbox runs as on the desktop: Claude Code with your own subscription, plus Codex, Gemini CLI
+and the rest if you add them, `git`, `npm` and real commands.
+
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2Fcleb0x%2Flunchbox-anywhere&cloudshell_git_branch=main&cloudshell_tutorial=cloudshell.md)
+
+1. Click the button and choose **Trust** when Cloud Shell asks.
+2. Run `./lunchbox` in the terminal. The first time it installs Claude Code and asks you to sign
+   in to Claude.
+3. Click the link it prints.
+
+Each person runs their own copy in their own Cloud Shell, signed in with their own Claude account.
+Only they can open it, so there is no sign in to set up for Lunchbox itself. Next time, open
+shell.cloud.google.com and run `cd ~/lunchbox-anywhere && ./lunchbox`.
+
+The Lunchbox browser view is not in this mode yet; everything else is. `./lunchbox` runs on any
+Linux or Mac computer too. `server/` holds the code: the desktop engine on Node
+(`server/main.ts`) and the window's bridge over a WebSocket (`server/ui/entry.ts`).
