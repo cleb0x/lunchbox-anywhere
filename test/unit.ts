@@ -1696,3 +1696,34 @@ test('custom themes: text is held readable on the frame as well as the sheet', a
   assert.ok(contrast(ok.theme.dark.text!, ok.theme.dark.frame!) >= 4.5, 'text moved until the sidebar reads')
   assert.ok(contrast(ok.theme.dark.text!, ok.theme.dark.sheet!) >= 4.5)
 })
+
+test('clean: a runaway of blank lines is cut down, not a crash, and command output loses only its codes', async () => {
+  const { clean, tidy } = await import('../shared/clean')
+  assert.equal(clean('a' + '\n'.repeat(300000) + 'b'), 'a\n\n\nb')
+  assert.equal(tidy('\x1b[1mbuilding\x1b[0m\n 10%\r 80%\r100%\nok ' + '='.repeat(80)), 'building\n100%\nok ' + '='.repeat(80))
+})
+
+test('store: a file holding the wrong kind of thing falls back instead of stopping the app', async () => {
+  const { Store } = await import('../electron/store')
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lunchbox-shape-'))
+  fs.writeFileSync(path.join(dir, 'state.json'), 'null')
+  fs.writeFileSync(path.join(dir, 'flows.json'), '{}')
+  fs.writeFileSync(path.join(dir, 'skills.json'), '"x"')
+  fs.writeFileSync(path.join(dir, 'settings.json'), '[]')
+  const store = new Store(dir, { seal: (s: string) => s, open: (s: string) => s } as never)
+  assert.deepEqual(store.flows, [])
+  assert.deepEqual(store.skills, [])
+  assert.deepEqual(store.spent, {})
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('flows: a time lost to the clocks changing does not shift the days after', async () => {
+  const { nextRun } = await import('../shared/flow')
+  const f = { every: 'day', at: '09:30' } as never
+  const from = new Date(2026, 2, 28, 12, 0).getTime()
+  const next = new Date(nextRun(f, from)!)
+  assert.equal(next.getHours(), 9)
+  assert.equal(next.getMinutes(), 30)
+  assert.equal(next.getDate(), 29)
+})

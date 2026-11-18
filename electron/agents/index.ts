@@ -408,6 +408,8 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     } catch (err) {
       return failed(`${name} could not start: ${(err as Error).message}`)
     }
+    // Stop pressed while the environment was still being read: the tool has only just started.
+    if (stopped) stop(proc)
     let stderr = ''
     let over = false
     proc.stderr?.on('data', (b: Buffer) => { if (stderr.length < 65536) stderr += b.toString() })

@@ -36,15 +36,24 @@ function prose(text: string) {
     let j = i
     while (j + 1 < lines.length && lines[j + 1] === lines[i]) j++
     const run = j - i + 1
-    kept.push(...(lines[i].trim() && run >= 4 ? [lines[i]] : lines.slice(i, j + 1)))
+    // One at a time: a runaway of blank lines is too long to spread into a call.
+    if (lines[i].trim() && run >= 4) kept.push(lines[i])
+    else for (let k = i; k <= j; k++) kept.push(lines[k])
     i = j + 1
   }
   return kept.join('\n').replace(/\n{4,}/g, '\n\n\n')
 }
 
+// What a command printed, as a terminal would have left it on screen: no colour codes, and a
+// progress line that redrew itself shows only its last state. The text is otherwise untouched.
+export function tidy(text: string): string {
+  if (!text) return text
+  return text.replace(ESCAPES, '').replace(/\r\n/g, '\n').split('\n').map(redraw).join('\n').replace(CONTROLS, '')
+}
+
 export function clean(text: string): string {
   if (!text) return text
-  const base = text.replace(ESCAPES, '').replace(EDGES, '').replace(/\r\n/g, '\n').split('\n').map(redraw).join('\n').replace(CONTROLS, '')
+  const base = tidy(text).replace(EDGES, '')
   // Fences alternate prose and code; an unclosed fence at the end is code still being written.
   const parts = base.split(/^([ \t]*```.*)$/m)
   let inCode = false

@@ -7,7 +7,7 @@ import { join, relative } from 'node:path'
 import type { Access, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
 import { asks, plan } from '../../shared/plan'
 import { classify } from '../../shared/route'
-import { clean } from '../../shared/clean'
+import { clean, tidy } from '../../shared/clean'
 import { DESIGN_SOURCES, DIRECTION, directionGist, spark, studioChecks } from '../../shared/studio'
 import { describe as schedule } from '../../shared/flow'
 import { detect, run, type Result } from '../agents'
@@ -1271,12 +1271,14 @@ export class Engine {
         this.changed(room)
       },
       start: () => { lr.state = 'running'; this.changed(room) },
-      out: (t) => { lr.out = (lr.out + t).slice(-20000); this.changed(room) },
+      out: (t) => { lr.raw = ((lr.raw ?? '') + t).slice(-20000); lr.out = tidy(lr.raw); this.changed(room) },
     }).then((ran) => {
-      live.runs = live.runs.filter((x) => x !== lr)
-      this.add(room, { kind: 'run', who, command, cwd: meta.workspace, verdict: ran.verdict, code: ran.code, ms: ran.ms, out: ran.out.slice(-6000), how: ran.how })
-      this.changed(room)
+      this.add(room, { kind: 'run', who, command, cwd: meta.workspace, verdict: ran.verdict, code: ran.code, ms: ran.ms, out: tidy(ran.out).slice(-6000), how: ran.how })
       return ran
+    }).finally(() => {
+      // Also when the command could not be judged or started, or the room would stay busy.
+      live.runs = live.runs.filter((x) => x !== lr)
+      this.changed(room)
     })
   }
 

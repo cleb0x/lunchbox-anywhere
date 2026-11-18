@@ -83,6 +83,8 @@ export function line(e: Event, name: (id: string) => string): string | null {
     case 'joined': return `[${name(e.by)} brought in ${name(e.who)} for: ${e.task}]`
     case 'chose': return `[Person chose: ${e.label}]`
     case 'pick': return `[Person picked ${name(e.who)}'s answer]`
+    // A rewind changes the files under a session that remembers writing them.
+    case 'note': return e.undo ? `[Person rewound the folder: ${e.text} Edits made after that point are gone, so read a file again before building on it.]` : null
     default: return null
   }
 }

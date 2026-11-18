@@ -29,6 +29,9 @@ export function nextRun(f: Pick<Flow, 'every' | 'at' | 'day'>, from = Date.now()
       (f.every === 'week' && t.getDay() === (f.day ?? 1))
     if (ok && t.getTime() > from) return t.getTime()
     t.setDate(t.getDate() + 1)
+    // Set again each day: a time that does not exist on the night the clocks change must not
+    // carry its shifted hour into the days after.
+    t.setHours(h, m, 0, 0)
   }
   return undefined
 }

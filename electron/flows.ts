@@ -102,6 +102,9 @@ export class Flows {
   private tick() {
     const now = Date.now()
     for (const f of this.store.flows) {
+      // A computer that slept through a run by more than a few hours skips it, as a start does:
+      // last night's flow should not start in the middle of today.
+      if (f.on && f.next && f.next < now - MISSED) { f.next = nextRun(f, now); this.save(); continue }
       if (f.on && f.next && f.next <= now && !this.running.has(f.id)) this.run(f.id)
     }
   }
@@ -139,9 +142,11 @@ export class Flows {
         this.hooks.emit('flows', { flows: this.store.flows, running: this.states() })
         const text = (step.to && f.crew.includes(step.to) ? `@${step.to} ` : '') + fill(step.text, vars)
         const from = this.store.events(meta.id).length
-        await this.engine.send(meta.id, text, f.access, { from: 'flow' })
+        // The hour covers the step itself: send only settles once the whole turn has.
+        const sent = Promise.resolve(this.engine.send(meta.id, text, f.access, { from: 'flow' })).then(() => this.engine.idle(meta.id)).then(() => true as const)
+        sent.catch(() => {})
         let timer: NodeJS.Timeout | undefined
-        const settled = await Promise.race([this.engine.idle(meta.id).then(() => true), new Promise<false>((ok) => { timer = setTimeout(ok, STEP, false) })])
+        const settled = await Promise.race([sent, new Promise<false>((ok) => { timer = setTimeout(ok, STEP, false) })])
         clearTimeout(timer)
         if (!settled) {
           this.engine.stop(meta.id, `Step ${i + 1} ran for over an hour without finishing, so the flow stopped it.`)

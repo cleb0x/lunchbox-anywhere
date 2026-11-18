@@ -182,6 +182,8 @@ export type LiveRun = {
   edit?: boolean
   verdict?: Verdict
   out: string
+  // What the command printed, before colour codes and redrawn lines were taken out.
+  raw?: string
   started: number
 }
 
