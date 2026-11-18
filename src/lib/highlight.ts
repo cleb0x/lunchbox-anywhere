@@ -77,10 +77,10 @@ name('diff patch', 'diff')
 // Past this, colouring every frame of a streaming reply would cost more than it gives.
 const MAX = 40000
 
-export const knows = (lang: string) => lang.toLowerCase() in LANGS
+export const knows = (lang: string) => Object.hasOwn(LANGS, lang.toLowerCase())
 
 export function highlight(code: string, lang = ''): Tok[] {
-  const l = LANGS[lang.toLowerCase()]
+  const l = Object.hasOwn(LANGS, lang.toLowerCase()) ? LANGS[lang.toLowerCase()] : undefined
   if (!l || code.length > MAX) return [[code]]
   const out: Tok[] = []
   const push = (text: string, role?: Role) => {

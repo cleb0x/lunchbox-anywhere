@@ -63,6 +63,11 @@ const expect = (access, cmd, want) => {
 expect('plan', 'git diff', 'allow'); expect('plan', 'npm test', 'deny'); expect('plan', 'rm -rf dist', 'deny')
 expect('ask', 'ls', 'allow'); expect('ask', 'npm test', 'ask')
 expect('workspace', 'npm test', 'allow'); expect('workspace', 'npm install', 'ask'); expect('workspace', 'touch /tmp/x', 'ask')
+// From the 0.1.7 review: an unclosed quote in a heredoc must not hide the lines after it,
+// and a preload or a flag is not code on the command line.
+expect('plan', "cat <<EOF\nit's\nEOF\nrm x", 'deny')
+expect('workspace', 'node -r dotenv/config app.js', 'allow'); expect('workspace', 'python -E x.py', 'allow')
+expect('workspace', 'node -e "fetch(1)"', 'ask'); expect('workspace', 'python3 -c "print(1)"', 'ask'); expect('workspace', 'ruby -r json -e "p 1"', 'ask')
 expect('full', 'npm install', 'allow'); expect('full', 'touch /tmp/x', 'allow'); expect('full', 'rm -rf dist', 'allow'); expect('full', 'rm -rf ~', 'deny')
 expect('plan', 'git branch -D feature', 'deny'); expect('ask', './anything.sh -v', 'ask'); expect('workspace', 'echo x > ./../../.zshrc', 'ask')
 expect('workspace', 'node -e "1"', 'ask'); expect('workspace', 'bash -c "npm test"', 'allow'); expect('workspace', 'sed "1e id" x', 'ask'); expect('ask', 'sed -n 1p x', 'allow'); expect('plan', 'echo x >&cat', 'deny')

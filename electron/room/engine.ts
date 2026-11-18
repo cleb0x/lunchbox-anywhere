@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { addressed } from '../../shared/address'
 import { sentence } from '../../shared/steps'
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import type { Access, Act, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
@@ -974,7 +974,9 @@ export class Engine {
       const root = meta.workspace
       const memory = this.allowed.get(root) ?? new Set<string>()
       this.allowed.set(root, memory)
-      const v = decide(access, command, cwd || root, root, memory)
+      // Claude reports its real folder, so a workspace reached through a link is resolved too.
+      const real = (p: string) => { try { return realpathSync(p) } catch { return p } }
+      const v = decide(access, command, real(cwd || root), real(root), memory)
       if (v.decision === 'allow') return null
       if (v.decision === 'deny') return `Lunchbox did not run this: it ${v.reason}.`
       const a = await this.permit(room, who, command, v)

@@ -47,6 +47,8 @@ export type Reach = { id: string; ask: string }
 // The agent a command would start with a prompt, and the prompt when it is there to read.
 export function reach(command: string, bins: Map<string, string>, depth = 0): Reach | null {
   if (depth > 3) return null
+  // A heredoc's lines are text, like a commit message that starts with "Claude Code now ...".
+  command = command.replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2(?=\s|$|\))/g, ' ')
   // What runs inside $( ) or backticks is a command of its own.
   for (const m of command.matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)) {
     const r = reach(m[1] ?? m[2], bins, depth + 1)
@@ -60,12 +62,20 @@ export function reach(command: string, bins: Map<string, string>, depth = 0): Re
       if (/^[A-Za-z_]\w*=/.test(head)) { w = w.slice(1); continue }
       const n = name(head)
       if (WRAPPERS.has(n)) {
+        // command -v claude only asks where claude is.
+        if ((n === 'command' || n === 'builtin') && w.slice(1).some((x) => /^-[a-zA-Z]*[vVp]/.test(x))) { w = []; break }
         w = w.slice(1)
         while (w[0] && (w[0].startsWith('-') || (/timeout$/.test(n) && /^\d/.test(w[0])) || (n === 'env' && /^\w+=/.test(w[0])))) w = w.slice(1)
         continue
       }
-      // xargs takes its own flags and values first, so the agent is looked for among the rest.
-      if (n === 'xargs') { const at = w.findIndex((x, i) => i > 0 && bins.has(name(x))); w = at > 0 ? w.slice(at) : []; continue }
+      // xargs runs the first word after its own flags; a word later on is an argument to it.
+      if (n === 'xargs') {
+        let i = 1
+        // Braces are blanked before this, so the {} after -I may be gone and the agent comes next.
+        while (w[i]?.startsWith('-')) i += /^-[IinPLsdEa]$|^--(replace|max-args|max-procs|max-lines|delimiter|arg-file)$/.test(w[i]) && w[i + 1] !== undefined && !bins.has(name(w[i + 1])) ? 2 : 1
+        w = w.slice(i)
+        continue
+      }
       break
     }
     if (!w.length) continue

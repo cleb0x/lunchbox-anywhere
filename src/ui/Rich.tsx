@@ -7,8 +7,8 @@ import { highlight } from '../lib/highlight'
 import { IconCheck, IconCopy } from './icons'
 
 // Code, bold, emphasis, web links, links to files on disk (shown as the file name) and bare URLs.
-// Emphasis needs a word on both sides of its stars, so 2 * 3 * 4 and *.ts stay as they are.
-const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|(?<![\w*\\])\*(?=\S)[^*\n]+?(?<=\S)\*(?![\w*])|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\[[^\]\n]+\]\((?!https?:)[^)\n]+\)|https?:\/\/[^\s)<>]+[^\s).,;:!?<>'"])/g
+// Emphasis needs a word on both sides of its stars, so 2 * 3 * 4, *.ts and src/*.ts stay as they are.
+const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|(?<![\w*\\/.])\*(?=\S)[^*\n]+?(?<=\S)\*(?![\w*]|\.\w)|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\[[^\]\n]+\]\((?!https?:)[^)\n]+\)|https?:\/\/[^\s)<>]+[^\s).,;:!?<>'"])/g
 
 function inline(text: string): ReactNode[] {
   return text.split(INLINE).map((part, i) => {

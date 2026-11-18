@@ -124,6 +124,9 @@ export function segments(command: string) {
     cur += c
   }
   out.push(cur)
+  // A quote that never closes (an apostrophe in a heredoc, say) would hide every line after it
+  // inside one segment, so each line is judged on its own instead.
+  if (quote) return plain.split(/[;|&\r\n]/).map((s) => s.trim()).filter(Boolean)
   return out.map((s) => s.trim()).filter(Boolean)
 }
 
@@ -154,7 +157,7 @@ function sed(segment: string): 'read' | 'edit' | 'unknown' {
 
 // Code written on the command line for an interpreter: node -e, python -c, perl -e and the like.
 // It is a program of its own, which the words around it say nothing about.
-const INLINE = /^(?:\S*[\\/])?(node|nodejs|deno|bun|python[\d.]*|ruby|perl|php|osascript|pwsh|powershell)(?:\.exe)?\s+(?:-\S+\s+)*(-[a-zA-Z]*[ecrpEC]\b|--eval|--print|--command|eval\s)/i
+const INLINE = /^(?:\S*[\\/])?(?:(?:node|nodejs|bun)(?:\.exe)?\s+(?:-\S+\s+)*(?:-[a-zA-Z]*[ep]\b|--eval|--print)|deno\s+(?:-\S+\s+)*eval\s|python[\d.]*(?:\.exe)?\s+(?:-\S+\s+)*-[a-zA-Z]*c\b|(?:ruby|php)(?:\.exe)?\s+(?:-\S+\s+)*-[a-zA-Z]*[er]\b|perl(?:\.exe)?\s+(?:-\S+\s+)*-[a-zA-Z]*[eE]\b|osascript\s+(?:-\S+\s+)*-e\b|(?:pwsh|powershell)(?:\.exe)?\s+(?:-\S+\s+)*(?:-c\b|-command\b|-e\b|-encodedcommand\b))/i
 // A shell given its commands as one word: sh -c '...'. What is inside is judged as it would be
 // on its own.
 const SHELL_C = /^(?:\S*[\\/])?(?:ba|z|da|k|fi)?sh\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\b/

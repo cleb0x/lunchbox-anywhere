@@ -1754,6 +1754,35 @@ test('numbers on screen: the unit is chosen after rounding', async () => {
   assert.equal(money(0), '$0')
 })
 
+test('reach: text and lookups that only name an agent are left alone', async () => {
+  const { reach, binsOf } = await import('../electron/room/reach')
+  const agent = (id: string) => ({ id, name: id, short: id, maker: '', via: 'cli', bin: id, found: true, ready: true, tools: true, good: '', alphabet: '', mark: id }) as never
+  const bins = binsOf([agent('claude'), agent('codex'), agent('grok')])
+  for (const command of [
+    "git commit -m \"$(cat <<'EOF'\nClaude Code now picks the session up\n\nCodex reads it too\nEOF\n)\"",
+    'cat > notes.md <<EOF\ngrok -p "hi" is how you would ask it\nEOF',
+    'git ls-files | xargs grep -l codex',
+    'xargs -n 1 grep claude < files.txt',
+    'command -v claude',
+  ]) assert.equal(reach(command, bins), null, command)
+  assert.equal(reach('ls | xargs -I {} grok -p "look at {}"', bins)?.id, 'grok', 'xargs still runs its first word')
+  assert.equal(reach('cat <<EOF\nhi\nEOF\ncodex exec "go"', bins)?.id, 'codex', 'a command after the heredoc still counts')
+})
+
+test('git reads keep the repository\'s diff tools off without breaking git diff', async () => {
+  const { plainGit } = await import('../electron/shell')
+  assert.equal(plainGit('git diff'), 'git diff --no-ext-diff --no-textconv')
+  assert.equal(plainGit('git -c color.ui=never log -p -3'), 'git -c color.ui=never log --no-ext-diff --no-textconv -p -3')
+  assert.equal(plainGit('git status && git show HEAD'), 'git status && git show --no-ext-diff --no-textconv HEAD')
+})
+
+test('highlight: a fence named like an object property is plain text', async () => {
+  const { highlight, knows } = await import('../src/lib/highlight')
+  assert.equal(knows('constructor'), false)
+  assert.deepEqual(highlight('x', 'constructor'), [['x']])
+  assert.deepEqual(highlight('x', '__proto__'), [['x']])
+})
+
 test('reach: a command that starts another agent with a prompt is found, however it is dressed', async () => {
   const { reach, binsOf, instead, REFUSED } = await import('../electron/room/reach')
   const agent = (id: string, bin: string) => ({ id, name: id, short: id[0].toUpperCase() + id.slice(1), maker: '', via: 'cli', bin, found: true, ready: true, tools: true, good: '', alphabet: '', mark: id }) as never
@@ -1988,7 +2017,8 @@ test('import: sessions on the computer are listed newest first, and a broken or 
   }
   const work = join(home, 'recipe-site')
   fs.mkdirSync(work)
-  const here = (name: string) => chatFixture(name).replaceAll('/Users/sam/recipe-site', work)
+  // The path goes into JSON, so a Windows path needs its backslashes escaped like the agents write them.
+  const here = (name: string) => chatFixture(name).replaceAll('/Users/sam/recipe-site', JSON.stringify(work).slice(1, -1))
   put(`.claude/projects/${claudeDir(work)}/0f3c9a52-7d1e-4b8a-9c11-5e2f6a7b8c9d.jsonl`, here('claude-session.jsonl'), 1_800_000_300)
   put('.claude/projects/-gone/aaaaaaaa-0000-4000-8000-000000000000.jsonl', '{"type":"session-owner"}\n{broken\n', 1_800_000_900)
   put('.codex/sessions/2026/11/02/rollout-2026-11-02T09-14-03-6b1d2c3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e.jsonl', chatFixture('codex-rollout.jsonl'), 1_800_000_200)

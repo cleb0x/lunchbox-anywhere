@@ -195,7 +195,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
           const el = e.currentTarget
           const recall = (to: number) => { e.preventDefault(); setPast(to); setText(to < 0 ? '' : sent[to]); setCaret(0); requestAnimationFrame(() => el.setSelectionRange(0, 0)) }
           if (e.key === 'ArrowUp' && !e.shiftKey && (past >= 0 ? el.selectionStart === 0 : !text) && past + 1 < sent.length) return recall(past + 1)
-          if (e.key === 'ArrowDown' && !e.shiftKey && past >= 0 && (el.selectionStart === 0 || el.selectionEnd === text.length)) return recall(past - 1)
+          if (e.key === 'ArrowDown' && !e.shiftKey && past >= 0 && el.selectionEnd === text.length) return recall(past - 1)
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
         }} />
       <div className="cbar">
