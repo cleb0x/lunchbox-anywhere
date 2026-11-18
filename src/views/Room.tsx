@@ -315,7 +315,7 @@ function RoomMenu({ id, meta, events, canReplay, replay, open, say }: { id: stri
 }
 
 // The saved event a live row turns into when its turn ends.
-const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'say' ? e.who === t.who : e.kind === 'hands' ? e.to === t.who : e.kind === 'image' && !!t.image && e.by === t.who)
+const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'say' ? e.who === t.who : e.kind === 'hands' ? e.to === t.who && e.via !== 'cli' : e.kind === 'image' && !!t.image && e.by === t.who)
 
 // The transcript is a timeline. Agent turns hang off a thin thread in the gutter so a chain of
 // handoffs reads as one piece of work; your messages sit on the right and break the thread.
@@ -714,17 +714,22 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const tool = e?.via === 'tool'
+  // One agent started the other from its own command line. It ran outside the room, so all the
+  // room has is what the command printed.
+  const cli = e?.via === 'cli'
   const work = useLeaving(t)
   return (
     <Ev id={e?.id} mark={<Mark seed={to.mark} size={16} active={!!t} />} className={`hands${t ? ' live' : ''}`}>
       <div className="handhead">
-        <b className="name">{to.short}</b><span>{t ? 'is answering' : tool ? 'lent a hand to' : 'answered'}</span><Mark seed={from.mark} size={12} /><span>{from.short}</span>
+        <b className="name">{to.short}</b><span>{t ? 'is answering' : cli ? 'was run by' : tool ? 'lent a hand to' : 'answered'}</span><Mark seed={from.mark} size={12} /><span>{from.short}</span>
         {tool && <span className="tag" title={`${from.short} called ${to.short} through the room's tools and kept working with the answer`}>while working</span>}
+        {cli && <span className="tag" title={`${from.short} started ${to.short} from its own command line. It ran outside the room, without the room's memory or its access mode. This is what the command printed.`}>outside the room</span>}
         {e && <span className="when">{clock(e.at)}</span>}
       </div>
       <div className="exchange">
         <p className="asked">{t ? t.ask : e!.ask}</p>
-        {raw.trim() ? <div className="got"><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></div> : e && <div className="got"><span className="err">{e.error ?? 'No answer'}</span></div>}
+        {raw.trim() ? <div className="got"><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></div>
+          : e && <div className="got"><span className={cli && !e.error ? 'err soft' : 'err'}>{e.error ?? (cli ? 'What it printed went somewhere else, so there is nothing to show here.' : 'No answer')}</span></div>}
         <Acts acts={(t ?? e)?.acts ?? []} live={!!t} />
         {work && <Working t={work} a={to} fallback={doing} leaving={!t} />}
       </div>
@@ -1341,7 +1346,7 @@ function Receipt({ meta, events, agents, kept }: { meta: RoomMeta; events: Event
   const rows = useMemo(() => {
     const by = new Map<string, { cost: number; tokens: number; turns: number; ms: number }>()
     for (const e of events) {
-      if (e.kind !== 'say' && e.kind !== 'hands') continue
+      if ((e.kind !== 'say' && e.kind !== 'hands') || (e.kind === 'hands' && e.via === 'cli')) continue
       const who = e.kind === 'say' ? e.who : e.to
       const r = by.get(who) ?? { cost: 0, tokens: 0, turns: 0, ms: 0 }
       r.cost += e.usage?.cost ?? 0
