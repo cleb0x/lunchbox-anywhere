@@ -129,7 +129,8 @@ export class Browser {
       if (!web(url)) return { action: 'deny' }
       // A sized popup is a sign in window (Google, Apple, Microsoft). It has to stay a real window
       // with its opener, or it cannot hand the login back to the page that asked for it.
-      if (disposition === 'new-window') return { action: 'allow', overrideBrowserWindowOptions: { parent: win, autoHideMenuBar: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:browser' } } }
+      // Only the person's own page: an agent has no login to hand back, and its pages stay in tabs.
+      if (disposition === 'new-window' && who === YOU) return { action: 'allow', overrideBrowserWindowOptions: { parent: win, autoHideMenuBar: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:browser' } } }
       wc.loadURL(url)
       return { action: 'deny' }
     })
