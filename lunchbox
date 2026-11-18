@@ -116,7 +116,7 @@ else
   if [ -n "${CF:-}" ] && [ -x "${CF:-}" ]; then
     echo "The tunnel did not start. What cloudflared said:"
     tail -n 15 "$LOG" | sed 's/^/    /'
-  else
+  elif [ "${LUNCHBOX_TUNNEL:-1}" = "1" ]; then
     echo "The tunnel is not available (cloudflared could not be downloaded)."
   fi
   echo "Use the link below instead for now."
