@@ -17,7 +17,8 @@ import { createServer } from 'node:http'
 import { pull, suggest } from '../electron/local'
 import type { Pull } from '../shared/types'
 import { asks, foldChecklists, plan, plansBefore, sincePlan } from '../shared/plan'
-import { canReplace, parseFeed, pick } from '../electron/macfeed'
+import { canReplace, pick } from '../electron/macfeed'
+import { newer, onList, sha512, signedBytes, signedRelease, type Release } from '../electron/signed'
 import { classify, rating, route, score } from '../shared/route'
 import { fill, nextRun } from '../shared/flow'
 import { merge, section, strip } from '../electron/room/project'
@@ -726,26 +727,81 @@ test('cmdLine: arguments reach a .cmd shim intact through both of cmd.exe\'s pas
   assert.equal(cmdLine('C:\\Program Files\\nodejs\\npx.cmd', []), 'C:\\Program^ Files\\nodejs\\npx.cmd')
 })
 
-test('mac update: the feed is read and the zip for this chip is picked', () => {
-  const yml = `version: 0.1.2
-files:
-  - url: Lunchbox-0.1.2-mac-x64.zip
-    sha512: aaa==
-    size: 121715767
-  - url: Lunchbox-0.1.2-mac-arm64.zip
-    sha512: bbb==
-    size: 117619996
-  - url: Lunchbox-0.1.2-mac-arm64.dmg
-    sha512: ccc==
-    size: 121192433
-path: Lunchbox-0.1.2-mac-x64.zip
-releaseDate: '2026-11-11T10:00:00.000Z'`
-  const feed = parseFeed(yml)!
-  assert.equal(feed.version, '0.1.2')
-  assert.equal(feed.files.length, 3)
-  assert.deepEqual(pick(feed, 'arm64'), { url: 'Lunchbox-0.1.2-mac-arm64.zip', sha512: 'bbb==', size: 117619996 })
-  assert.equal(pick(feed, 'x64')!.url, 'Lunchbox-0.1.2-mac-x64.zip')
-  assert.equal(parseFeed('nothing here'), null)
+test('mac update: the zip for this chip is picked from the signed file list', () => {
+  const files = [
+    { name: 'Lunchbox-0.1.2-mac-x64.zip', sha512: 'aaa==', size: 121715767 },
+    { name: 'Lunchbox-0.1.2-mac-arm64.zip', sha512: 'bbb==', size: 117619996 },
+    { name: 'Lunchbox-0.1.2-mac-arm64.dmg', sha512: 'ccc==', size: 121192433 },
+  ]
+  assert.deepEqual(pick(files, 'arm64'), files[1])
+  assert.equal(pick(files, 'x64')!.name, 'Lunchbox-0.1.2-mac-x64.zip')
+  assert.equal(pick(files.slice(2), 'arm64'), undefined)
+})
+
+// A key made for the test and thrown away with it. The real one is never read here.
+function signer() {
+  const { generateKeyPairSync, sign } = require('node:crypto') as typeof import('node:crypto')
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  const seal = (r: Release) => ({ ...r, sig: sign(null, signedBytes(r), privateKey).toString('base64') })
+  return { publicKey, seal }
+}
+const RELEASE: Release = { version: '0.2.0', issued: 1_800_000_000_000, files: [{ name: 'Lunchbox-0.2.0-mac-arm64.zip', sha512: 'abc=', size: 10 }, { name: 'Lunchbox-Setup-0.2.0.exe', sha512: 'def=', size: 20 }] }
+const LATER = RELEASE.issued + 1000
+
+test('updates: a release signed with the trusted key is accepted, whole', () => {
+  const { publicKey, seal } = signer()
+  const got = signedRelease(JSON.parse(JSON.stringify(seal(RELEASE))), '0.1.6', publicKey, LATER)
+  assert.deepEqual(got, { release: RELEASE })
+})
+
+test('updates: no signature, a wrong key or a changed list means no install', () => {
+  const { publicKey, seal } = signer()
+  const other = signer()
+  const good = seal(RELEASE)
+  const refused = (body: unknown) => 'refused' in signedRelease(body, '0.1.6', publicKey, LATER)
+  assert.ok(refused(null))
+  assert.ok(refused({ version: '0.2.0', issued: RELEASE.issued, files: RELEASE.files }), 'no signature')
+  assert.ok(refused({ ...good, sig: 'AAAA' }), 'a signature that is not one')
+  assert.ok(refused(other.seal(RELEASE)), 'signed by somebody else')
+  assert.ok(refused({ ...good, version: '0.3.0' }), 'another version under the same signature')
+  assert.ok(refused({ ...good, files: [{ ...RELEASE.files[0], sha512: 'zzz=' }, RELEASE.files[1]] }), 'a swapped hash')
+  assert.ok(refused({ ...good, files: [...RELEASE.files, { name: 'extra.exe', sha512: 'q=', size: 1 }] }), 'a file added to the list')
+  assert.ok(refused({ ...good, files: [{ ...RELEASE.files[0], name: '../../evil.zip' }, RELEASE.files[1]] }), 'a name that is a path')
+  // The real key did not sign this, so the app as shipped refuses it.
+  assert.ok('refused' in signedRelease(good, '0.1.6'))
+})
+
+test('updates: a signed release older than the running version is refused', () => {
+  const { publicKey, seal } = signer()
+  const good = seal(RELEASE)
+  assert.match((signedRelease(good, '0.2.1', publicKey, LATER) as { refused: string }).refused, /older/)
+  assert.match((signedRelease(good, '1.0.0', publicKey, LATER) as { refused: string }).refused, /older/)
+  // The running version itself is fine: there is simply nothing to install.
+  assert.ok('release' in signedRelease(good, '0.2.0', publicKey, LATER))
+  assert.equal(newer('0.2.0', '0.2.0'), false)
+  assert.ok('refused' in signedRelease(seal({ ...RELEASE, issued: LATER + 2 * 3600e3 }), '0.1.6', publicKey, LATER), 'dated in the future')
+})
+
+test('updates: a signed message feed cannot stand in for a signed release', () => {
+  const { generateKeyPairSync, sign } = require('node:crypto') as typeof import('node:crypto')
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  const issued = RELEASE.issued
+  const feed = { notices: [], issued }
+  const sig = sign(null, Buffer.from(JSON.stringify(feed)), privateKey).toString('base64')
+  assert.ok('refused' in signedRelease({ version: '0.2.0', issued, files: RELEASE.files, notices: [], sig }, '0.1.6', publicKey, LATER))
+})
+
+test('updates: a downloaded installer counts only when its hash is on the signed list', async () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const dir = mkdtempSync(join(tmpdir(), 'lunchbox-signed-'))
+  const file = join(dir, 'Lunchbox-Setup-0.2.0.exe')
+  fs.writeFileSync(file, 'the installer')
+  const release: Release = { ...RELEASE, files: [{ name: 'Lunchbox-Setup-0.2.0.exe', sha512: await sha512(file), size: 13 }] }
+  assert.equal(await onList(release, file), true)
+  fs.writeFileSync(file, 'the installer, with something added')
+  assert.equal(await onList(release, file), false)
+  assert.equal(await onList(release, join(dir, 'missing.exe')), false)
+  fs.rmSync(dir, { recursive: true, force: true })
 })
 
 test('mac update: an app on the disk image or moved by Gatekeeper never tries to replace itself', () => {

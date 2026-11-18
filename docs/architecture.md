@@ -6,7 +6,8 @@ Lunchbox is an Electron app. The main process runs the agents and holds the rule
 
 ```
 electron/
-  main.ts           window, IPC, keychain
+  main.ts           windows, IPC, keychain
+  signed.ts         the key the app trusts, and the check every update has to pass
   store.ts          rooms as JSONL logs that only grow, settings, the usage ledger
   system.ts         PATH, shells and processes on each platform
   policy.ts         what each access mode lets a command do
@@ -43,6 +44,12 @@ Three things lower what a turn costs. Each one is counted on its own turn in the
 - **Not sent twice.** A resumed session gets only the memory that changed, and a crewmate gets a briefing instead of the conversation.
 
 `npm run bench` runs the same tasks in plain Claude Code and in a room and prints what each cost. It uses real agents and real usage.
+
+## Updates
+
+Installers are built by `release.yml` and published to `noah-thing/lunchbox-releases`. That repository is only where the files lie. What the app trusts is `latest-signed.json` on the release: the version and the SHA-512 of every installer, signed with an Ed25519 key that exists only on Noah's computer (`scripts/sign-release.mjs`). The public half is in `electron/signed.ts`.
+
+Every check starts by fetching that file. A release without it, with a signature that does not verify, or with a version older than the one running is left alone, and the reason goes to the log. On a Mac the zip is hashed against the signed list before it is unpacked. On Windows and Linux electron-updater does the download, and the file it fetched is hashed against the signed list before the app will install it, now or on quit. Copies up to 0.1.6 were built before this and install whatever the repository offers.
 
 ## Data
 

@@ -342,5 +342,7 @@ export type UpdateState =
   | { state: 'ready'; version: string }
   | { state: 'manual'; version: string; url: string }
   | { state: 'error'; error: string }
+  // A release was found but not installed, because its signature was missing or wrong.
+  | { state: 'refused'; error: string }
 
 export type Report = { kind: 'bug' | 'idea' | 'question'; text: string; contact?: string; context?: string; diagnostics?: string }

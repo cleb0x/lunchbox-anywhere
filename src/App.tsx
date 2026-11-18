@@ -344,7 +344,7 @@ export function App() {
         </Guard>
       </main>
 
-      <Notices />
+      <Notices say={say} />
       {ctx && <RoomContext key={ctx.room.id + ctx.x + ctx.y} {...ctx} close={() => setCtx(null)} say={say} />}
       {report && <ReportSheet open={report} close={() => setReport(null)} say={say} />}
       {palette && <Palette commands={commands} close={() => openPalette(false)} openHit={openHit} anchor={searchButton} />}
