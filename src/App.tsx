@@ -26,7 +26,7 @@ import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, 
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
 import { loadTune, saveTune, tuned, type Tune } from './lib/tune'
 import { shift } from './lib/fit'
-import { ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
+import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
 
 export type View =
   | { name: 'room'; id: string; focus?: string }
@@ -34,6 +34,7 @@ export type View =
   | { name: 'agents' } | { name: 'free' } | { name: 'settings'; edit?: string } | { name: 'pool' } | { name: 'savings' } | { name: 'library' } | { name: 'browser' } | { name: 'waiting' }
   | { name: 'flows'; edit?: string; template?: string }
 export type Look = 'lunchbox' | 'neyra'
+const VIEWS: View['name'][] = ['room', 'new', 'agents', 'free', 'settings', 'pool', 'savings', 'library', 'browser', 'waiting', 'flows']
 
 const saved = <T,>(key: string, fallback: T): T => {
   try { const v = localStorage.getItem('lb.' + key); return v ? JSON.parse(v) : fallback } catch { return fallback }
@@ -48,6 +49,8 @@ export function flow(change: () => void, animate = true) {
   document.startViewTransition(() => flushSync(change))
 }
 
+let revealing: ViewTransition | null = null
+
 // The new theme grows out of the point that was clicked, as one circle over the old one.
 function reveal(change: () => void, at?: { x: number; y: number }) {
   if (calm()) return change()
@@ -57,11 +60,14 @@ function reveal(change: () => void, at?: { x: number; y: number }) {
   const root = document.documentElement
   root.classList.add('revealing')
   const t = document.startViewTransition(() => flushSync(change))
+  revealing = t
+  // A transition that is skipped, by a second click or a hidden window, rejects ready.
   t.ready.then(() => root.animate(
     { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
     { duration: 620, easing: 'cubic-bezier(.65,0,.25,1)', pseudoElement: '::view-transition-new(root)' },
-  ))
-  t.finished.finally(() => root.classList.remove('revealing'))
+  ), () => {})
+  // Only the newest reveal takes the class off, or a quick second switch would crossfade.
+  t.finished.catch(() => {}).finally(() => { if (revealing === t) root.classList.remove('revealing') })
 }
 
 // A toast that reports a failure keeps its Report this button and stays a little longer.
@@ -70,22 +76,22 @@ const failure = (t: string) => /\b(fail(ed|s)?|error|could ?n[o']t|cannot|can't|
 export function App() {
   // 'theme' has always held dark or light, so it stays the mode; the theme is saved beside it.
   const [mode, setModeState] = useState<Mode>(saved<string>('theme', 'dark') === 'light' ? 'light' : 'dark')
-  const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox')).id)
-  const [ascii, setAscii] = useState<AsciiId>(() => asciiOf(saved('ascii', 'theme')).id)
   // Themes a person made, and the one being made right now, shown on the app before it is saved.
   const [custom, setCustom] = useState<Theme[]>(loadCustom)
+  const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox'), custom).id)
+  const [ascii, setAscii] = useState<AsciiId>(() => asciiOf(saved('ascii', 'theme')).id)
   const [preview, setPreview] = useState<Theme | null>(null)
   // Single colours changed on top of the theme, per mode, from Fine tune in Settings.
   const [tune, setTuneState] = useState<Tune>(loadTune)
   const setTune = (t: Tune) => { setTuneState(t); saveTune(t) }
-  const [look, setLookState] = useState<Look>(() => (new URLSearchParams(location.search).get('look') as Look | null) ?? saved('look', 'lunchbox'))
-  const [ready, setReady] = useState<boolean>(saved('ready', false))
+  const [look, setLookState] = useState<Look>(() => ((new URLSearchParams(location.search).get('look') ?? saved('look', 'lunchbox')) === 'neyra' ? 'neyra' : 'lunchbox'))
+  const [ready, setReady] = useState<boolean>(() => saved<unknown>('ready', false) === true)
   const [arriving, setArriving] = useState(false)
   // Every launch starts at home, except right after an update, which reopens the page it left.
   const [view, setView] = useState<View>(() => {
     const back = saved<View | null>('resume', null)
     try { localStorage.removeItem('lb.resume') } catch {}
-    return back ?? { name: 'new' }
+    return back && typeof back === 'object' && VIEWS.includes(back.name) && (back.name !== 'room' || typeof back.id === 'string') ? back : { name: 'new' }
   })
   const [palette, setPalette] = useState(false)
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null)
@@ -106,8 +112,8 @@ export function App() {
     addEventListener('lb:report', open)
     return () => removeEventListener('lb:report', open)
   }, [])
-  const [access, setAccessState] = useState<Access>(saved('access', 'workspace'))
-  const [workspace, setWorkspaceState] = useState<string>(saved('workspace', ''))
+  const [access, setAccessState] = useState<Access>(() => { const a = saved<Access>('access', 'workspace'); return ACCESS.some((x) => x.id === a) ? a : 'workspace' })
+  const [workspace, setWorkspaceState] = useState<string>(() => { const w = saved<unknown>('workspace', ''); return typeof w === 'string' ? w : '' })
   const loaded = useApp((s) => s.loaded)
   const all = useApp((s) => s.rooms)
   // Pinned rooms lead the list; archived ones leave it and wait under their own heading.
