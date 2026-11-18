@@ -55,17 +55,56 @@ fi
 
 # Codex, Gemini CLI and the others are picked up too when you install them yourself.
 
-if [ -n "${WEB_HOST:-}" ]; then
-  link="https://$PORT-$WEB_HOST"
-else
-  link="http://localhost:$PORT"
+# A secret key for this computer, kept between runs. Links without it cannot reach Lunchbox.
+KEYFILE="$HOME/.config/Lunchbox/server-key"
+mkdir -p "$(dirname "$KEYFILE")"
+[ -s "$KEYFILE" ] || (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$KEYFILE")
+KEY="$(cat "$KEYFILE")"
+
+# A free Cloudflare quick tunnel, so the Lunchbox website can reach this computer. No account.
+TUNNEL=""
+if [ "${LUNCHBOX_TUNNEL:-1}" = "1" ]; then
+  CF="$APP/cloudflared"
+  if [ ! -x "$CF" ]; then
+    case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) arch="" ;; esac
+    if [ "$(uname -s)" = "Linux" ] && [ -n "$arch" ]; then
+      curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch" -o "$CF.part" && chmod +x "$CF.part" && mv "$CF.part" "$CF" || true
+    elif command -v cloudflared >/dev/null; then CF="$(command -v cloudflared)"; fi
+  fi
 fi
-bold "Lunchbox is starting. Open it here:"
-printf '\n    \033[4m%s\033[0m\n\n' "$link"
-[ -n "${WEB_HOST:-}" ] && echo "(Or use Web Preview above the terminal: Preview on port $PORT. Only your Google account can open it.)"
-echo "Keep this tab open while you use Lunchbox. Press Ctrl+C to stop it."
-echo
-# Cloud Shell reaches the page through its own proxy, which only you can use; elsewhere it stays
-# on this computer alone.
+
+SITE="${LUNCHBOX_SITE:-https://${REPO%%/*}.github.io/${REPO#*/}/}"
 host="127.0.0.1"; [ -n "${WEB_HOST:-}" ] && host="0.0.0.0"
-exec env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" node "$APP/main.cjs"
+LOG="$(mktemp)"
+cleanup() { [ -n "${TPID:-}" ] && kill "$TPID" 2>/dev/null; [ -n "${SPID:-}" ] && kill "$SPID" 2>/dev/null; rm -f "$LOG"; }
+trap cleanup EXIT INT TERM
+
+env PORT="$PORT" LUNCHBOX_HOST="${LUNCHBOX_HOST:-$host}" LUNCHBOX_KEY="$KEY" LUNCHBOX_QUIET=1 node "$APP/main.cjs" &
+SPID=$!
+
+if [ -n "${CF:-}" ] && [ -x "$CF" ]; then
+  "$CF" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" >"$LOG" 2>&1 &
+  TPID=$!
+  for _ in $(seq 1 60); do
+    TUNNEL="$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG" | head -n1 || true)"
+    [ -n "$TUNNEL" ] && break
+    sleep 0.5
+  done
+fi
+
+if [ -n "$TUNNEL" ]; then
+  bold "Lunchbox is ready. Open this link:"
+  printf '\n    \033[4m%s#connect=%s&key=%s\033[0m\n\n' "$SITE" "$TUNNEL" "$KEY"
+  echo "(Ctrl+click it, or copy it into a new tab. Keep the link to yourself: it opens your Lunchbox.)"
+else
+  [ -n "${CF:-}" ] && echo "The tunnel did not start, so use the link below instead."
+  if [ -n "${WEB_HOST:-}" ]; then
+    bold "Lunchbox is ready. Open it with Web Preview (the eye icon above), port $PORT, then add #key=$KEY"
+    printf '\n    \033[4mhttps://%s-%s/#key=%s\033[0m\n\n' "$PORT" "$WEB_HOST" "$KEY"
+  else
+    bold "Lunchbox is ready. Open it here:"
+    printf '\n    \033[4mhttp://localhost:%s/#key=%s\033[0m\n\n' "$PORT" "$KEY"
+  fi
+fi
+echo "Keep this tab open while you use Lunchbox. Press Ctrl+C to stop it."
+wait "$SPID"

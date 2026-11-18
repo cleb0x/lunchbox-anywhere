@@ -1,47 +1,31 @@
-// Starts the browser version: the Node stand-ins first, then the file system, then the engine,
-// and only then the window from src/, which finds window.lb as it would in the desktop app.
-import './shims/process'
-import * as vfs from './vfs'
-import { exec } from './bash'
-
-// Node timers can be unref'd so they do not keep the process alive; a browser has nothing to keep
-// alive, so the call is accepted and does nothing.
-const proto = Number.prototype as unknown as Record<string, unknown>
-proto.unref ??= function (this: number) { return this }
-proto.ref ??= function (this: number) { return this }
-proto.hasRef ??= () => false
-
-// Anthropic answers a page directly only when it says it knows the key is in the page. The key is
-// the person's own and stays in their browser, which is the point.
-const nativeFetch = globalThis.fetch.bind(globalThis)
-globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  if (/^https:\/\/api\.anthropic\.com\//.test(url)) {
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-    headers.set('anthropic-dangerous-direct-browser-access', 'true')
-    return nativeFetch(input, { ...init, headers })
-  }
-  return nativeFetch(input, init)
+// The site runs Lunchbox one of two ways:
+// - on its own, in this tab (web/local.ts), with API keys, or
+// - connected to Lunchbox running in the person's Cloud Shell, with Claude Code and their
+//   subscription. ./lunchbox prints a link to this site with the address and a key after the #.
+//   The part after # never leaves the browser, so the key is not sent to GitHub.
+const hash = new URLSearchParams(location.hash.slice(1))
+if (hash.has('connect')) {
+  sessionStorage.setItem('lb-connect', JSON.stringify({ base: hash.get('connect'), key: hash.get('key') ?? '' }))
+  history.replaceState(null, '', location.pathname + location.search)
 }
+if (hash.has('local')) sessionStorage.removeItem('lb-connect')
 
-async function boot() {
-  // For tests and for looking into the file system from the developer tools.
-  ;(window as unknown as { __lunchbox: unknown }).__lunchbox = { vfs, exec }
-  await vfs.boot()
-  await vfs.restoreMounts().catch((e) => console.warn('Linked folders could not be restored', e))
-  const { serveFiles } = await import('./browser')
-  serveFiles()
-  const { startApp } = await import('./main')
-  const { ready } = await startApp()
-  ready.catch((e) => console.error(e))
-  await import('../src/main')
-  document.getElementById('lb-boot')?.remove()
-  const { lockedFolders } = await import('./locked')
-  lockedFolders()
-}
-
-boot().catch((e) => {
+const fail = (e: unknown) => {
   console.error(e)
   const el = document.getElementById('lb-boot')
   if (el) el.textContent = `Lunchbox could not start: ${(e as Error).message}`
-})
+}
+
+const saved = sessionStorage.getItem('lb-connect')
+if (saved) {
+  const { base, key } = JSON.parse(saved) as { base: string; key: string }
+  const boot = document.getElementById('lb-boot')
+  if (boot) boot.textContent = 'Connecting to your Lunchbox in Cloud Shell…'
+  import('../server/ui/bridge')
+    .then(({ startBridge }) => startBridge({ base, key }))
+    .then(() => import('../src/main'))
+    .then(() => document.getElementById('lb-boot')?.remove())
+    .catch(fail)
+} else {
+  import('./local').then(({ boot }) => boot()).catch(fail)
+}

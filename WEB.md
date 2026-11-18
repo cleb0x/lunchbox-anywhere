@@ -97,10 +97,12 @@ and the rest if you add them, `git`, `npm` and real commands.
 1. Click the button and choose **Trust** when Cloud Shell asks.
 2. Run `./lunchbox` in the terminal. The first time it installs Claude Code and asks you to sign
    in to Claude.
-3. Click the link it prints.
+3. Ctrl+click the link it prints. It opens this website, connected to your Cloud Shell.
 
 Each person runs their own copy in their own Cloud Shell, signed in with their own Claude account.
-Only they can open it, so there is no sign in to set up for Lunchbox itself. Next time, open
+`./lunchbox` opens a free Cloudflare quick tunnel (no account) so this website can reach it, and
+makes a secret key that only the printed link carries, after the `#`, which browsers never send to
+GitHub. Without the key nothing gets in, so there is no sign in to set up for Lunchbox itself. Next time, open
 shell.cloud.google.com and run `cd ~/lunchbox-anywhere && ./lunchbox`.
 
 The Lunchbox browser view is not in this mode yet; everything else is. `./lunchbox` runs on any

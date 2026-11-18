@@ -35,6 +35,9 @@ import { Limits } from '../electron/limits'
 const PORT = Number(process.env.PORT || process.env.LUNCHBOX_PORT || 8080)
 const HOST = process.env.LUNCHBOX_HOST || '0.0.0.0'
 const PASSWORD = process.env.LUNCHBOX_PASSWORD || ''
+// With a key, the engine can be reached from another address (the GitHub Pages site through a
+// tunnel) by whoever has the link with the key in it, and by nobody else.
+const KEY = process.env.LUNCHBOX_KEY || ''
 const UI = resolve(__dirname, 'ui')
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml' }
 
@@ -324,7 +327,14 @@ const secret = (() => {
 })()
 const token = createHmac('sha256', secret).update(`ok:${createHash('sha256').update(PASSWORD).digest('hex')}`).digest('hex')
 const cookie = (req: IncomingMessage) => Object.fromEntries((req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((p) => p.length === 2)) as Record<string, string>
-const signedIn = (req: IncomingMessage) => {
+const keyed = (req: IncomingMessage) => {
+  const k = new URL(req.url ?? '/', 'http://x').searchParams.get('key') ?? ''
+  return !!KEY && k.length === KEY.length && timingSafeEqual(Buffer.from(k), Buffer.from(KEY))
+}
+// The page itself is the same for everyone; what it reaches, the engine and uploads, is not.
+const signedIn = (req: IncomingMessage, open = false) => {
+  if (keyed(req)) return true
+  if (KEY && !open && !PASSWORD) return false
   if (!PASSWORD) return true
   const t = cookie(req).lb_session ?? ''
   return t.length === token.length && timingSafeEqual(Buffer.from(t), Buffer.from(token))
@@ -366,7 +376,18 @@ const server = createServer(async (req, res) => {
       res.writeHead(303, { location: './', 'set-cookie': `lb_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000${req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''}` }).end()
       return
     }
-    if (!signedIn(req)) { res.writeHead(200, { 'content-type': 'text/html' }).end(LOGIN(false)); return }
+    // The GitHub Pages site sends files from its own address.
+    const origin = req.headers.origin
+    if (origin && KEY) res.setHeader('access-control-allow-origin', origin)
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { 'access-control-allow-methods': 'POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '600' }).end()
+      return
+    }
+    const isUpload = url.pathname.endsWith('/upload')
+    if (!signedIn(req, !isUpload)) {
+      if (isUpload) { res.writeHead(403).end('Not allowed'); return }
+      res.writeHead(200, { 'content-type': 'text/html' }).end(LOGIN(false)); return
+    }
     // Files the page sends: attachments, imports. They land in ~/.lunchbox-uploads.
     if (url.pathname.endsWith('/upload') && req.method === 'POST') {
       const name = (url.searchParams.get('name') ?? 'file').normalize('NFKD').replace(/[^\w.-]+/g, '-').slice(-80) || 'file'
@@ -468,6 +489,7 @@ async function main() {
   server.listen(PORT, HOST, () => {
     console.log(`Lunchbox is running on port ${PORT}.`)
     const shell = process.env.WEB_HOST || process.env.CLOUD_SHELL
+    if (process.env.LUNCHBOX_QUIET) return
     console.log(shell ? 'Open the link above, or Web Preview on this port. Only your Google account can open it.'
       : HOST === '127.0.0.1' || HOST === 'localhost' ? `Open http://localhost:${PORT}`
       : `Open http://<this computer>:${PORT}${PASSWORD ? '' : '. No password is set, so anyone who can reach this port can use it: set LUNCHBOX_PASSWORD.'}`)

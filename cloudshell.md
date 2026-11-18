@@ -16,8 +16,9 @@ After that it starts straight away.
 
 ## Open it
 
-Click the link it prints. You can also use <walkthrough-web-preview-icon></walkthrough-web-preview-icon>
-**Web Preview → Preview on port 8080**.
+When it says **Lunchbox is ready**, hold **Ctrl** and click the link it prints (or copy it into a
+new tab). It opens the Lunchbox website, connected to the Lunchbox in your Cloud Shell. Keep the
+link to yourself: it has your key in it.
 
 ## Next time
 
