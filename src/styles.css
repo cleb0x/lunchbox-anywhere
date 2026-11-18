@@ -548,7 +548,15 @@ label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
 .rich code{font:12.5px/1 var(--mono);padding:1px 5px;border-radius:4px;background:var(--hover);box-shadow:inset 0 0 0 1px var(--line)}
 .rich a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px;transition:text-decoration-color 140ms var(--out)}
 .rich a:hover{text-decoration-color:var(--ink)}
-.codeblock{position:relative;padding:12px 14px;border-radius:8px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);font:12px/1.6 var(--mono);color:var(--dim);overflow-x:auto;white-space:pre}
+.codeblock{position:relative;padding:12px 14px;border-radius:8px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);font:12px/1.6 var(--mono);color:var(--code);overflow-x:auto;white-space:pre}
+/* Code in four roles at most. Without a theme they are steps of ink; a theme sets the three
+   colours from its accent and its ASCII ramp (src/lib/codecolors.ts), checked against the block. */
+:root{--code:color-mix(in oklab,var(--ink) 78%,transparent);--code-key:var(--ink);--code-str:color-mix(in oklab,var(--ink) 60%,transparent);--code-num:var(--ink);--code-com:color-mix(in oklab,var(--ink) 46%,transparent)}
+[data-theme=light]{--code-com:color-mix(in oklab,var(--ink) 58%,transparent)}
+.codeblock .k{color:var(--code-key)}
+.codeblock .s{color:var(--code-str)}
+.codeblock .n{color:var(--code-num)}
+.codeblock .c{color:var(--code-com)}
 .codewrap[data-lang]::after{content:attr(data-lang);position:absolute;top:1px;right:1px;padding:6px 9px 4px;border-radius:0 7px 0 6px;background:var(--well);font:10px var(--mono);color:var(--faint);pointer-events:none}
 .codewrap{position:relative;min-width:0}
 .codecopy{position:absolute;z-index:1;top:6px;right:6px;height:22px;padding:0 8px;border-radius:6px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line2);font-size:11px;color:var(--dim);opacity:0;transition:opacity 140ms var(--out),color 140ms var(--out)}

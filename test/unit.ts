@@ -1832,3 +1832,63 @@ test('drafts: what was typed and sent in a room outlives a restart, stays small 
   assert.deepEqual([...data.keys()].sort(), ['lb.draft.c', 'lb.sent.c', 'lb.sent.new'], 'rooms that are gone take theirs with them')
   delete (globalThis as any).localStorage
 })
+
+test('code colour: the text is never changed, whole or half written, and the roles are few', async () => {
+  const { highlight, knows } = await import('../src/lib/highlight')
+  const samples: [string, string][] = [
+    ['ts', 'export const answer = (q: string) => q.length > 40 ? "long // not a comment" : `short ${q}` // why\n/* block */ const n = 0x1f + 12.5e3\nlet a = null'],
+    ['json', '{\n  "name": "lunchbox",\n  "private": true,\n  "count": 12,\n  "tags": ["a", "b"]\n}'],
+    ['py', 'def parse(text: str) -> int:\n    """Docs\n    go on."""\n    # a comment\n    return None if not text else int(text, 16)'],
+    ['bash', 'for f in *.ts; do\n  echo "$f: ${#f}" # count\n  npm test -- --watch=false && exit $?\ndone'],
+    ['css', '@media (hover:hover){.a:hover{color:#fff;margin:0 12px;--x:calc(1px + 2%)}}\n/* note */\n.b::after{content:"x"}'],
+    ['html', '<!-- head -->\n<div class="row" data-x=\'1\'>Hello <b>there</b></div>'],
+    ['go', 'package main\nfunc main() { x := `raw\nstring`; if x != nil { return } }'],
+    ['rust', "fn main<'a>(x: &'a str) -> Option<u8> { let c = 'x'; None } // done"],
+    ['swift', 'guard let x = y else { return nil } // note\nlet s = "a \\(x)"'],
+    ['sql', "SELECT id, name FROM rooms WHERE crew LIKE '%grok%' -- note\nlimit 10"],
+    ['yaml', 'name: lunchbox # the app\nsteps:\n  - run: "npm test"\n    retries: 3\n    on: true'],
+    ['toml', '[package]\nname = "lunchbox"\nversion = 1'],
+    ['diff', 'diff --git a/x b/x\n@@ -1,2 +1,2 @@\n-old line\n+new line\n same'],
+    ['java', 'public static void main(String[] a) { int x = 5; /* c */ }'],
+  ]
+  for (const [lang, code] of samples) {
+    assert.ok(knows(lang), lang)
+    // Every prefix, as it arrives while streaming: the text comes back exactly and nothing throws.
+    for (let n = 0; n <= code.length; n++) {
+      const part = code.slice(0, n)
+      const toks = highlight(part, lang)
+      assert.equal(toks.map((t) => t[0]).join(''), part, `${lang} at ${n}`)
+      assert.ok(toks.every((t) => t[1] === undefined || 'ksnc'.includes(t[1])))
+    }
+  }
+  const of = (lang: string, code: string) => Object.fromEntries(highlight(code, lang).filter((t) => t[1]).map((t) => [t[0], t[1]]))
+  assert.deepEqual(of('ts', 'const a = "x" // y\nreturn 42'), { const: 'k', '"x"': 's', '// y': 'c', return: 'k', 42: 'n' })
+  assert.deepEqual(of('json', '{"a": "b", "n": 1, "t": true}'), { '"a"': 'k', '"b"': 's', '"n"': 'k', 1: 'n', '"t"': 'k', true: 'n' })
+  assert.deepEqual(of('sql', 'select 1 from t'), { select: 'k', 1: 'n', from: 'k' })
+  assert.deepEqual(of('bash', 'echo "$HOME" # hi'), { '"$HOME"': 's', '# hi': 'c' })
+  assert.equal(of('ts', 'x.default.return')['default'], undefined, 'a property is not a keyword')
+  assert.deepEqual(highlight('plain text', 'nosuchlang'), [['plain text']])
+  assert.deepEqual(highlight('x'.repeat(50000), 'ts').length, 1, 'a very long block is left as it is')
+})
+
+test('code colour: every theme gives colours that read on its code block, by night and by day', async () => {
+  const { THEMES, ASCII } = await import('../src/lib/themes')
+  const { codeColours, wellOf } = await import('../src/lib/codecolors')
+  const { contrast, build } = await import('../src/lib/custom')
+  const made = build({ name: 'Harbour', base: '#2f4a5a', tint: 0.022, night: { block: '#e9dcc2', accent: '#ff7a3d', ascii: ['#2f4a5a', '#6f8fa0', '#e9dcc2', '#ff7a3d'] }, day: { block: '#1f3340', accent: '#e8611f', ascii: ['#b9c9d2', '#6f8fa0', '#1f3340', '#e8611f'] } })!.theme
+  for (const t of [...THEMES, made]) for (const mode of ['dark', 'light'] as const) {
+    const well = wellOf(t, mode)
+    const tone = t[mode]
+    const set = t.id === 'lunchbox' ? {} : codeColours({ accent: tone.accent, block: tone.block, glyphs: tone.glyphs, well, mode })
+    if (t.id === 'lunchbox') continue
+    const got = Object.values(set)
+    assert.ok(got.length >= 2, `${t.id} ${mode} colours at least two roles`)
+    for (const [k, v] of Object.entries(set)) assert.ok(contrast(v, well) >= 4.5, `${t.id} ${mode} ${k} ${v} on ${well} is ${contrast(v, well).toFixed(2)}`)
+    assert.equal(new Set(got).size, got.length, `${t.id} ${mode} roles are told apart`)
+  }
+  // Lunchbox's own theme with an ASCII colour picked on top: strings and numbers follow the ramp.
+  const ember = ASCII.find((a) => a.id === 'ember')!
+  const plain = codeColours({ glyphs: ember.dark, well: '#161614', mode: 'dark' })
+  assert.ok(plain['--code-str'] && !plain['--code-key'])
+  assert.deepEqual(codeColours({ well: '#161614', mode: 'dark' }), {}, 'no theme colours: the stylesheet draws code in ink')
+})

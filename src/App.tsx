@@ -24,6 +24,7 @@ import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
 import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
+import { codeColours, wellOf } from './lib/codecolors'
 import { loadTune, saveTune, tuned, type Tune } from './lib/tune'
 import { shift } from './lib/fit'
 import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
@@ -154,6 +155,9 @@ export function App() {
     own?.forEach((c, i) => { set[`--glyph-${i + 1}`] = c })
     // The tune goes last, so a colour picked by hand wins over the theme's.
     if (!preview) Object.assign(set, tuned(tune, mode))
+    // Code is written in the colours that ended up on the root, so a tune or an ASCII colour of
+    // its own carries into it.
+    Object.assign(set, codeColours({ accent: set['--accent'], block: set['--block'], glyphs: [1, 2, 3, 4].map((i) => set[`--glyph-${i}`]), well: /^#/.test(set['--well'] ?? '') ? set['--well'] : wellOf(t, mode), mode }))
     for (const k of painted.current) if (!(k in set)) root.style.removeProperty(k)
     for (const [k, v] of Object.entries(set)) root.style.setProperty(k, v)
     painted.current = Object.keys(set)

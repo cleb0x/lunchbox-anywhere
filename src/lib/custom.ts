@@ -69,7 +69,7 @@ export function on(bg: string) {
 }
 
 // Moves a colour in lightness, away from the background, until it reaches the contrast it needs.
-function lift(color: string, bg: string, min: number, mode: Mode) {
+export function lift(color: string, bg: string, min: number, mode: Mode) {
   let { l } = oklch(color)
   const { c, h } = oklch(color)
   let out = color

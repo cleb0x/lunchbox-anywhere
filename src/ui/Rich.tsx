@@ -3,6 +3,7 @@ import { ThemeOffer } from './ThemeOffer'
 import { foldChecklists, same, sincePlan, type Step } from '../../shared/plan'
 import { steady } from '../../shared/stream'
 import { PlanCard } from './Plan'
+import { highlight } from '../lib/highlight'
 
 // Code, bold, emphasis, web links, links to files on disk (shown as the file name) and bare URLs.
 // Emphasis needs a word on both sides of its stars, so 2 * 3 * 4 and *.ts stay as they are.
@@ -111,7 +112,7 @@ function Code({ text, lang, children }: { text: string; lang?: string; children?
   }, [copied])
   return (
     <div className="codewrap" data-lang={lang || undefined}>
-      <pre className="codeblock" dir="ltr">{text}{children}</pre>
+      <pre className="codeblock" dir="ltr">{highlight(text, lang).map(([t, role], i) => (role ? <span key={i} className={role}>{t}</span> : t))}{children}</pre>
       {text.trim() && <button type="button" className="codecopy" onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}>{copied ? 'Copied' : 'Copy'}</button>}
     </div>
   )
