@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, nativeTheme, Notification, safeStorage, shell } from 'electron'
@@ -350,7 +350,10 @@ function wire() {
   // path can come from an agent's message, and opening a program or a script would run it.
   h('reveal', (path: string) => {
     if (typeof path !== 'string' || !existsSync(path)) return 'missing'
-    if (statSync(path).isDirectory() || IMAGE_TYPES[extname(path).toLowerCase()]) return shell.openPath(path)
+    // A link is shown, never followed, and an app is a folder that would start if it were opened.
+    const s = lstatSync(path)
+    const app = /\.(app|appex|bundle|framework|kext|plugin|prefpane|saver|workflow|action|command|tool)$/i.test(path.replace(/[\\/]+$/, ''))
+    if (!s.isSymbolicLink() && !app && (s.isDirectory() || IMAGE_TYPES[extname(path).toLowerCase()])) return shell.openPath(path)
     shell.showItemInFolder(path)
     return ''
   })
@@ -390,7 +393,19 @@ function into(room: string, files: string[]) {
   })
 }
 
+// One Lunchbox per profile: two would write the same rooms and settings over each other. A
+// second launch brings the first one's window forward instead.
+const first = app.requestSingleInstanceLock()
+if (!first) app.quit()
+app.on('second-instance', () => {
+  if (!win) return createWindow()
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
+
 app.whenReady().then(async () => {
+  if (!first) return
   // The Lunchbox folder exists from the first launch, so the first room has somewhere to go.
   try { mkdirSync(workspace(), { recursive: true }) } catch {}
   store = new Store(join(app.getPath('userData'), 'data'), cipher)
