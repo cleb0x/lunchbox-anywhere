@@ -71,8 +71,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/mai
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2Fcleb0x%2Flunchbox-anywhere&cloudshell_git_branch=main&cloudshell_tutorial=cloudshell.md)
 
 Click it, choose **Trust**, and run `./lunchbox`. The first time it installs Claude Code and asks
-you to sign in to Claude. It prints a link; Ctrl+click it. After that, the website's **Start in
-Cloud Shell** button opens Cloud Shell, and Lunchbox starts there by itself.
+you to sign in to Claude. It prints a link; Ctrl+click it.
+
+**Every day after that:** open the website. If Cloud Shell is asleep, it shows **Start in Cloud
+Shell**; click it, wait for **Lunchbox is ready** in the Cloud Shell tab, then reload the website and
+it connects by itself. When you close the Lunchbox tab, Lunchbox stops after 20 minutes so Cloud
+Shell can sleep and save your free hours. Updates come by themselves; to force one, run
+`bash <(curl -fsSL https://raw.githubusercontent.com/cleb0x/lunchbox-anywhere/main/lunchbox) --update`.
 
 ### 3. Just the website
 
