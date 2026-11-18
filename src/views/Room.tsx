@@ -719,7 +719,7 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
     <Ev id={e?.id} mark={<Mark seed={to.mark} size={16} active={!!t} />} className={`hands${t ? ' live' : ''}`}>
       <div className="handhead">
         <b className="name">{to.short}</b><span>{t ? 'is answering' : tool ? 'lent a hand to' : 'answered'}</span><Mark seed={from.mark} size={12} /><span>{from.short}</span>
-        {tool && <span className="tag" title={`${from.short} called ${to.short} through the room's tools and kept working with the answer`}>mid-turn</span>}
+        {tool && <span className="tag" title={`${from.short} called ${to.short} through the room's tools and kept working with the answer`}>while working</span>}
         {e && <span className="when">{clock(e.at)}</span>}
       </div>
       <div className="exchange">
