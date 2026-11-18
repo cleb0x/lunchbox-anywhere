@@ -4,7 +4,7 @@ import { sentence } from '../../shared/steps'
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import type { Access, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
+import type { Access, Act, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
 import { asks, plan } from '../../shared/plan'
 import { classify } from '../../shared/route'
 import { clean, tidy } from '../../shared/clean'
@@ -25,6 +25,7 @@ import type { Snapshots } from '../snap'
 import type { Store } from '../store'
 import { briefing, line, prompt, protocol } from './context'
 import { check, suggest } from './proof'
+import { binsOf, instead, reach, refusals, REFUSED, shims, type Reach } from './reach'
 
 type Hooks = {
   emit(channel: string, payload: unknown): void
@@ -119,11 +120,16 @@ export class Engine {
   private listTimer: NodeJS.Timeout | null = null
   private projectTimers = new Map<string, NodeJS.Timeout>()
   private warmth = new Map<string, Warmth>()
+  // A folder of stand-ins for the agents' commands, first on the PATH of every agent a room starts.
+  private front = ''
+  private shimmed = ''
 
   constructor(private store: Store, private hooks: Hooks, private hands?: Hands, private snaps?: Snapshots) {}
 
   async refresh() {
     this.agents = await detect(this.store.keys(), this.store.settings.models, this.store.health)
+    const bins = [...binsOf(this.agents).keys()]
+    if (bins.join() !== this.shimmed) { this.shimmed = bins.join(); this.front = shims(join(this.store.dir, 'shims'), bins) }
     this.hooks.emit('agents', this.agents)
     return this.agents
   }
@@ -828,6 +834,14 @@ export class Engine {
     return `Saved ${relative(meta.workspace, path)}`
   }
 
+  private outside(room: string, who: string, r: Reach, a: Extract<Act, { t: 'cmd' }>, where: { inside?: { turn: string; mark: number } }) {
+    if (!this.agent(r.id)) return
+    this.add(room, {
+      kind: 'hands', from: who, to: r.id, via: 'cli', ask: (r.ask || a.command).slice(0, 2000), answer: clean(a.out ?? '').trim(), acts: [],
+      ...(a.exit ? { error: `The command ended with exit code ${a.exit}.` } : {}), ...where,
+    })
+  }
+
   private keep(room: string, who: string, r: Result) {
     this.store.update(room, (m) => {
       m.sessions[who] = r.session!
@@ -933,7 +947,16 @@ export class Engine {
     // In Auto, Claude Code runs commands without asking anyone. The room's mode is put in front
     // of each one: inside the folder they run as before, and one that reaches the internet,
     // leaves the folder or is dangerous waits for a yes in the room, like any other command.
-    const guard: Guard | undefined = who === 'claude' && access === 'workspace' ? async (command, cwd) => {
+    // In every mode, a command that would start another agent, or a second copy of this one, is
+    // turned down with the way to reach that agent that shows in the room.
+    const bins = binsOf(this.agents)
+    const nested = (ctx.depth ?? 0) > 0
+    const held = tools.map((t) => t.name)
+    const guard: Guard | undefined = who === 'claude' ? async (command, cwd) => {
+      const r = reach(command, bins)
+      const target = r && this.agent(r.id)
+      if (target) return instead(me, target, { inCrew: meta.crew.includes(target.id), tools: held, nested })
+      if (access !== 'workspace') return null
       const root = meta.workspace
       const memory = this.allowed.get(root) ?? new Set<string>()
       this.allowed.set(root, memory)
@@ -951,6 +974,7 @@ export class Engine {
       model: ctx.models?.[who] || this.store.settings.models[who] || me.model, session: resumed ? session : undefined, meter: resumed && meta.meters?.[who]?.session === session ? meta.meters[who] : undefined, allow: ctx.allow, hands: grant?.url || undefined, bench,
       hook: grant?.hook || undefined, outputs: shorten ? outputs(room) : undefined, effort: this.store.settings.effort?.[who], lean: saving.lean, short,
       inbox: grant?.hook || http ? inbox : undefined, unload: this.store.settings.unload,
+      env: me.via === 'cli' ? refusals(me, this.agents, meta.crew, held, nested) : undefined, front: this.front || undefined,
     }, this.store.keys(), (u) => {
       if (u.delta) lt.text += u.delta
       if (u.acts) {
@@ -962,6 +986,10 @@ export class Engine {
         for (const a of u.acts) {
           // An edit in between means the agent is fixing, not looping; a pass clears the count.
           if (a.t === 'edit') { fails.clear(); continue }
+          // An agent that got to another one through its own shell anyway: the room shows what
+          // came back, so the person never has only "I checked with Grok" to go on.
+          const r = a.t === 'cmd' && !(a.out ?? '').includes(REFUSED) ? reach(a.command, bins) : null
+          if (r && a.t === 'cmd') this.outside(room, who, r, a, inner.host?.turn === lt.id ? { inside: { turn: lt.id, mark: lt.text.length } } : within(ctx))
           if (a.t !== 'cmd' || a.exit === null) continue
           if (a.exit === 0) { fails.delete(a.command); continue }
           const n = (fails.get(a.command) ?? 0) + 1

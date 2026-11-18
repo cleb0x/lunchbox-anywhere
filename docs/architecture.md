@@ -31,6 +31,7 @@ test/               unit tests, recorded CLI output and the fake agent
 2. `room/context.ts` builds the prompt with the stable part first (instructions, then the conversation) and the new part last, so providers can reuse the start from cache. A crewmate that joins gets a briefing in place of the conversation.
 3. The agent runs as its own CLI, or over HTTP for API keys and local models. A parser turns its stream into text, commands, file edits and usage.
 4. The main agent can ask a crewmate a question or bring one in for a task, through its tools or a line like `@grok: question`. Lunchbox sends the crewmate a briefing with the brief, shared memory, changed files and its task. The answer goes into shared memory and the main agent carries on.
+   An agent that starts another agent from its own shell gets an answer nobody else sees, so `room/reach.ts` finds those commands. Claude Code is turned down by the hook before the command runs, in every mode, and told which tool to use. Every agent gets stand-ins for the agents' commands first on its PATH, which do the same where its shell keeps that PATH. One that gets through anyway is shown in the room with what it printed, marked as outside the room.
 5. The engine checks claims such as "the tests pass" against commands that exited 0 after the last edit.
 6. The engine writes usage to the ledger, which Pool and Savings read.
 

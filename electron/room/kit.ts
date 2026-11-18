@@ -24,7 +24,10 @@ const str = (v: unknown, name: string) => {
 
 // The abilities one agent can borrow from the others during its own turn. An agent answering a
 // question gets the read-only part, so a question cannot start a chain of further questions.
-export function kit(h: Host): Tool[] {
+// Every one of them is listed to the agent from the start.
+export const kit = (h: Host): Tool[] => build(h).map((t) => ({ ...t, always: true }))
+
+function build(h: Host): Tool[] {
   const tools: Tool[] = []
   const mates = h.crew.filter((a) => a.id !== h.me.id)
   // Searching and drawing are done by a crewmate, never by an agent the person left out of the
@@ -37,6 +40,7 @@ export function kit(h: Host): Tool[] {
       name: 'ask_crewmate',
       description: [
         'Ask another agent in this room and wait for its answer. Use it when a crewmate is clearly better placed than you, then carry on with what they say.',
+        'This is how a crewmate is reached: the person sees the question and the answer in the room. Never run a crewmate\'s command line yourself, where nothing it does is shown.',
         'Crew:',
         ...mates.map((a) => `- ${a.id}: ${a.short} (${a.maker}). ${a.good}.${a.tools ? '' : ' Text only.'}`),
       ].join('\n'),

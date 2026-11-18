@@ -12,6 +12,8 @@ export type Tool = {
   required?: string[]
   // A complete JSON schema, for tools passed through from another MCP server.
   schema?: Record<string, unknown>
+  // Listed to the agent from the start, never behind a search for tools it has to run first.
+  always?: boolean
   run(args: Record<string, unknown>): Promise<string>
 }
 
@@ -159,7 +161,7 @@ export class Hands {
     const command = o.tool_input?.command
     // The room's mode decides about the command before anything else is done with it. No answer
     // in time counts as a no.
-    if (guard && o.tool_name === 'Bash' && typeof command === 'string') {
+    if (guard && (o.tool_name === 'Bash' || o.tool_name === 'PowerShell') && typeof command === 'string') {
       let timer: NodeJS.Timeout | undefined
       const late = new Promise<string>((done) => { timer = setTimeout(() => done('Nobody answered in time, so Lunchbox did not run this.'), GUARD_WAIT) })
       const no = await Promise.race([guard(command, typeof o.cwd === 'string' ? o.cwd : undefined).catch(() => 'Lunchbox could not check this command, so it did not run.'), late])
@@ -209,6 +211,9 @@ export class Hands {
             name: t.name,
             description: t.description,
             inputSchema: t.schema ?? { type: 'object', properties: t.input, required: t.required ?? Object.keys(t.input) },
+            // Claude Code hides a long list of tools behind a search. An agent that has to look
+            // for the way to ask a crewmate reaches for that crewmate's command line instead.
+            ...(t.always ? { _meta: { 'anthropic/alwaysLoad': true } } : {}),
           })),
         })
       case 'tools/call': {

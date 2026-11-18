@@ -1739,3 +1739,62 @@ test('numbers on screen: the unit is chosen after rounding', async () => {
   assert.equal(money(0.004), '1¢')
   assert.equal(money(0), '$0')
 })
+
+test('reach: a command that starts another agent with a prompt is found, however it is dressed', async () => {
+  const { reach, binsOf, instead, REFUSED } = await import('../electron/room/reach')
+  const agent = (id: string, bin: string) => ({ id, name: id, short: id[0].toUpperCase() + id.slice(1), maker: '', via: 'cli', bin, found: true, ready: true, tools: true, good: '', alphabet: '', mark: id }) as never
+  const agents = [agent('claude', 'claude'), agent('codex', 'codex'), agent('grok', '/Users/me/.local/bin/grok'), agent('gemini', 'gemini'), agent('mine', 'node')]
+  const bins = binsOf(agents)
+  assert.equal(bins.has('node'), false, 'an interpreter a connector runs through is not an agent')
+  const to = (c: string) => reach(c, bins)?.id
+  for (const [command, id] of [
+    ['grok -p "what do people say about limits"', 'grok'],
+    ['echo "Reply PONG" | claude -p --permission-mode dontAsk --output-format text', 'claude'],
+    ['claude -p --tools "WebSearch" < /tmp/prompt.md > /tmp/out.txt 2> /tmp/err.txt; echo "EXIT:$?"', 'claude'],
+    ['codex exec --skip-git-repo-check "review the diff"', 'codex'],
+    ['/opt/homebrew/bin/gemini -p "second opinion"', 'gemini'],
+    ['cd src && FOO=1 timeout 120 grok --prompt-file q.txt', 'grok'],
+    ['bash -lc \'codex exec "fix it"\'', 'codex'],
+    ['npx -y @openai/codex exec "fix it"', 'codex'],
+    ['npx @anthropic-ai/claude-code@latest -p hi', 'claude'],
+    ['ANSWER=$(grok -p "is this right")', 'grok'],
+    ['cat q.txt | xargs -I {} gemini -p {}', 'gemini'],
+    ['nohup claude -p "long job" &', 'claude'],
+    ['claude', 'claude'],
+  ]) assert.equal(to(command), id, command)
+  for (const command of [
+    'codex mcp list', 'codex mcp add openroll -- /Applications/OpenRoll.app/Contents/MacOS/OpenRoll --mcp', 'claude --version', 'grok models',
+    'which grok codex', 'grep -rn "claude -p" scripts', 'echo "codex exec is the command"', 'ls ~/.claude', 'cat .codex/config.toml',
+    'npm i -g @openai/codex', 'git commit -m "teach grok -p a lesson"', 'gemini --help', 'node agent.js -p hello', 'brew upgrade codex', 'claude update',
+  ]) assert.equal(to(command), undefined, command)
+  assert.equal(reach('grok -p "what do people say about limits"', bins)?.ask, 'what do people say about limits')
+
+  const [claude, , grok] = agents as { id: string; short: string }[]
+  const tools = ['ask_crewmate', 'bring_in']
+  const shown = instead(claude as never, grok as never, { inCrew: true, tools, nested: false })
+  assert.ok(shown.startsWith(REFUSED))
+  assert.match(shown, /mcp__lunchbox__ask_crewmate \(agent "grok"\)/)
+  assert.match(instead(grok as never, claude as never, { inCrew: true, tools: [], nested: false }), /"@claude: what you need"/)
+  assert.match(instead(claude as never, grok as never, { inCrew: false, tools, nested: false }), /is not in this room/)
+  assert.match(instead(claude as never, claude as never, { inCrew: true, tools, nested: false }), /a second Claude/)
+  assert.doesNotMatch(instead(grok as never, claude as never, { inCrew: true, tools: [], nested: true }), /@claude:/)
+})
+
+test('hands: the room\'s own tools are listed from the start, and the guard covers every mode', async () => {
+  const hands = new Hands()
+  await hands.start()
+  try {
+    const tool = (name: string, always?: boolean) => ({ name, description: '', input: {}, always, run: async () => '' })
+    const seen: string[] = []
+    const g = hands.grant([tool('ask_crewmate', true), tool('browser_open')], undefined, undefined, async (c) => { seen.push(c); return c.includes('grok') ? 'no' : null })
+    const rpc = async (url: string, body: unknown) => (await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json()
+    const list = (await rpc(g.url, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).result.tools
+    assert.deepEqual(list.map((t: { _meta?: Record<string, unknown> }) => t._meta?.['anthropic/alwaysLoad']), [true, undefined])
+    const hook = (tool_name: string, command: string) => rpc(g.hook, { hook_event_name: 'PreToolUse', tool_name, tool_input: { command } })
+    assert.equal((await hook('Bash', 'grok -p hi')).hookSpecificOutput.permissionDecision, 'deny')
+    assert.equal((await hook('PowerShell', 'grok -p hi')).hookSpecificOutput.permissionDecision, 'deny')
+    assert.deepEqual(await hook('Bash', 'ls'), {})
+    assert.deepEqual(seen, ['grok -p hi', 'grok -p hi', 'ls'])
+    g.revoke()
+  } finally { hands.stop() }
+})

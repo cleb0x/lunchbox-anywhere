@@ -203,6 +203,32 @@ if (mcp && input.includes('Browse:')) {
   process.exit(0)
 }
 
+// A line starting "Shell:" in the request is a command the agent runs in its own shell. Claude
+// Code asks the room's hook first, as the real one does; the others have no hook and just run it,
+// with the PATH the room gave them.
+const shell = input.match(/^Shell: (.+)$/m)?.[1]
+if (shell && name !== 'codex') {
+  const { spawnSync } = await import('node:child_process')
+  const hook = args.includes('--settings') ? JSON.parse(readFileSync(args[args.indexOf('--settings') + 1], 'utf8')).hooks.PreToolUse[0].hooks[0].url : null
+  const asked = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: shell } }
+  const answer = hook ? await (await fetch(hook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(asked) })).json() : {}
+  const refused = answer.hookSpecificOutput?.permissionDecision === 'deny' ? answer.hookSpecificOutput.permissionDecisionReason : ''
+  say({ type: 'system', subtype: 'init', session_id: `${name}-session`, model: 'fake' })
+  say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'Bash', input: { command: shell } }] } })
+  let out = refused
+  let code = 1
+  if (!refused) {
+    const ran = spawnSync('/bin/sh', ['-c', shell], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FAKE_LOG: '' } })
+    out = `${ran.stdout}${ran.stderr}`
+    code = ran.status ?? 1
+  }
+  say({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 's1', content: code ? `Exit code ${code}\n${out}` : out, is_error: code !== 0 }] } })
+  const text = refused ? 'I could not run that.' : `Ran it, exit ${code}.`
+  say({ type: 'assistant', message: { content: [{ type: 'text', text }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: `${name}-session`, total_cost_usd: 0.01, usage: { input_tokens: 100, output_tokens: 20 } })
+  process.exit(0)
+}
+
 if (name === 'codex') {
   say({ type: 'thread.started', thread_id: 'thread-1' })
   // FAKE_SCRIPT=cut: Codex runs a command and, unless told to stay quiet, writes half a reply before the limit.

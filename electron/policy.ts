@@ -42,7 +42,7 @@ const VERSION = /^(node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|uv|ruby|go|car
 
 // Words as a shell splits them, quotes removed, so "$HOME"/x is one word. A backslash is part of
 // a path on Windows and an escape everywhere else.
-function words(s: string) {
+export function words(s: string) {
   const word = sep === '\\' ? /(?:"[^"]*"|'[^']*'|[^\s"'])+/g : /(?:"[^"]*"|'[^']*'|\\.|[^\s"'\\])+/g
   return [...s.matchAll(word)].map((m) => m[0].replace(sep === '\\' ? /"([^"]*)"|'([^']*)'/g : /"([^"]*)"|'([^']*)'|\\(.)/g, (_m, a, b, c) => a ?? b ?? c ?? ''))
 }
@@ -107,7 +107,7 @@ function wipes(command: string, cwd: string) {
   return false
 }
 
-function segments(command: string) {
+export function segments(command: string) {
   // A single & starts a second command as surely as && does, but the & in 2>&1 or &> only
   // points one output at another, so those go first. &> still writes a file, so it stays a >,
   // and so does >& before a name: `echo x >&cat` writes a file called cat.

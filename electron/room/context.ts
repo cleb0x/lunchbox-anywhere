@@ -1,6 +1,7 @@
 import type { Access, Act, AgentInfo, Event, Pack, RoomMeta } from '../../shared/types'
 import { habitRules } from '../../shared/habits'
 import { lunchbox, studioCore } from '../../shared/studio'
+import { binsOf } from './reach'
 
 const ACCESS: Record<Access, string> = {
   plan: 'Plan. Read only: do not edit files or run commands that change anything. Investigate and propose.',
@@ -42,6 +43,10 @@ export function protocol(meta: RoomMeta, me: AgentInfo, crew: AgentInfo[], acces
   const borrowed = [...tools.filter((t) => !(solo && t === 'propose_flow')).map((t) => TOOL_LINES[t]).filter(Boolean), connected(tools)].filter(Boolean)
   // A room with one agent says nothing about a crew: every line here is read again on each step.
   const alone = !mates.length
+  // Claude Code lists a server's tools under the server's name, and may keep them behind a search.
+  const named = me.id === 'claude' ? ' In your tool list each one is named mcp__lunchbox__ and then the name used here.' : ''
+  const clis = [...binsOf(crew.filter((a) => a.id !== me.id)).keys()]
+  const reach = tools.includes('ask_crewmate') ? `${me.id === 'claude' ? 'mcp__lunchbox__ask_crewmate' : 'ask_crewmate'} or bring_in` : 'an "@handle:" line'
   return [
     alone ? `You are ${me.short}, working with one person in a Lunchbox room.` : `You are ${me.short}, one of several AI agents working with one person in a shared room in Lunchbox.`,
     `Room: ${meta.name}. Folder: ${meta.workspace}. Access: ${ACCESS[access]}`,
@@ -50,11 +55,12 @@ export function protocol(meta: RoomMeta, me: AgentInfo, crew: AgentInfo[], acces
     // left alone, many ask the person to paste a file they could have opened.
     me.tools && me.via !== 'cli' ? `You work in the folder yourself, through your tools: ${access === 'plan' ? 'list_directory, read_file, search_file_content and run_command for commands that only read' : 'list_directory, read_file, search_file_content, write_file, edit_file and run_command'}. Look things up in the folder before asking the person for them, and check your work by running it.` : '',
     mates.length ? `Your crew:\n${mates.join('\n')}` : '',
-    borrowed.length ? (alone ? `Your lunchbox tools: ${borrowed.join(' ')}` : `The lunchbox tools lend you your crewmates' abilities mid-turn. ${borrowed.join(' ')} Prefer them to an @handle line when you need the answer to keep working.`) : '',
+    borrowed.length ? (alone ? `Your lunchbox tools: ${borrowed.join(' ')}` : `The lunchbox tools lend you your crewmates' abilities mid-turn. ${borrowed.join(' ')}${named} Prefer them to an @handle line when you need the answer to keep working.`) : '',
     [
       'How the room works:',
       mates.length && main === me.id ? '- You are the main agent. The person talks to you; the rest of the crew is on call and does not read along. Do the work yourself unless a crewmate is clearly better placed, then involve only that one, with a task complete enough to start on: they see the brief, the shared memory and the files changed, not this conversation.' : '',
       mates.length ? '- To get something from a crewmate, put a line on its own: "@handle: what you need". Their answer comes back to you before you finish. Ask only when they are clearly better placed, at most two at a time.' : '',
+      clis.length ? `- Never start a crewmate from a command line (${clis.join(', ')}): not in a shell, not in a script, not through a subagent. Nothing it does there shows in the room, so the person would only have your word for it, and Lunchbox turns those commands down. Reach a crewmate with ${reach}.` : '',
       me.tools && access !== 'plan' ? '- The folder is yours to organise. Give a new project its own folder inside it rather than scattering files.' : '',
       '- For work with several steps, post the plan before you start: three to eight short "- [ ] step" lines, in order. Lunchbox pins it beside the room for the person to follow. The moment a step is done, write that one step as "- [x] step" on its own line before starting the next, never all at the end. Never post the whole list again; a new step is one more "- [ ] step" line.',
       '- Claims like "the tests pass" or "the build works" are checked against the commands that ran in this room after the last edit. Run the check before claiming it.',
@@ -76,7 +82,7 @@ export function line(e: Event, name: (id: string) => string): string | null {
   switch (e.kind) {
     case 'you': return `Person: ${e.text}${e.files?.length ? `\n  [attached: ${e.files.join(', ')}. Read them before answering.]` : ''}`
     case 'say': return e.error && !e.text ? null : `${name(e.who)}: ${e.text}${acts(e.acts)}`
-    case 'hands': return `${name(e.to)}, answering ${name(e.from)} ("${e.ask}"): ${e.answer}${acts(e.acts)}`
+    case 'hands': return e.via === 'cli' ? `[${name(e.from)} started ${name(e.to)} from its own command line, outside the room${e.answer ? `. It printed: ${e.answer.slice(0, 800)}` : ''}]` : `${name(e.to)}, answering ${name(e.from)} ("${e.ask}"): ${e.answer}${acts(e.acts)}`
     case 'wall': return `[${name(e.from)} stopped (${e.reason}); ${e.to ? `${name(e.to)} took over` : 'nobody could take over'}]`
     case 'run': return `[${e.who === 'you' ? 'Person' : name(e.who)} ran \`${e.command}\`, ${e.code === null ? e.how : `exit ${e.code}`}]${e.out ? `\n${e.out.slice(-800)}` : ''}`
     case 'image': return `[${name(e.by)} made an image for ${name(e.for)}, saved as ${e.path}: ${e.prompt.slice(0, 200)}]`

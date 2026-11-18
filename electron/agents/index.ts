@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import type { Access, AgentInfo, Act, Connector, Meter, Usage } from '../../shared/types'
 import { capture, env, launch, probe, runnable, stop, version, which } from '../system'
 import { claudeLike, codex, gemini, limitOf, reason, textOut, type Turn, type Update } from './parse'
@@ -44,6 +44,9 @@ export type Input = {
   inbox?: () => string | null
   // Local models: free the model from memory when it has answered.
   unload?: boolean
+  // For the agent's own shell: extra variables, and a folder that goes first on its PATH.
+  env?: Record<string, string>
+  front?: string
 }
 
 export type Result = {
@@ -100,7 +103,7 @@ function claudeHook(i: Input, file: string): Pick<Spec, 'extra'> & { args: strin
   if (!i.hook) return { args: dirs }
   const path = file.replace(/\.txt$/, '.settings.json')
   const settings = { hooks: {
-    PreToolUse: [{ matcher: i.guarded ? '*' : 'Bash', hooks: [{ type: 'http', url: i.hook, timeout: HOOK_TIMEOUT }] }],
+    PreToolUse: [{ matcher: i.guarded ? '*' : 'Bash|PowerShell', hooks: [{ type: 'http', url: i.hook, timeout: HOOK_TIMEOUT }] }],
     // After each step, so a message sent mid-turn reaches the agent without stopping it.
     ...(i.inbox ? { PostToolUse: [{ matcher: '*', hooks: [{ type: 'http', url: i.hook, timeout: 10 }] }] } : {}),
   } }
@@ -404,7 +407,8 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
   async function cli(path: string, spec: Spec, t0: number): Promise<Result> {
     let proc: ReturnType<typeof launch>
     try {
-      proc = child = launch(path, spec.args, { cwd: input.cwd, env: { ...(await env()), ...spec.env }, stdio: ['pipe', 'pipe', 'pipe'] })
+      const base = await env()
+      proc = child = launch(path, spec.args, { cwd: input.cwd, env: { ...base, ...spec.env, ...input.env, ...(input.front ? { PATH: `${input.front}${delimiter}${base.PATH}` } : {}) }, stdio: ['pipe', 'pipe', 'pipe'] })
     } catch (err) {
       return failed(`${name} could not start: ${(err as Error).message}`)
     }

@@ -768,3 +768,86 @@ test('saving: cache lifetime, kept warm for a person and short for a flow', { sk
   assert.equal((engine as any).warmth.size, 0)
   store.flush()
 })
+
+// An agent that tries to reach another through its own shell: Claude Code is turned down by the
+// hook in any mode, an agent without a hook by the stand-in on its PATH, and one that gets through
+// by a full path still leaves what came back in the room.
+test('room: an agent cannot quietly run another agent\'s command line', { skip: process.platform === 'win32' }, async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'lunchbox-reach-'))
+  const bin = join(root, 'bin')
+  const agent = join(process.cwd(), 'test', 'fake-agent.mjs')
+  chmodSync(agent, 0o755)
+  require('node:fs').mkdirSync(bin)
+  for (const name of ['claude', 'codex', 'grok']) symlinkSync(agent, join(bin, name))
+  // Only the stand-in agents are on this PATH, so nothing here can start a real one.
+  const { resetPath } = await import('../electron/system')
+  const before = process.env.LUNCHBOX_PATH
+  process.env.LUNCHBOX_PATH = `${bin}:${require('node:path').dirname(process.execPath)}:/usr/bin:/bin`
+  process.env.LUNCHBOX_PATH_ONLY = '1'
+  resetPath()
+  const log = join(root, 'calls.jsonl')
+  process.env.FAKE_LOG = log
+
+  const { Store } = await import('../electron/store')
+  const { Engine } = await import('../electron/room/engine')
+  const { Hands } = await import('../electron/hands')
+  const hands = new Hands()
+  await hands.start()
+  t.after(() => { hands.stop(); delete process.env.FAKE_LOG; delete process.env.LUNCHBOX_PATH_ONLY; process.env.LUNCHBOX_PATH = before; resetPath() })
+  const store = new Store(join(root, 'data'), { seal: (t: string) => t, open: (t: string) => t })
+  const engine = new Engine(store, { emit: () => {}, notify: () => {}, packs: () => [] }, hands)
+  await engine.refresh()
+  type Ev = ReturnType<typeof store.events>[number]
+  const cmd = (e: Ev) => (e as Extract<Ev, { kind: 'say' }>).acts.find((a): a is Extract<Act, { t: 'cmd' }> => a.t === 'cmd')!
+  const names = () => readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l).name)
+
+  // Claude Code, with every permission: the hook still turns the command down and names the tool.
+  const one = engine.create({ crew: ['claude', 'grok'], workspace: root })
+  engine.send(one.id, 'Check this with Grok.\nShell: grok -p "what do people say about limits"', 'full')
+  await engine.idle(one.id)
+  let events = store.events(one.id)
+  assert.deepEqual(events.map((e) => e.kind), ['you', 'say'])
+  assert.match(cmd(events[1]).out!, /Lunchbox did not run this\. Grok is in this room\. Ask it with the tool mcp__lunchbox__ask_crewmate \(agent "grok"\)/)
+  assert.deepEqual(names(), ['claude'], 'Grok was never started')
+  const first = JSON.parse(readFileSync(log, 'utf8').trim().split('\n')[0])
+  assert.match(first.input, /Never start a crewmate from a command line \(grok\)/)
+  assert.match(first.input, /named mcp__lunchbox__/)
+
+  // Its own command line, and an agent that is not in the room.
+  engine.send(one.id, 'Again.\nShell: claude -p "do the rest"', 'workspace')
+  await engine.idle(one.id)
+  events = store.events(one.id)
+  assert.match(cmd(events[3]).out!, /That would start a second Claude/)
+  engine.send(one.id, 'Again.\nShell: codex exec "review it"', 'workspace')
+  await engine.idle(one.id)
+  events = store.events(one.id)
+  assert.match(cmd(events[5]).out!, /Codex is not in this room/)
+  // Managing the tool is not a prompt, and runs.
+  engine.send(one.id, 'Again.\nShell: grok --version', 'workspace')
+  await engine.idle(one.id)
+  events = store.events(one.id)
+  assert.match(cmd(events[7]).out!, /grok 1\.0\.0/)
+  assert.ok(!events.some((e) => e.kind === 'hands'))
+
+  // Grok has no hook. The stand-in first on its PATH answers for Claude's command.
+  const two = engine.create({ crew: ['grok', 'claude'], workspace: root })
+  engine.send(two.id, 'Get a second opinion.\nShell: claude -p "review this plan"', 'full')
+  await engine.idle(two.id)
+  events = store.events(two.id)
+  assert.deepEqual(events.map((e) => e.kind), ['you', 'say'])
+  assert.equal(cmd(events[1]).exit, 126)
+  assert.match(cmd(events[1]).out!, /Lunchbox did not run this\. Claude is in this room\. To ask it, put a line on its own in your reply: "@claude: what you need"/)
+  engine.send(two.id, 'And this.\nShell: claude --version', 'full')
+  await engine.idle(two.id)
+  assert.match(cmd(store.events(two.id)[3]).out!, /claude 1\.0\.0/, 'the stand-in passes what only asks about the tool')
+
+  // By its full path the command gets through. The room then shows what it printed, attributed.
+  engine.send(two.id, `Once more.\nShell: ${join(bin, 'claude')} -p "review this plan"`, 'full')
+  await engine.idle(two.id)
+  events = store.events(two.id)
+  const hand = events.find((e) => e.kind === 'hands') as Extract<Ev, { kind: 'hands' }>
+  assert.deepEqual([hand.from, hand.to, hand.via, hand.ask], ['grok', 'claude', 'cli', 'review this plan'])
+  assert.ok(hand.answer.length > 0)
+  assert.ok(hand.inside, 'shown inside the turn that ran it')
+  store.flush()
+})
