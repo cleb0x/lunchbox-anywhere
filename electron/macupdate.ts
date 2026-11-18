@@ -5,14 +5,14 @@ import { join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { app, net } from 'electron'
-import type { SignedFile } from './signed'
+import type { Asset } from './macfeed'
 
-export { canReplace, pick } from './macfeed'
+export { canReplace, parseFeed, pick, type Asset, type Feed } from './macfeed'
 
 // macOS lets electron-updater install only signed apps, and Lunchbox is not signed yet. So on a Mac
-// the update is done by hand: the release's zip is downloaded, checked against the hash on the
-// release's signed file list, unpacked with ditto (which keeps the bundle's links and signature
-// intact), and swapped in for the running app by a small script once the app has quit.
+// the update is done by hand: the release's zip is downloaded, checked against the hash in its
+// feed, unpacked with ditto (which keeps the bundle's links and signature intact), and swapped in
+// for the running app by a small script once the app has quit.
 
 // The .app this process runs from: .../Lunchbox.app/Contents/MacOS/Lunchbox.
 export function bundlePath(exe = app.getPath('exe')) {
@@ -35,17 +35,16 @@ const plistVersion = async (appPath: string) =>
     p.on('close', () => done(out.trim()))
   })
 
-// Downloads, verifies and unpacks a release. The asset comes from a list whose signature has
-// already been checked, so a zip that matches its hash is the one Noah released. Resolves with the path of the new Lunchbox.app, ready
+// Downloads, verifies and unpacks a release. Resolves with the path of the new Lunchbox.app, ready
 // to be swapped in, or throws with a reason a person can read.
-export async function prepare(base: string, version: string, asset: SignedFile, progress: (p: number) => void): Promise<string> {
+export async function prepare(base: string, version: string, asset: Asset, progress: (p: number) => void): Promise<string> {
   // The version names a folder that is emptied first, so it has to be a version and nothing else.
   if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) throw new Error('the release has no proper version number')
   const dir = join(app.getPath('userData'), 'updates', version)
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
   const zip = join(dir, 'update.zip')
-  const res = await net.fetch(`${base}/download/v${version}/${asset.name}`)
+  const res = await net.fetch(`${base}/download/v${version}/${asset.url}`)
   if (!res.ok || !res.body) throw new Error(`the download failed (${res.status})`)
   const hash = createHash('sha512')
   let got = 0
@@ -56,7 +55,7 @@ export async function prepare(base: string, version: string, asset: SignedFile, 
     progress(Math.min(0.99, got / asset.size))
   })
   await pipeline(body, createWriteStream(zip))
-  if (hash.digest('base64') !== asset.sha512 || got !== asset.size) {
+  if (hash.digest('base64') !== asset.sha512) {
     rmSync(dir, { recursive: true, force: true })
     throw new Error('the download did not match the release, so it was thrown away')
   }

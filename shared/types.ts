@@ -345,8 +345,6 @@ export type UpdateState =
   | { state: 'ready'; version: string }
   | { state: 'manual'; version: string; url: string }
   | { state: 'error'; error: string }
-  // A release was found but not installed, because its signature was missing or wrong.
-  | { state: 'refused'; error: string }
 
 // A chat found in another agent's own history on this computer. there: its folder still exists.
 export type ChatSource = 'claude' | 'codex' | 'gemini' | 'grok'

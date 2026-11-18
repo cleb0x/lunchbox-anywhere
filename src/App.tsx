@@ -380,7 +380,7 @@ export function App() {
         </Guard>
       </main>
 
-      <Notices say={say} />
+      <Notices />
       {ctx && <RoomContext key={ctx.room.id + ctx.x + ctx.y} {...ctx} close={() => setCtx(null)} say={say} />}
       {importing && <ImportSheet close={() => setImporting(false)} open={(id) => go({ name: 'room', id })} say={say} />}
       {report && <ReportSheet open={report} close={() => setReport(null)} say={say} />}

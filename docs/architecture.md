@@ -8,7 +8,6 @@ Lunchbox is an Electron app. The main process runs the agents and holds the rule
 electron/
   main.ts           windows, IPC, keychain
   import.ts         chats read from Claude Code, Codex, Gemini CLI and Grok, made into rooms
-  signed.ts         the key the app trusts, and the check every update has to pass
   store.ts          rooms as JSONL logs that only grow, settings, the usage ledger
   system.ts         PATH, shells and processes on each platform
   policy.ts         what each access mode lets a command do
@@ -54,12 +53,6 @@ One process runs per profile, because two would write the same rooms over each o
 ## Imported chats
 
 `import.ts` lists the sessions each agent keeps on the computer and turns one into a room: the person's messages, the agent's answers and a count of the commands and edits, never the raw records. The room is made in the folder the chat was held in. Claude Code, Codex and Grok are handed their own session back, so they remember all of it and are not sent it again. Gemini CLI cannot take a session back, and neither can any agent when the folder is gone, so those read the conversation from the room, the newest part first, with a short summary in shared memory.
-
-## Updates
-
-Installers are built by `release.yml` and published to `noah-thing/lunchbox-releases`. That repository is only where the files lie. What the app trusts is `latest-signed.json` on the release: the version and the SHA-512 of every installer, signed with an Ed25519 key that exists only on Noah's computer (`scripts/sign-release.mjs`). The public half is in `electron/signed.ts`.
-
-Every check starts by fetching that file. A release without it, with a signature that does not verify, or with a version older than the one running is left alone, and the reason goes to the log. On a Mac the zip is hashed against the signed list before it is unpacked. On Windows and Linux electron-updater does the download, and the file it fetched is hashed against the signed list before the app will install it, now or on quit. Copies up to 0.1.6 were built before this and install whatever the repository offers.
 
 ## Data
 
