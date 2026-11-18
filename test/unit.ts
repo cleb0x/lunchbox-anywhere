@@ -1598,3 +1598,35 @@ test('agent themes: surfaces of their own, held to readable text, and a brief th
   assert.ok(brief.includes('The theme I use now is Koi') && brief.includes('"base"') && brief.includes('lunchbox-theme'))
   assert.ok(brief.includes('screenshots, photos, a website') && !brief.includes('\\`'))
 })
+
+test('clean: joiners, long rules, inline <s> and indented fences survive', async () => {
+  const { clean } = await import('../shared/clean')
+  const family = '\u{1F468}‍\u{1F469}‍\u{1F467}'
+  assert.equal(clean(`Team ${family} done`), `Team ${family} done`)
+  assert.equal(clean('می‌خواهم'), 'می‌خواهم')
+  const rule = '─'.repeat(60)
+  assert.equal(clean(`top\n${rule}\nbottom`), `top\n${rule}\nbottom`)
+  assert.equal(clean('a' + '-'.repeat(5000)), 'a---')
+  assert.equal(clean('Wrap it in <s>old</s> to strike it.'), 'Wrap it in <s>old</s> to strike it.')
+  assert.equal(clean('<s>Hello there.</s>'), 'Hello there.')
+  const nested = '1. Run:\n   ```\n   echo ' + '!'.repeat(60) + '\n   ```\ndone'
+  assert.equal(clean(nested), nested)
+})
+
+test('rich: tables, rules and emphasis are read as what they are', async () => {
+  const { blocks } = await import('../src/ui/Rich')
+  const out = blocks('| Agent | Cost |\n|---|---:|\n| Claude | `a|b` |\n| Grok |\n\n---\n\nnot | a | table')
+  assert.deepEqual(out[0], { t: 'table', head: ['Agent', 'Cost'], rows: [['Claude', '`a|b`'], ['Grok']] })
+  assert.equal(out[1].t, 'rule')
+  assert.deepEqual(out[2], { t: 'p', text: 'not | a | table' })
+  assert.equal(blocks('###### Deep')[0].t, 'h')
+})
+
+test('model names: a snapshot date is not a version', async () => {
+  ;(globalThis as any).window ??= globalThis
+  const { modelName } = await import('../src/ui/ModelPicker')
+  assert.equal(modelName('claude-fable-5-2'), 'Fable 5.2')
+  assert.equal(modelName('claude-sonnet-4-20250514'), 'Sonnet 4')
+  assert.equal(modelName('claude-opus-4-1-20250805'), 'Opus 4.1')
+  assert.equal(modelName('gpt-6-sol'), 'GPT-6 Sol')
+})

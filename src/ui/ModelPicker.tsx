@@ -7,8 +7,9 @@ import { desk, reload, unavailable, useApp } from '../lib/desk'
 // Model ids as people say them: claude-fable-5-2 is Fable 5.2, gpt-6-sol is GPT-6 Sol.
 export function modelName(id: string) {
   const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
-  const claude = id.match(/^claude-([a-z]+)-(\d+)-(\d+)/)
-  if (claude) return `${cap(claude[1])} ${claude[2]}.${claude[3]}`
+  // A date on the end, claude-sonnet-4-20250514, is a snapshot and not part of the version.
+  const claude = id.match(/^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?=-|$)/)
+  if (claude) return `${cap(claude[1])} ${claude[2]}${claude[3] ? '.' + claude[3] : ''}`
   if (/^(fable|opus|sonnet|haiku)$/.test(id)) return `${cap(id)}, newest`
   const gpt = id.match(/^gpt-([\d.]+)(?:-(.+))?$/)
   if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ' ' + gpt[2].split('-').map(cap).join(' ') : ''}`
@@ -19,7 +20,11 @@ export function modelName(id: string) {
 
 const lists = new Map<string, Promise<string[]>>()
 function listOf(a: AgentInfo) {
-  if (!lists.has(a.id)) lists.set(a.id, desk.call('agents:models', a.id).then((r: unknown) => (Array.isArray(r) ? (r as string[]) : [])).catch(() => []))
+  if (!lists.has(a.id)) {
+    // A lookup that failed or came back empty is tried again the next time the list opens.
+    const forget = () => { lists.delete(a.id); return [] as string[] }
+    lists.set(a.id, desk.call('agents:models', a.id).then((r: unknown) => (Array.isArray(r) && r.length ? (r as string[]) : forget()), forget))
+  }
   return lists.get(a.id)!
 }
 

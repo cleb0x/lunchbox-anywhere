@@ -1,17 +1,19 @@
-import { Fragment, memo, type ReactNode } from 'react'
+import { Fragment, memo, useEffect, useState, type ReactNode } from 'react'
 import { ThemeOffer } from './ThemeOffer'
 import { foldChecklists, same, sincePlan, type Step } from '../../shared/plan'
 import { steady } from '../../shared/stream'
 import { PlanCard } from './Plan'
 
-// Code, bold, web links, links to files on disk (shown as the file name) and bare URLs.
-const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\[[^\]\n]+\]\((?!https?:)[^)\n]+\)|https?:\/\/[^\s)<>]+[^\s).,;:!?<>'"])/g
+// Code, bold, emphasis, web links, links to files on disk (shown as the file name) and bare URLs.
+// Emphasis needs a word on both sides of its stars, so 2 * 3 * 4 and *.ts stay as they are.
+const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|(?<![\w*\\])\*(?=\S)[^*\n]+?(?<=\S)\*(?![\w*])|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\[[^\]\n]+\]\((?!https?:)[^)\n]+\)|https?:\/\/[^\s)<>]+[^\s).,;:!?<>'"])/g
 
 function inline(text: string): ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     if (i % 2 === 0) return part
     if (part.startsWith('`')) return <code key={i}>{part.slice(1, -1)}</code>
     if (part.startsWith('**')) return <b key={i}>{part.slice(2, -2)}</b>
+    if (part.startsWith('*')) return <em key={i}>{part.slice(1, -1)}</em>
     const link = part.match(/^\[([^\]]+)\]\((.+)\)$/)
     if (link && !/^https?:/.test(link[2])) return <code key={i} title={link[2]}>{link[1]}</code>
     const href = link ? link[2] : part
@@ -24,10 +26,12 @@ type Block =
   | { t: 'h'; text: string }
   | { t: 'code'; lang: string; text: string }
   | { t: 'quote'; paras: string[] }
+  | { t: 'table'; head: string[]; rows: string[][] }
+  | { t: 'rule' }
   | { t: 'list'; ordered: boolean; items: { text: string; check?: boolean }[] }
 
 // live: the last line is still being typed.
-function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], live = false): Block[] {
+export function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], live = false): Block[] {
   const out: Block[] = []
   const lines = src.replace(/\r/g, '').split('\n')
   let para: string[] = []
@@ -58,7 +62,17 @@ function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], live = f
       continue
     }
     if (!line.trim()) { flush(); continue }
-    const head = line.match(/^#{1,4}\s+(.+)/)
+    // A table: a row of cells with a row of dashes under it. Without the dashes it is just text.
+    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1] ?? '')) {
+      flush()
+      const rows: string[][] = []
+      for (i += 2; i < lines.length && /^\s*\|/.test(lines[i]); i++) rows.push(cells(lines[i]))
+      i--
+      out.push({ t: 'table', head: cells(line), rows })
+      continue
+    }
+    if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)) { flush(); out.push({ t: 'rule' }); continue }
+    const head = line.match(/^#{1,6}\s+(.+)/)
     if (head) { flush(); out.push({ t: 'h', text: head[1] }); continue }
     const item = line.match(/^\s*(?:([-*•])|(\d+)[.)])\s+(?:\[( |x|X)\]\s+)?(.*)$/)
     if (item) {
@@ -82,6 +96,25 @@ function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], live = f
   return sincePlan(foldChecklists(out, items), items, prior)
 }
 
+// The cells of one table row. A pipe inside inline code or after a backslash is part of the cell.
+const cells = (line: string) => line.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|(?=(?:[^`]*`[^`]*`)*[^`]*$)/).map((c) => c.trim().replace(/\\\|/g, '|'))
+
+// A code block with a way to copy it. The button says so for a moment once it has.
+function Code({ text, lang, children }: { text: string; lang?: string; children?: ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(false), 1400)
+    return () => clearTimeout(t)
+  }, [copied])
+  return (
+    <div className="codewrap">
+      <pre className="codeblock" data-lang={lang || undefined}>{text}{children}</pre>
+      {text.trim() && <button type="button" className="codecopy" onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}>{copied ? 'Copied' : 'Copy'}</button>}
+    </div>
+  )
+}
+
 // One line of text with code, bold and links, for places that show a single line (the plan).
 export function Inline({ text }: { text: string }) {
   return <>{inline(text)}</>
@@ -101,11 +134,20 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
         switch (b.t) {
           case 'p': return <p key={i}>{b.text.split('\n').map((l, j) => <Fragment key={j}>{j > 0 && <br />}{inline(l)}</Fragment>)}{end}</p>
           case 'h': return <h4 key={i}>{inline(b.text)}{end}</h4>
-          case 'code': return b.lang === 'lunchbox-theme' ? <ThemeOffer key={i} code={b.text} /> : <pre key={i} className="codeblock" data-lang={b.lang || undefined}>{b.text}{end}</pre>
+          case 'code': return b.lang === 'lunchbox-theme' ? <ThemeOffer key={i} code={b.text} /> : <Code key={i} text={b.text} lang={b.lang}>{end}</Code>
           case 'quote': return (
             <blockquote key={i}>
               {b.paras.map((t, j) => <p key={j}>{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === b.paras.length - 1 && end}</p>)}
             </blockquote>
+          )
+          case 'rule': return <hr key={i} />
+          case 'table': return (
+            <div key={i} className="tablewrap">
+              <table>
+                <thead><tr>{b.head.map((c, j) => <th key={j}>{inline(c)}</th>)}</tr></thead>
+                <tbody>{b.rows.map((r, j) => <tr key={j}>{b.head.map((_, k) => <td key={k}>{inline(r[k] ?? '')}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
           )
           case 'list': {
             // A live list that starts with an open step is a plan from its first line, so it never
