@@ -111,6 +111,11 @@ export class Snapshots {
     return true
   }
 
+  // The checkpoints of a folder no room works in any more.
+  drop(workspace: string) {
+    return this.serial(workspace, async () => { rmSync(this.repo(workspace), { recursive: true, force: true }) }).catch(() => {})
+  }
+
   private serial<T>(workspace: string, job: () => Promise<T>): Promise<T> {
     const prev = this.locks.get(workspace) ?? Promise.resolve()
     const next = prev.then(job, job)

@@ -384,7 +384,10 @@ export class Engine {
     this.stop(room)
     this.cool(room)
     try { rmSync(outputs(room), { recursive: true, force: true }) } catch {}
+    const folder = this.store.room(room)?.workspace
     this.store.remove(room)
+    // Checkpoints hold copies of the folder's files; they go with the last room that used it.
+    if (folder && !this.store.list().some((m) => m.workspace === folder)) this.snaps?.drop(folder)
     this.undecided.delete(room)
     this.lives.delete(room)
     this.list()
