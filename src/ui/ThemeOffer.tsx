@@ -13,7 +13,7 @@ export function ThemeOffer({ code }: { code: string }) {
   const built = useMemo(() => { try { return build(JSON.parse(code), `custom-offer-${hash(code)}`) } catch { return null } }, [code])
   const [used, setUsed] = useState(() => !!built && document.documentElement.dataset.palette === built.theme.id)
   const [open, setOpen] = useState(false)
-  if (!built) return <pre className="codeblock" data-lang="lunchbox-theme">{code}</pre>
+  if (!built) return <pre className="codeblock">{code}</pre>
   const { theme, fixed } = built
   const mode = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
   const use = () => { dispatchEvent(new CustomEvent('lb:theme', { detail: theme })); setUsed(true) }

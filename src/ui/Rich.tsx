@@ -38,12 +38,14 @@ export function blocks(src: string, prior: Pick<Step, 'text' | 'done'>[] = [], l
   const flush = () => { if (para.length) out.push({ t: 'p', text: para.join('\n') }); para = [] }
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    const fence = line.match(/^\s*```(\S*)/)
+    const fence = line.match(/^(\s*)```(\S*)/)
     if (fence) {
       flush()
       const body: string[] = []
-      while (++i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i])
-      out.push({ t: 'code', lang: fence[1], text: body.join('\n') })
+      // A fence inside a list is indented with it; the code is not.
+      const dent = new RegExp(`^\\s{0,${fence[1].length}}`)
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i].replace(dent, ''))
+      out.push({ t: 'code', lang: fence[2], text: body.join('\n') })
       continue
     }
     // A quote: consecutive lines starting with ">". A bare ">" separates its paragraphs.
@@ -108,8 +110,8 @@ function Code({ text, lang, children }: { text: string; lang?: string; children?
     return () => clearTimeout(t)
   }, [copied])
   return (
-    <div className="codewrap">
-      <pre className="codeblock" data-lang={lang || undefined}>{text}{children}</pre>
+    <div className="codewrap" data-lang={lang || undefined}>
+      <pre className="codeblock" dir="ltr">{text}{children}</pre>
       {text.trim() && <button type="button" className="codecopy" onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}>{copied ? 'Copied' : 'Copy'}</button>}
     </div>
   )
@@ -132,12 +134,12 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
       {list.map((b, i) => {
         const end = caret && i === list.length - 1 ? <span className="caret" /> : null
         switch (b.t) {
-          case 'p': return <p key={i}>{b.text.split('\n').map((l, j) => <Fragment key={j}>{j > 0 && <br />}{inline(l)}</Fragment>)}{end}</p>
-          case 'h': return <h4 key={i}>{inline(b.text)}{end}</h4>
+          case 'p': return <p key={i} dir="auto">{b.text.split('\n').map((l, j) => <Fragment key={j}>{j > 0 && <br />}{inline(l)}</Fragment>)}{end}</p>
+          case 'h': return <h4 key={i} dir="auto">{inline(b.text)}{end}</h4>
           case 'code': return b.lang === 'lunchbox-theme' ? <ThemeOffer key={i} code={b.text} /> : <Code key={i} text={b.text} lang={b.lang}>{end}</Code>
           case 'quote': return (
             <blockquote key={i}>
-              {b.paras.map((t, j) => <p key={j}>{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === b.paras.length - 1 && end}</p>)}
+              {b.paras.map((t, j) => <p key={j} dir="auto">{t.split('\n').map((l, k) => <Fragment key={k}>{k > 0 && <br />}{inline(l)}</Fragment>)}{j === b.paras.length - 1 && end}</p>)}
             </blockquote>
           )
           case 'rule': return <hr key={i} />
@@ -145,7 +147,7 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
             <div key={i} className="tablewrap">
               <table>
                 <thead><tr>{b.head.map((c, j) => <th key={j}>{inline(c)}</th>)}</tr></thead>
-                <tbody>{b.rows.map((r, j) => <tr key={j}>{b.head.map((_, k) => <td key={k}>{inline(r[k] ?? '')}</td>)}</tr>)}</tbody>
+                <tbody>{b.rows.map((r, j) => <tr key={j}>{b.head.map((_, k) => <td key={k} dir="auto">{inline(r[k] ?? '')}</td>)}</tr>)}</tbody>
               </table>
             </div>
           )
@@ -161,7 +163,7 @@ export const Rich = memo(function Rich({ text, caret = false, flowing = caret, p
             return (
               <Tag key={i}>
                 {b.items.map((it, j) => (
-                  <li key={j} className={it.check === undefined ? '' : it.check ? 'todo done' : 'todo'}>
+                  <li key={j} dir="auto" className={it.check === undefined ? '' : it.check ? 'todo done' : 'todo'}>
                     {it.check !== undefined && <i />}<span>{inline(it.text)}</span>
                   </li>
                 ))}

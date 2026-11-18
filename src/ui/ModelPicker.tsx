@@ -117,7 +117,7 @@ function Choices({ a, value, back, alone }: { a: AgentInfo; value: string; back:
       {(list?.length ?? 0) > 12 && <input className="modelfind" placeholder={`Find among ${list!.length}`} value={find} onChange={(e) => setFind(e.target.value)} autoFocus />}
       <div className="modellist">
         <button role="menuitemradio" aria-checked={!value} className={`item modelrow${!value ? ' on' : ''}`} onClick={() => pick('')}>
-          <span className="grow">Default</span><span className="now">{fallback}</span>
+          <span className="grow">Default</span><span className="modelnow">{fallback}</span>
         </button>
         {list === null && <div className="menunote">Looking up models</div>}
         {shown.slice(0, 80).map(row)}

@@ -109,6 +109,25 @@ if (process.env.FAKE_SCRIPT === 'theme' && name === 'claude') {
   process.exit(0)
 }
 
+// FAKE_SCRIPT=rich: one reply with everything a reply can hold, and the things that used to leak
+// into one: a table, a rule, emphasis, a quote, code, a very long word and terminal leftovers.
+if (process.env.FAKE_SCRIPT === 'rich' && name === 'claude') {
+  const reply = [
+    '\x1b[32mHere is the comparison\x1b[0m you asked for, with *one* caveat and a **bold** claim.<|im_end|>',
+    '| Agent | Best at | Cost per turn |\n|---|---|---:|\n| Claude | Careful edits and long reasoning across many files | `$0.04` |\n| Codex | Building, running and fixing tests | `$0.02` |\n| Grok | Live search | free |',
+    '---',
+    '> Limits are the top complaint.\n>\n> Second paragraph of the quote.',
+    '```ts\nexport const answer = (question: string) => question.length > 40 ? "a very long line of code that runs past the edge of the column so it has to scroll sideways" : "short"\n```',
+    'A link that never breaks: https://example.com/' + 'a-very-long-path-segment/'.repeat(8) + ' and a word ' + 'Donaudampfschifffahrtsgesellschaft'.repeat(4) + '.',
+    '1. First step\n2. Second step\n   ```\n   npm test\n   ```',
+    'سلام، این یک جمله فارسی است. 👨‍👩‍👧 done.',
+  ].join('\n\n')
+  say({ type: 'system', subtype: 'init', session_id: 'rich', model: 'claude-sonnet-5-5' })
+  say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'rich', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
+  process.exit(0)
+}
+
 // FAKE_SCRIPT=saving: Claude Code as the saving code meets it. A new session writes its whole
 // start to the cache, for five minutes when asked to and an hour otherwise; a resumed one reads
 // it back. A line starting "Run:" in the request runs that command the way Claude Code does, through the hook
