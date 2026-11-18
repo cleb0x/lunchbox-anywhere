@@ -1798,3 +1798,37 @@ test('hands: the room\'s own tools are listed from the start, and the guard cove
     g.revoke()
   } finally { hands.stop() }
 })
+
+test('drafts: what was typed and sent in a room outlives a restart, stays small and goes with the room', async () => {
+  const data = new Map<string, string>()
+  ;(globalThis as any).localStorage = {
+    getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v) }, removeItem: (k: string) => { data.delete(k) },
+    key: (i: number) => [...data.keys()][i] ?? null, get length() { return data.size },
+  }
+  const d = await import('../src/lib/drafts')
+  d.saveDraft('a', { text: 'half a thought', files: ['/tmp/x.png'] })
+  for (let i = 0; i < 60; i++) d.remember('a', `message ${i}`)
+  d.remember('a', 'message 59')
+  d.remember('a', 'x'.repeat(5000))
+  d.remember(undefined, 'from the new room box')
+  assert.deepEqual(JSON.parse(data.get('lb.draft.a')!), { text: 'half a thought', files: ['/tmp/x.png'] })
+  const kept: string[] = JSON.parse(data.get('lb.sent.a')!)
+  assert.equal(kept.length, 49, 'the last fifty, without the one too long to keep')
+  assert.equal(kept[0], 'message 59')
+  assert.equal(d.sentIn('a').length, 50)
+  assert.equal(d.sentIn('b').length, 0, 'each room has its own')
+
+  // A restart: nothing in memory, everything read back.
+  data.set('lb.draft.c', JSON.stringify({ text: 'kept', files: [] }))
+  data.set('lb.sent.c', JSON.stringify(['one', 'two']))
+  data.set('lb.draft.bad', '{"text":5}')
+  assert.deepEqual(d.draftOf('c'), { text: 'kept', files: [] })
+  assert.deepEqual(d.sentIn('c'), ['one', 'two'])
+  assert.equal(d.draftOf('bad'), undefined)
+
+  d.saveDraft('a', { text: '', files: [] })
+  assert.equal(data.has('lb.draft.a'), false, 'an emptied box leaves nothing behind')
+  d.prune(['c'])
+  assert.deepEqual([...data.keys()].sort(), ['lb.draft.c', 'lb.sent.c', 'lb.sent.new'], 'rooms that are gone take theirs with them')
+  delete (globalThis as any).localStorage
+})

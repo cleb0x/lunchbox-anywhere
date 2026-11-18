@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import type { Access, AgentInfo, Env, Flow, FlowState, Kind, Ledger, Pack, RoomSummary, Settings, Skill, Spent, PlanLimits } from '../../shared/types'
 
+import { prune } from './drafts'
+
 export type { Access, Kind }
 export type LedgerView = Ledger & { spent: Record<string, Spent>; budgets: Record<string, number> }
 
@@ -69,7 +71,7 @@ let booted: Promise<void> | null = null
 export function boot() {
   booted ??= (async () => {
     desk.on('agents', (agents) => set({ agents }))
-    desk.on('rooms', (rooms) => set({ rooms }))
+    desk.on('rooms', (rooms: RoomSummary[]) => { set({ rooms }); prune(rooms.map((r) => r.id)) })
     desk.on('ledger', (ledger) => set({ ledger }))
     desk.on('limits', (limits) => set({ limits }))
     desk.call('limits').then((limits) => limits && set({ limits }))

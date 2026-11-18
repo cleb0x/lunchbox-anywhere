@@ -7,11 +7,8 @@ import { agentOf, desk, machine, unavailable, useApp, type Access } from '../lib
 import { follow } from '../lib/fit'
 import { PLAYBOOKS, fillPlaybook } from '../../shared/skills'
 import { addOpenCode, hasOpenCode, openCodeFound } from './Connect'
+import { draftOf, remember, saveDraft, sentIn } from '../lib/drafts'
 
-// What was typed in each room and not sent yet, so leaving a room and coming back loses nothing,
-// and the messages sent since the app opened, newest first, for the up arrow.
-const drafts = new Map<string, { text: string; files: string[] }>()
-const sent: string[] = []
 
 type Suggestion = { key: string; label: string; hint: string; insert: string; mark?: string }
 
@@ -19,13 +16,10 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   crew: string[]; setCrew: (c: string[]) => void; onSend: (t: string, files?: string[]) => void; access: Access; setAccess: (a: Access) => void
   busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string; room?: string
 }) {
-  const [text, setText] = useState(() => (room && drafts.get(room)?.text) || '')
-  const [files, setFiles] = useState<string[]>(() => (room && drafts.get(room)?.files) || [])
-  useEffect(() => {
-    if (!room) return
-    if (text || files.length) drafts.set(room, { text, files })
-    else drafts.delete(room)
-  }, [room, text, files])
+  const [text, setText] = useState(() => (room && draftOf(room)?.text) || '')
+  const [files, setFiles] = useState<string[]>(() => (room && draftOf(room)?.files) || [])
+  useEffect(() => { if (room) saveDraft(room, { text, files }) }, [room, text, files])
+  const sent = sentIn(room)
   // Where the up arrow stands in the sent messages; -1 is the box as it was typed.
   const [past, setPast] = useState(-1)
   const [over, setOver] = useState(false)
@@ -136,7 +130,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   const submit = () => {
     if (!text.trim() && !files.length) return
     onSend(text.trim() || 'Have a look at the attached files.', files.length ? files : undefined)
-    if (text.trim() && sent[0] !== text.trim()) { sent.unshift(text.trim()); sent.length = Math.min(sent.length, 50) }
+    remember(room, text.trim())
     setPast(-1)
     setText('')
     setFiles([])
