@@ -25,7 +25,8 @@ export function Onboarding({ onDone, workspace, theme, setTheme, mode, setMode }
   const [leaving, setLeaving] = useState(false)
   const next = () => flow(() => setStep((s) => Math.min(STEPS - 1, s + 1)))
   const back = () => flow(() => setStep((s) => Math.max(0, s - 1)))
-  const done = () => { setLeaving(true); setTimeout(() => onDone(folder), 560) }
+  // Once: a click and then Enter would finish twice.
+  const done = () => { if (leaving) return; setLeaving(true); setTimeout(() => onDone(folder), 560) }
   useEffect(() => {
     if (step === 0) setLabel('')
     if (step === 2) setLabel(themeOf(theme).note.toLowerCase())
@@ -82,6 +83,8 @@ function Welcome({ onNext }: { onNext: () => void }) {
 function Agents({ onNext, setLabel, setBusy }: { onNext: () => void; setLabel: (l: string) => void; setBusy: (b: boolean) => void }) {
   const [list, setList] = useState<AgentInfo[] | null>(null)
   const [shown, setShown] = useState(0)
+  // What a local server said when it was started from here; there is no toast before the app opens.
+  const [said, setSaid] = useState('')
   const cached = useApp((s) => s.agents)
   useEffect(() => {
     let alive = true
@@ -126,7 +129,7 @@ function Agents({ onNext, setLabel, setBusy }: { onNext: () => void; setLabel: (
               <span className="spacer" />
               <code className={step ? 'todo' : ''}>{step || `${a.bin ?? a.via} ${a.version ?? ''}`}</code>
             </div>,
-            settled && step && a.id !== 'llamacpp' ? <div key={a.id + 'fix'} className="unfold obfix"><div><div className="obfixbox"><LocalSetupBox a={a} say={() => rescan()} /></div></div></div> : null,
+            settled && step && a.id !== 'llamacpp' ? <div key={a.id + 'fix'} className="unfold obfix"><div><div className="obfixbox"><LocalSetupBox a={a} say={(t) => { setSaid(t); rescan() }} /></div></div></div> : null,
           ]
         })}
         {settled && missing.length > 0 && (
@@ -142,6 +145,7 @@ function Agents({ onNext, setLabel, setBusy }: { onNext: () => void; setLabel: (
           </div></div>
         )}
       </div>
+      {said && <span className="obnote" role="status">{said}</span>}
       {!isDesktop && settled && <span className="obnote">Browser preview. Open the desktop app to find real agents.</span>}
       <button className="btn big" disabled={!settled} onClick={onNext}>Continue <kbd>↵</kbd></button>
     </div>

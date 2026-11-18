@@ -40,6 +40,7 @@ const saved = <T,>(key: string, fallback: T): T => {
   try { const v = localStorage.getItem('lb.' + key); return v ? JSON.parse(v) : fallback } catch { return fallback }
 }
 const keep = (key: string, v: unknown) => { try { localStorage.setItem('lb.' + key, JSON.stringify(v)) } catch {} }
+const steps = (n: number) => `${n} step${n === 1 ? '' : 's'}`
 const calm = () => !document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches
 
 // Native view transitions for every change a person makes. Elements that share a
@@ -254,8 +255,8 @@ export function App() {
   const commands: Command[] = [
     { group: 'Actions', label: 'New room', hint: `${mod}N`, run: () => go({ name: 'new' }) },
     ...rooms.map((r) => ({ group: 'Rooms' as const, label: r.name, hint: r.waiting ? 'needs you' : r.busy ? 'working' : ago(r.updated), run: () => go({ name: 'room', id: r.id }) })),
-    ...skills.map((s) => ({ group: 'Skills' as const, label: s.name, hint: `${s.steps.length} steps`, run: () => go({ name: 'new', skill: s }) })),
-    ...flows.map((f) => ({ group: 'Flows' as const, label: `Run ${f.name}`, hint: `${f.steps.length} steps`, run: async () => { const room = await desk.call('flows:run', f.id); if (room) go({ name: 'room', id: room }) } })),
+    ...skills.map((s) => ({ group: 'Skills' as const, label: s.name, hint: steps(s.steps.length), run: () => go({ name: 'new', skill: s }) })),
+    ...flows.map((f) => ({ group: 'Flows' as const, label: `Run ${f.name}`, hint: steps(f.steps.length), run: async () => { const room = await desk.call('flows:run', f.id); if (room) go({ name: 'room', id: room }) } })),
     { group: 'Go to', label: 'Flows', hint: `${mod}⇧F`, run: () => go({ name: 'flows' }) },
     { group: 'Go to', label: 'Pool', hint: `${mod}⇧P`, run: () => go({ name: 'pool' }) },
     { group: 'Go to', label: 'Savings', hint: 'Prompt cache', run: () => go({ name: 'savings' }) },

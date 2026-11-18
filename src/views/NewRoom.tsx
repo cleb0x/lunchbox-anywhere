@@ -83,6 +83,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
   const [studio, setStudio] = useState(() => { try { return localStorage.getItem('lb.studio') === '1' } catch { return false } })
   const pickStudio = (on: boolean) => { setStudio(on); try { localStorage.setItem('lb.studio', on ? '1' : '0') } catch {} }
   const [starting, setStarting] = useState(false)
+  const made = useRef<{ id: string } | null>(null)
   const current = packs.find((p) => p.id === pack)
   const ideas = current?.ideas ?? ['Review this folder and tell me what to fix first', 'Research a topic with sources', 'Build a small tool and test it']
 
@@ -91,8 +92,10 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
     setStarting(true)
     // If the room can't be made, the person keeps what they wrote and hears why.
     try {
-      const meta = await desk.call('room:create', { crew, workspace, pack, about: text, studio })
+      // A room made by an earlier try whose message failed is used again, not left empty beside a new one.
+      const meta = made.current ?? await desk.call('room:create', { crew, workspace, pack, about: text, studio })
       if (!meta) throw new Error('The room could not be created. Check that the folder can be written to.')
+      made.current = meta
       if (workspace) remember(workspace)
       await desk.call('room:send', meta.id, text, access, arena, files)
       onCreated(meta.id)
@@ -172,7 +175,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
             <span className="label">Your skills</span>
             {skills.slice(0, 4).map((s) => (
               <button key={s.id} onClick={() => useSkill(s)}>
-                <b>{s.name}</b><span>{s.steps.length} steps</span>
+                <b>{s.name}</b><span>{s.steps.length} step{s.steps.length === 1 ? '' : 's'}</span>
               </button>
             ))}
           </div>
@@ -185,7 +188,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
 
 // Folders you picked before, newest first. A convenience kept on this machine only.
 function recents(): string[] {
-  try { return JSON.parse(localStorage.getItem('lb.recentFolders') ?? '[]') } catch { return [] }
+  try { const list = JSON.parse(localStorage.getItem('lb.recentFolders') ?? '[]'); return Array.isArray(list) ? list.filter((f) => typeof f === 'string') : [] } catch { return [] }
 }
 function remember(folder: string) {
   try { localStorage.setItem('lb.recentFolders', JSON.stringify([folder, ...recents().filter((f) => f !== folder)].slice(0, 6))) } catch {}

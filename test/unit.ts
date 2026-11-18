@@ -1727,3 +1727,15 @@ test('flows: a time lost to the clocks changing does not shift the days after', 
   assert.equal(next.getMinutes(), 30)
   assert.equal(next.getDate(), 29)
 })
+
+test('numbers on screen: the unit is chosen after rounding', async () => {
+  ;(globalThis as any).window ??= globalThis
+  const { money, tokens } = await import('../src/lib/desk')
+  assert.equal(tokens(999), '999')
+  assert.equal(tokens(9999), '10k')
+  assert.equal(tokens(999999), '1.0M')
+  assert.equal(tokens(1500), '1.5k')
+  assert.equal(money(0.996), '$1.00')
+  assert.equal(money(0.004), '1¢')
+  assert.equal(money(0), '$0')
+})

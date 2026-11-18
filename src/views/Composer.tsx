@@ -106,7 +106,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
     const checks = packs.find((p) => p.id === pack)?.checks ?? []
     suggestions = [
       ...checks.map((c) => ({ key: c.command, label: c.label, hint: c.command, insert: `!${c.command}` })),
-      ...skills.map((s) => ({ key: s.id, label: s.name, hint: `Skill, ${s.steps.length} steps`, insert: `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}` })),
+      ...skills.map((s) => ({ key: s.id, label: s.name, hint: `Skill, ${s.steps.length} step${s.steps.length === 1 ? '' : 's'}`, insert: `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}` })),
       ...PLAYBOOKS.map((p) => ({ key: `p-${p.id}`, label: p.name, hint: `${p.field} · ${p.line}`, insert: fillPlaybook(p, '') })),
     ].filter((s) => s.label.toLowerCase().includes(q) || s.hint.toLowerCase().includes(q)).slice(0, 8)
   }

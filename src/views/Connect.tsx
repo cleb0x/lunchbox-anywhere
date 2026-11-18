@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useModal } from '../lib/modal'
 import type { Connector } from '../../shared/types'
 import { Loader, Mark } from '../ui/bits'
 import { logoOf } from '../../shared/logos'
 import { IconClose } from '../ui/icons'
-import { desk, now, reload, useApp } from '../lib/desk'
+import { desk, now, reason, reload, useApp } from '../lib/desk'
 
 type Kind = Connector['kind']
 type Preset = Partial<Connector> & { label: string; keyUrl?: string; free?: boolean }
@@ -97,18 +97,26 @@ export function ConnectorSheet({ edit, close, say }: { edit?: Connector; close: 
     return () => removeEventListener('keydown', esc)
   }, [])
 
+  const saving = useRef(false)
   const ready = c.name.trim() && (c.kind === 'cli' ? (c.command ?? '').trim() : /^https?:\/\/.+/.test(c.base ?? ''))
-  const test = async () => { setBusy(true); setCheck(await desk.call('connector:test', c, key, hdrs).catch((e: Error) => ({ ok: false, note: e.message }))); setBusy(false) }
+  const test = async () => { setBusy(true); setCheck(await desk.call('connector:test', c, key, hdrs).catch((e: unknown) => ({ ok: false, note: reason(e) }))); setBusy(false) }
   const save = async () => {
     const taken = new Set((settings.connectors ?? []).map((x) => x.id))
     let id = c.id || `my-${slug(c.name)}`
     for (let n = 2; !c.id && taken.has(id); n++) id = `my-${slug(c.name)}-${n}`
     const next = { ...c, id, name: c.name.trim() }
-    if (key.trim()) await desk.call('keys:set', `conn:${id}`, key.trim())
-    if (hdrsTouched && c.kind !== 'cli') await desk.call('keys:set', `conn:${id}:headers`, hdrs.trim())
-    await reload.settings({ connectors: [...(settings.connectors ?? []).filter((x) => x.id !== id), next] })
-    say(edit ? `${next.name} updated` : `${next.name} added to your agents`)
-    close()
+    if (saving.current) return
+    saving.current = true
+    try {
+      if (key.trim()) await desk.call('keys:set', `conn:${id}`, key.trim())
+      if (hdrsTouched && c.kind !== 'cli') await desk.call('keys:set', `conn:${id}:headers`, hdrs.trim())
+      await reload.settings({ connectors: [...(settings.connectors ?? []).filter((x) => x.id !== id), next] })
+      say(edit ? `${next.name} updated` : `${next.name} added to your agents`)
+      close()
+    } catch (e) {
+      saving.current = false
+      say(reason(e))
+    }
   }
 
   return (

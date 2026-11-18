@@ -134,6 +134,8 @@ function Editor({ initial, go, say }: { initial: Draft; go: (v: View) => void; s
     setBusy(true)
     try {
       const f: Flow = await desk.call('flows:put', { ...d, every: d.every || undefined })
+      // Saved from here on: if the run fails, another try changes this flow and makes no second one.
+      set({ id: f.id })
       if (runNow) {
         const room = await desk.call('flows:run', f.id)
         return go({ name: 'room', id: room })
