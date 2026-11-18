@@ -1671,3 +1671,28 @@ test('browser gate: this computer is never asked about, a site or a search is', 
   assert.equal(siteOf('docs.stripe.com/api'), 'docs.stripe.com')
   assert.equal(siteOf('agent limits this week'), 'a web search')
 })
+
+test('packs: a file from outside is cut down to what a pack is', async () => {
+  const { importPack } = await import('../electron/packs')
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lunchbox-pack-'))
+  const file = path.join(dir, 'in.json')
+  fs.writeFileSync(file, JSON.stringify({ id: 'mine', name: 'N'.repeat(90), brief: 'b', ideas: ['one', 2, 'three'], crew: ['claude', 7], checks: [{ label: 'Test', command: 'npm test', extra: 1 }, { label: 3 }], source: 'builtin', evil: { a: 1 } }))
+  const p = importPack(file, dir)
+  assert.equal(p.name.length, 40)
+  assert.deepEqual(p.ideas, ['one', 'three'])
+  assert.deepEqual(p.crew, ['claude'])
+  assert.deepEqual(p.checks, [{ label: 'Test', command: 'npm test' }])
+  assert.equal(p.source, 'user')
+  assert.ok(!('evil' in JSON.parse(fs.readFileSync(path.join(dir, 'mine.json'), 'utf8'))))
+  fs.rmSync(dir, { recursive: true, force: true })
+})
+
+test('custom themes: text is held readable on the frame as well as the sheet', async () => {
+  const { build, contrast } = await import('../src/lib/custom')
+  const t = build({ name: 'Hidden', base: '#336699', night: { block: '#88aacc', accent: '#ffcc00', text: '#e8e8e8', sheet: '#101418', frame: '#e0e0e0' } })!
+  assert.ok(contrast(t.theme.dark.text!, t.theme.dark.frame!) >= 4.5 || contrast(t.theme.dark.text!, t.theme.dark.sheet!) >= 4.5)
+  const ok = build({ name: 'Fine', base: '#336699', night: { block: '#88aacc', accent: '#ffcc00', text: '#9aa0a6', sheet: '#101418', frame: '#3a3f45' } })!
+  assert.ok(contrast(ok.theme.dark.text!, ok.theme.dark.frame!) >= 4.5, 'text moved until the sidebar reads')
+  assert.ok(contrast(ok.theme.dark.text!, ok.theme.dark.sheet!) >= 4.5)
+})
