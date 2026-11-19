@@ -1,28 +1,31 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { addressed } from '../../shared/address'
 import { sentence } from '../../shared/steps'
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import type { Access, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
+import type { Access, Act, AgentInfo, Block, DecideAction, Event, Flow, Hit, Live, LiveRun, LiveTurn, Pack, RoomMeta, RoomSummary, Skill, Usage, Waiting } from '../../shared/types'
 import { asks, plan } from '../../shared/plan'
 import { classify } from '../../shared/route'
-import { DESIGN_SOURCES, studioChecks } from '../../shared/studio'
+import { clean, tidy } from '../../shared/clean'
+import { DESIGN_SOURCES, DIRECTION, directionGist, spark, studioChecks } from '../../shared/studio'
 import { describe as schedule } from '../../shared/flow'
 import { detect, run, type Result } from '../agents'
 import { plain } from '../agents/parse'
-import type { Hands, Tool, Watch } from '../hands'
+import type { Guard, Hands, Tool, Watch } from '../hands'
 import { rates } from '../../shared/prices'
 import { openaiImage, target } from '../images'
 import { kit, type Host } from './kit'
 import { clearMemory, writeMemory } from './project'
-import { ask, execute, kill, type Ran } from '../shell'
-import { decide } from '../policy'
+import { ask, execute, kill, type Answer, type Ran } from '../shell'
+import { decide, prefix } from '../policy'
+import type { Verdict } from '../../shared/types'
 import type { Bench } from '../agents/bench'
 import type { Snapshots } from '../snap'
 import type { Store } from '../store'
 import { briefing, line, prompt, protocol } from './context'
 import { check, suggest } from './proof'
+import { binsOf, instead, reach, refusals, REFUSED, shims, type Reach } from './reach'
 
 type Hooks = {
   emit(channel: string, payload: unknown): void
@@ -60,6 +63,18 @@ const FLOW_ASK = 15 * 60e3
 const BORROWS = new Set(['claude', 'codex', 'gemini'])
 const WEB = process.env.LUNCHBOX_WEB === '1'
 const LOST_SESSION = /(session|conversation|thread|rollout)[^\n]{0,60}(not found|no such|invalid|expired|unknown|missing|does not exist|could not be (found|loaded|resumed))|no (conversation|session|thread|rollout) found|(could not|cannot|can't|failed to|unable to) (find|load|resume)[^\n]{0,40}(session|conversation|thread|rollout)|--resume|unexpected[^\n]{0,30}(session|resume)/i
+// The site an address for the browser leads to, or nothing for this computer. Words with no
+// address in them are a web search.
+export function siteOf(url: string) {
+  const u = url.trim()
+  if (/^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(u)) return ''
+  if (!/^https?:\/\//i.test(u) && (/\s/.test(u) || !u.includes('.'))) return 'a web search'
+  try {
+    const host = new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname.toLowerCase()
+    return /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)$/.test(host) || host.endsWith('.localhost') ? '' : host
+  } catch { return 'a web search' }
+}
+
 // What "always" remembers for edits in Ask mode, in the place command prefixes are kept.
 const EDITS = '\u0000edits'
 const uid = () => randomUUID().replace(/-/g, '').slice(0, 14)
@@ -106,11 +121,16 @@ export class Engine {
   private listTimer: NodeJS.Timeout | null = null
   private projectTimers = new Map<string, NodeJS.Timeout>()
   private warmth = new Map<string, Warmth>()
+  // A folder of stand-ins for the agents' commands, first on the PATH of every agent a room starts.
+  private front = ''
+  private shimmed = ''
 
   constructor(private store: Store, private hooks: Hooks, private hands?: Hands, private snaps?: Snapshots) {}
 
   async refresh() {
     this.agents = await detect(this.store.keys(), this.store.settings.models, this.store.health)
+    const bins = [...binsOf(this.agents).keys()]
+    if (bins.join() !== this.shimmed) { this.shimmed = bins.join(); this.front = shims(join(this.store.dir, 'shims'), bins) }
     this.hooks.emit('agents', this.agents)
     return this.agents
   }
@@ -307,9 +327,39 @@ export class Engine {
       id: uid(), name: opts.name || 'New room', created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace, pack: opts.pack, flow: opts.flow, studio: opts.studio || undefined, design: opts.studio ? designFiles(opts.workspace) : undefined,
       sessions: {}, seen: {}, heard: {}, blocks: [], saved: { full: 0, sent: 0 },
     }
+    if (opts.studio) Object.assign(meta, this.inspire(meta.id))
     this.store.create(meta)
     this.list()
     return meta
+  }
+
+  // A chat held in an agent's own app, brought in as a room. An agent handed its old session picks
+  // it up there, so it is marked as having heard everything already in the room.
+  adopt(opts: { name: string; crew: string[]; workspace: string; events: Event[]; about: string; session?: { who: string; id: string } }): RoomMeta {
+    const s = opts.session
+    const meta: RoomMeta = {
+      id: uid(), name: opts.name, created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace,
+      sessions: s ? { [s.who]: s.id } : {}, seen: s ? { [s.who]: { imported: 1 } } : {}, heard: s ? { [s.who]: opts.events.length } : {},
+      blocks: [{ id: 'imported', title: 'Imported chat', text: opts.about, v: 1, at: Date.now() }], saved: { full: 0, sent: 0 },
+    }
+    this.store.create(meta, opts.events)
+    this.list()
+    return meta
+  }
+
+  // Expert's starting points for a room: three drawn at random, and the gist of the directions the
+  // last few Expert rooms wrote, so a new room looks somewhere else.
+  private inspire(room: string) {
+    const lately: string[] = []
+    for (const m of this.store.list()) {
+      if (lately.length >= 3) break
+      if (m.id === room || !m.studio) continue
+      try {
+        const gist = directionGist(readFileSync(join(m.workspace, DIRECTION), 'utf8'))
+        if (gist && !lately.includes(gist)) lately.push(gist)
+      } catch { /* that room never wrote a direction */ }
+    }
+    return { sparks: spark(), lately }
   }
 
   // Switching Studio on reads the project's own design files once and keeps the list with the room.
@@ -317,6 +367,7 @@ export class Engine {
     this.store.update(room, (m) => {
       m.studio = on || undefined
       m.design = on ? designFiles(m.workspace) : undefined
+      if (on && !m.sparks) Object.assign(m, this.inspire(room))
     })
     this.hooks.emit('room:meta', this.store.room(room))
   }
@@ -354,7 +405,10 @@ export class Engine {
     this.stop(room)
     this.cool(room)
     try { rmSync(outputs(room), { recursive: true, force: true }) } catch {}
+    const folder = this.store.room(room)?.workspace
     this.store.remove(room)
+    // Checkpoints hold copies of the folder's files; they go with the last room that used it.
+    if (folder && !this.store.list().some((m) => m.workspace === folder)) this.snaps?.drop(folder)
     this.undecided.delete(room)
     this.lives.delete(room)
     this.list()
@@ -487,7 +541,7 @@ export class Engine {
     for (const id of this.quiet.get(room) ?? []) kill(id)
     for (const lt of live.turns) {
       this.flushed.add(lt.id)
-      if (lt.text.trim()) this.add(room, { kind: 'say', who: lt.who, text: lt.text.trim(), acts: lt.acts, error: 'Stopped' })
+      if (lt.text.trim()) this.add(room, { kind: 'say', who: lt.who, text: clean(lt.text).trim(), acts: lt.acts, error: 'Stopped' })
     }
     live.turns = []
     live.doing = ''
@@ -723,7 +777,7 @@ export class Engine {
       canWrite: access === 'workspace' || access === 'full',
       consult: (to, ask) => this.consult(room, me.id, to, ask, access, ctx),
       bring: (to, job, context) => this.bring(room, me.id, to, job, context, access, ctx),
-      image: (prompt, file, size) => this.image(room, me.id, prompt, access, ctx, file, size),
+      image: (prompt, file, size) => this.image(room, me.id, prompt, access, ctx, file, size, crew.some((a) => a.id === 'openai-api')),
       memory: () => this.store.room(room)?.blocks ?? [],
       remember: (title, text) => this.block(room, `note-${uid()}`, title, text, me.id),
       offerFlow: (flow, why) => this.offerFlow(room, me.id, flow, why),
@@ -768,14 +822,15 @@ export class Engine {
     return r.text
   }
 
-  private async image(room: string, from: string, prompt: string, access: Access, ctx: Ctx, file?: string, size?: string) {
+  private async image(room: string, from: string, prompt: string, access: Access, ctx: Ctx, file?: string, size?: string, api = false) {
     const meta = this.store.room(room)
     if (!meta) throw new Error('The room is gone')
     const path = target(meta.workspace, prompt, file)
     const key = this.store.keys().openai
     let by = 'codex'
     let usage: Usage | undefined
-    if (key && !this.why('openai-api')) {
+    // The OpenAI key draws only when it is in the room; otherwise Codex, the crewmate, does.
+    if (api && key && !this.why('openai-api')) {
       by = 'openai-api'
       const live = this.live(room)
       live.doing = `Making an image for ${this.name(from)}`
@@ -792,6 +847,14 @@ export class Engine {
     }
     this.add(room, { kind: 'image', by, for: from, prompt, path, size, usage, ...within(ctx) })
     return `Saved ${relative(meta.workspace, path)}`
+  }
+
+  private outside(room: string, who: string, r: Reach, a: Extract<Act, { t: 'cmd' }>, where: { inside?: { turn: string; mark: number } }) {
+    if (!this.agent(r.id)) return
+    this.add(room, {
+      kind: 'hands', from: who, to: r.id, via: 'cli', ask: (r.ask || a.command).slice(0, 2000), answer: clean(a.out ?? '').trim(), acts: [],
+      ...(a.exit ? { error: `The command ended with exit code ${a.exit}.` } : {}), ...where,
+    })
   }
 
   private keep(room: string, who: string, r: Result) {
@@ -815,6 +878,8 @@ export class Engine {
     const me = this.agent(who)!
     const crew = meta.crew.map((id) => this.agent(id)).filter((a): a is AgentInfo => !!a)
     if (!crew.some((a) => a.id === who)) crew.unshift(me)
+    // Rooms that had Expert on before starting points existed get theirs on their next turn.
+    if (meta.studio && !meta.sparks) this.store.update(room, (m) => Object.assign(m, this.inspire(room)))
     const pack = this.hooks.packs().find((p) => p.id === meta.pack)
     const session = meta.sessions[who]
     // Only the CLIs Lunchbox knows how to resume get a delta; a connector always gets the whole room.
@@ -852,7 +917,7 @@ export class Engine {
     // In the browser version every agent talks over HTTP, so the room's own tools go to them too.
     const borrows = me.via === 'cli' ? BORROWS.has(who) : WEB
     const tools = this.hands && borrows
-      ? [...kit(this.host(room, me, crew, access, inner)), ...(this.hooks.tools?.(who, meta.workspace, access, room) ?? []).filter((t) => meta.studio || !t.name.startsWith('expert_'))]
+      ? [...kit(this.host(room, me, crew, access, inner)), ...this.gated(room, who, access, (this.hooks.tools?.(who, meta.workspace, access, room) ?? []).filter((t) => meta.studio || !t.name.startsWith('expert_')))]
       : []
     const http = me.via !== 'cli'
     // A model behind an API has no file tools of its own, so the room gives it some.
@@ -896,13 +961,39 @@ export class Engine {
       const said = list.map((q) => q.text + (q.files?.length ? `\n\nAttached: ${q.files.join(', ')}` : '')).join('\n\n')
       return `The person sent this while you were working. Take it into account from here, and keep going unless it asks you to stop:\n\n${said}`
     } : undefined
+    // In Auto, Claude Code runs commands without asking anyone. The room's mode is put in front
+    // of each one: inside the folder they run as before, and one that reaches the internet,
+    // leaves the folder or is dangerous waits for a yes in the room, like any other command.
+    // In every mode, a command that would start another agent, or a second copy of this one, is
+    // turned down with the way to reach that agent that shows in the room.
+    const bins = binsOf(this.agents)
+    const nested = (ctx.depth ?? 0) > 0
+    const held = tools.map((t) => t.name)
+    const guard: Guard | undefined = who === 'claude' ? async (command, cwd) => {
+      const r = reach(command, bins)
+      const target = r && this.agent(r.id)
+      if (target) return instead(me, target, { inCrew: meta.crew.includes(target.id), tools: held, nested })
+      if (access !== 'workspace') return null
+      const root = meta.workspace
+      const memory = this.allowed.get(root) ?? new Set<string>()
+      this.allowed.set(root, memory)
+      // Claude reports its real folder, so a workspace reached through a link is resolved too.
+      const real = (p: string) => { try { return realpathSync(p) } catch { return p } }
+      const v = decide(access, command, real(cwd || root), real(root), memory)
+      if (v.decision === 'allow') return null
+      if (v.decision === 'deny') return `Lunchbox did not run this: it ${v.reason}.`
+      const a = await this.permit(room, who, command, v)
+      if (a === 'always') memory.add(prefix(command))
+      return a === 'deny' ? 'The person declined this command. Carry on without it, or ask them what to do instead.' : null
+    } : undefined
     // Granted last, with nothing between it and the turn that could fail and leave it open.
-    const grant = this.hands && (tools.length || watch || (inbox && who === 'claude')) ? this.hands.grant(tools, watch, inbox) : null
+    const grant = this.hands && (tools.length || watch || guard || (inbox && who === 'claude')) ? this.hands.grant(tools, watch, inbox, guard) : null
     const running = run(who, {
       prompt: http ? p.tail : p.text, history: http ? p.history : undefined, cacheKey: `${room}:${who}`, system, fresh: !resumed || meta.protos?.[who] !== sent, cwd: meta.workspace, access,
       model: ctx.models?.[who] || this.store.settings.models[who] || me.model, session: resumed ? session : undefined, meter: resumed && meta.meters?.[who]?.session === session ? meta.meters[who] : undefined, allow: ctx.allow, hands: grant?.url || undefined, bench,
       hook: grant?.hook || undefined, outputs: shorten ? outputs(room) : undefined, effort: this.store.settings.effort?.[who], lean: saving.lean, short,
       inbox: grant?.hook || http ? inbox : undefined, unload: this.store.settings.unload,
+      env: me.via === 'cli' ? refusals(me, this.agents, meta.crew, held, nested) : undefined, front: this.front || undefined,
     }, this.store.keys(), (u) => {
       if (u.delta) lt.text += u.delta
       if (u.acts) {
@@ -914,6 +1005,10 @@ export class Engine {
         for (const a of u.acts) {
           // An edit in between means the agent is fixing, not looping; a pass clears the count.
           if (a.t === 'edit') { fails.clear(); continue }
+          // An agent that got to another one through its own shell anyway: the room shows what
+          // came back, so the person never has only "I checked with Grok" to go on.
+          const r = a.t === 'cmd' && !(a.out ?? '').includes(REFUSED) ? reach(a.command, bins) : null
+          if (r && a.t === 'cmd') this.outside(room, who, r, a, inner.host?.turn === lt.id ? { inside: { turn: lt.id, mark: lt.text.length } } : within(ctx))
           if (a.t !== 'cmd' || a.exit === null) continue
           if (a.exit === 0) { fails.delete(a.command); continue }
           const n = (fails.get(a.command) ?? 0) + 1
@@ -944,6 +1039,9 @@ export class Engine {
     // and the room's queue reports what broke.
     try {
       r = await running.done
+      // Whatever a tool or model leaves in its output that was never meant to be read goes here,
+      // before the reply is shown, stored, remembered or handed to another agent.
+      r = { ...r, text: clean(r.text) }
     } finally {
       grant?.revoke()
       procs.delete(running)
@@ -956,7 +1054,7 @@ export class Engine {
       this.hooks.emit('ledger', this.ledger())
       if (r.session && me.via === 'cli') this.keep(room, who, r)
       this.flushed.delete(lt.id)
-      this.add(room, { kind: 'say', who, text: lt.text.trim(), acts: r.acts.length ? r.acts : lt.acts, usage: r.usage, ms: r.ms })
+      this.add(room, { kind: 'say', who, text: clean(lt.text).trim(), acts: r.acts.length ? r.acts : lt.acts, usage: r.usage, ms: r.ms })
       const other = this.fallback(meta, who)
       this.add(room, {
         kind: 'decide',
@@ -1002,7 +1100,7 @@ export class Engine {
     const stopped = (this.gens.get(room) ?? 0) !== ctx.gen || r.error === 'Stopped'
     if (stopped) {
       const already = this.flushed.delete(lt.id)
-      if (lt.text.trim() && !already) this.add(room, { kind: 'say', who, text: lt.text.trim(), acts: r.acts, error: 'Stopped' })
+      if (lt.text.trim() && !already) this.add(room, { kind: 'say', who, text: clean(lt.text).trim(), acts: r.acts, error: 'Stopped' })
       return null
     }
     if (r.session && me.via === 'cli') this.keep(room, who, r)
@@ -1152,19 +1250,57 @@ export class Engine {
       },
       confirm: async (what) => {
         if (memory.has(EDITS)) return true
-        const live = this.live(room)
-        const lr: LiveRun = { id: uid(), who, command: what, cwd: root, state: 'asking', edit: true, out: '', started: Date.now(), verdict: { kind: 'write', decision: 'ask', reason: 'changes a file in the folder' } }
-        live.runs.push(lr)
-        this.hooks.notify(meta.name, `Allow ${this.name(who)} to ${what[0].toLowerCase()}${what.slice(1)}?`, room)
-        if (meta.flow) setTimeout(() => { if (live.runs.includes(lr)) kill(lr.id) }, FLOW_ASK).unref()
-        this.changed(room)
-        const a = await ask(lr.id)
-        live.runs = live.runs.filter((x) => x !== lr)
-        this.changed(room)
+        const a = await this.permit(room, who, what, { kind: 'write', decision: 'ask', reason: 'changes a file in the folder' }, true)
         if (a === 'always') memory.add(EDITS)
         return a !== 'deny'
       },
     }
+  }
+
+  // A question for the person about something an agent is about to do by itself: a command of
+  // its own, an edit, a connected tool. It shows in the room like a command waiting for a yes.
+  private async permit(room: string, who: string, what: string, verdict: Verdict, edit = false, asks?: LiveRun['asks']): Promise<Answer> {
+    const meta = this.store.room(room)!
+    const live = this.live(room)
+    const lr: LiveRun = { id: uid(), who, command: what, cwd: meta.workspace, state: 'asking', edit: edit || undefined, asks, out: '', started: Date.now(), verdict }
+    live.runs.push(lr)
+    this.hooks.notify(meta.name, edit ? `Allow ${this.name(who)} to ${what[0].toLowerCase()}${what.slice(1)}?` : `Allow \`${what}\`?`, room)
+    // A flow often runs with nobody at the computer: the question counts as a no after a while.
+    if (meta.flow) setTimeout(() => { if (live.runs.includes(lr)) kill(lr.id) }, FLOW_ASK).unref()
+    this.changed(room)
+    const a = await ask(lr.id)
+    live.runs = live.runs.filter((x) => x !== lr)
+    this.changed(room)
+    return a
+  }
+
+  // Tools from outside the room, held to its mode. In Ask, a connected tool can write anywhere,
+  // so each one waits for a yes the first time. In Auto, the browser opens a site outside this
+  // computer only after a yes for that site, or for every site with Always.
+  private gated(room: string, who: string, access: Access, tools: Tool[]): Tool[] {
+    if (access !== 'ask' && access !== 'workspace') return tools
+    const meta = this.store.room(room)!
+    const memory = this.allowed.get(meta.workspace) ?? new Set<string>()
+    this.allowed.set(meta.workspace, memory)
+    const yes = async (key: string, all: string, what: string, verdict: Verdict, asks: LiveRun['asks']) => {
+      if (memory.has(key) || memory.has(all)) return
+      const a = await this.permit(room, who, what, verdict, true, asks)
+      if (a === 'deny') throw new Error('The person declined this. Carry on without it, or ask them what to do instead.')
+      memory.add(a === 'always' ? all : key)
+    }
+    return tools.map((t) => {
+      if (access === 'ask') return { ...t, run: async (args) => { await yes(`\u0000tool:${t.name}`, '\u0000tools', `Use the tool ${t.name.replace(/_/g, ' ')}`, { kind: 'outside', decision: 'ask', reason: 'uses a tool you connected, which can reach outside the folder' }, { text: 'Ask mode checks with you before a tool you connected is used. Allow this one?', always: 'Allow every connected tool here' }); return t.run(args) } }
+      if (t.name !== 'browser_open') return t
+      return { ...t, run: async (args) => {
+        // In the browser version agents open pages from the room's folder by path, as the desktop
+        // app opens localhost: those are not a site on the internet.
+        const u = String(args.url ?? '').trim()
+        if (WEB && (/^(file:\/\/|\/|\.\.?\/)/.test(u) || existsSync(join(meta.workspace, u)))) return t.run(args)
+        const host = siteOf(u)
+        if (host) await yes(`\u0000site:${host}`, '\u0000sites', `Open ${host} in the browser`, { kind: 'network', decision: 'ask', reason: 'opens a site on the internet' }, { text: 'Auto asks the first time the browser opens a site outside this computer. Allow this one?', always: 'Allow every site here' })
+        return t.run(args)
+      } }
+    })
   }
 
   shell(room: string, who: string, command: string, access: Access): Promise<Ran> {
@@ -1186,12 +1322,14 @@ export class Engine {
         this.changed(room)
       },
       start: () => { lr.state = 'running'; this.changed(room) },
-      out: (t) => { lr.out = (lr.out + t).slice(-20000); this.changed(room) },
+      out: (t) => { lr.raw = ((lr.raw ?? '') + t).slice(-20000); lr.out = tidy(lr.raw); this.changed(room) },
     }).then((ran) => {
-      live.runs = live.runs.filter((x) => x !== lr)
-      this.add(room, { kind: 'run', who, command, cwd: meta.workspace, verdict: ran.verdict, code: ran.code, ms: ran.ms, out: ran.out.slice(-6000), how: ran.how })
-      this.changed(room)
+      this.add(room, { kind: 'run', who, command, cwd: meta.workspace, verdict: ran.verdict, code: ran.code, ms: ran.ms, out: tidy(ran.out).slice(-6000), how: ran.how })
       return ran
+    }).finally(() => {
+      // Also when the command could not be judged or started, or the room would stay busy.
+      live.runs = live.runs.filter((x) => x !== lr)
+      this.changed(room)
     })
   }
 

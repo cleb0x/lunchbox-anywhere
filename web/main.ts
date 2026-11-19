@@ -153,7 +153,14 @@ const handlers = new Map<string, (...args: any[]) => unknown>()
 function wire() {
   const h = (channel: string, fn: (...args: any[]) => unknown) => handlers.set(channel, fn)
 
-  h('env', () => ({ home: app.getPath('home'), platform: 'linux', version: app.getVersion(), cwd: workspace(), data: store.dir }))
+  h('env', () => ({ home: app.getPath('home'), platform: 'linux', version: app.getVersion(), cwd: workspace(), data: store.dir, window: 1 }))
+  // On its own, the site keeps everything in this tab's storage, and a second tab would write over
+  // it. So a new window opens the room here instead; connected to a computer, tabs are windows.
+  h('window:new', (room?: string) => { if (typeof room === 'string' && store.room(room)) emit('open-room', room) })
+  h('window:view', () => {})
+  // Chats from the agents' own apps live on a computer; a browser tab has none to bring in.
+  h('import:list', () => [])
+  h('import:take', () => { throw new Error('Importing chats works when the website is connected to your computer or Cloud Shell.') })
   h('agents', () => engine.agents)
   h('agents:refresh', () => { resetPath(); return engine.refresh() })
   h('limits', () => limits.get())
@@ -289,6 +296,7 @@ function wire() {
     if (patch.autoUpdate !== undefined) updates?.setAuto(patch.autoUpdate)
     if (patch.models || patch.disabled || patch.connectors || patch.endpoints) await engine.refresh()
     if (patch.budgets) emit('ledger', engine.ledger())
+    emit('settings', store.settings)
     return store.settings
   })
   h('spent:clear', (id: string) => { delete store.spent[id]; store.saveState(); emit('ledger', engine.ledger()) })
@@ -315,10 +323,12 @@ function wire() {
     if (!f) return null
     const path = takeIn(f, '/tmp/imports')
     await settled()
-    return importPack(path, join(store.dir, 'packs'))
+    const pack = importPack(path, join(store.dir, 'packs'))
+    emit('packs', packs())
+    return pack
   })
-  h('packs:link', (url: string) => fetchPack(url, join(store.dir, 'packs')))
-  h('packs:remove', (id: string) => removePack(id, join(store.dir, 'packs')))
+  h('packs:link', async (url: string) => { const pack = await fetchPack(url, join(store.dir, 'packs')); emit('packs', packs()); return pack })
+  h('packs:remove', (id: string) => { const r = removePack(id, join(store.dir, 'packs')); emit('packs', packs()); return r })
   h('packs:export', (id: string) => {
     const p = packs().find((x) => x.id === id)
     return p ? saveAs('Share a pack', `${p.id}.json`, 'json', packJson(p)) : null

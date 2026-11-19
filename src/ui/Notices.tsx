@@ -56,8 +56,8 @@ export function Notices() {
   const showUpdate = !!ready1 && !card && clear
   useModal(showUpdate || !!card)
   useEffect(() => {
-    if (!showUpdate) return
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') closeCard() }
+    if (!showUpdate && !card) return
+    const esc = (e: KeyboardEvent) => { if (e.key !== 'Escape') return; if (card) dismiss(card.id); else closeCard() }
     addEventListener('keydown', esc)
     return () => removeEventListener('keydown', esc)
   })

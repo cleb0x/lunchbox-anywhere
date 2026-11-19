@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, statSync, writeFile, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, nativeTheme, Notification, safeStorage, shell } from 'electron'
-import type { Access, Connector, Flow, Report, Settings, Skill } from '../shared/types'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, shell, type Rectangle } from 'electron'
+import type { Access, ChatSource, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from './count'
 import { installed, modelsFor, testConnector, useConnectors } from './agents'
 import { setBase } from './agents/http'
@@ -23,13 +23,27 @@ import { Toolbox } from './tools'
 import { Store, type Cipher } from './store'
 import { cancelPull, pull, start } from './local'
 import { Limits } from './limits'
+import { allowed, claudeDir, found, read, resumes, room as roomFrom } from './import'
 
 app.setName('Lunchbox')
+// Electron exposes FedCM but has no browser side for it, so "Continue with Google" buttons fail
+// without a word. With it off, Google falls back to its sign-in popup, which the browser opens.
+app.commandLine.appendSwitch('disable-blink-features', 'FedCm')
 
 const mac = process.platform === 'darwin'
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
-let win: BrowserWindow | null = null
-const emit = (channel: string, value: unknown) => win?.webContents.send(channel, value)
+// One process holds every room, so one app runs as many windows as the person wants. What the
+// main process sends goes to all of them: two windows on the same room show the same thing.
+const wins = new Set<BrowserWindow>()
+let last: BrowserWindow | null = null
+// The window in front, or the one that was.
+const front = () => (last && !last.isDestroyed() ? last : [...wins].at(-1) ?? null)
+const anyFocused = () => [...wins].some((w) => w.isFocused())
+const emit = (channel: string, value: unknown) => { for (const w of wins) if (!w.isDestroyed()) w.webContents.send(channel, value) }
+// The room each window has open, so a notification can bring up the window already on it.
+const showing = new Map<BrowserWindow, string>()
+// The window the browser's pages are drawn in: the last one that opened the Browser page.
+let webHost: BrowserWindow | null = null
 
 // Keys are sealed with the OS keychain where there is one. Some Linux desktops have none, and
 // there the key is only encoded, which the Settings page says out loud.
@@ -52,6 +66,7 @@ const name = (id: string) => engine.agents.find((a) => a.id === id)?.short ?? id
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'room'
 
 async function saveAs(title: string, file: string, ext: string, contents: string | Buffer) {
+  const win = front()
   if (!win) return null
   const r = await dialog.showSaveDialog(win, { title, defaultPath: join(app.getPath('downloads'), file), filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
   if (r.canceled || !r.filePath) return null
@@ -64,6 +79,8 @@ function defaults() {
   const preferred = store.settings.defaultCrew.filter((id) => ready.includes(id))
   return { crew: preferred.length ? preferred : ready.slice(0, 3), workspace: workspace() }
 }
+// Where the agents keep their own chats. Tests point this at a folder of made-up sessions.
+const chatHome = () => process.env.LB_IMPORT_HOME || homedir()
 const workspace = () => process.env.LB_WORKSPACE || join(app.getPath('documents'), 'Lunchbox')
 
 // A room without a chosen folder gets its own, named after what it is for:
@@ -83,15 +100,53 @@ function useEndpoints() {
   for (const id of ['ollama', 'lmstudio', 'llamacpp']) setBase(id, typed[id] || (id === 'ollama' ? process.env.OLLAMA_HOST : '') || '')
 }
 
-function createWindow() {
+// Where the last window was, so the next launch opens in the same place. Only where a screen
+// still is: a display that was unplugged would leave the window out of reach.
+const boundsFile = () => join(app.getPath('userData'), 'window.json')
+function remembered(): { bounds?: Rectangle; maximized?: boolean } {
+  try {
+    const b = JSON.parse(readFileSync(boundsFile(), 'utf8'))
+    if (![b.x, b.y, b.width, b.height].every((n) => Number.isFinite(n)) || b.width < 400 || b.height < 300) return {}
+    const area = screen.getDisplayMatching(b).workArea
+    const seen = Math.min(b.x + b.width, area.x + area.width) - Math.max(b.x, area.x) >= 120 && b.y >= area.y - 10 && b.y < area.y + area.height - 60
+    return seen ? { bounds: { x: b.x, y: b.y, width: b.width, height: b.height }, maximized: !!b.maximized } : {}
+  } catch {
+    return {}
+  }
+}
+let boundsTimer: NodeJS.Timeout | null = null
+function remember(w: BrowserWindow) {
+  if (boundsTimer) clearTimeout(boundsTimer)
+  boundsTimer = setTimeout(() => {
+    boundsTimer = null
+    if (w.isDestroyed() || w.isMinimized() || w.isFullScreen()) return
+    writeFile(boundsFile(), JSON.stringify({ ...w.getNormalBounds(), maximized: w.isMaximized() }), () => {})
+  }, 400)
+}
+
+// The first window opens where the last one was. One more opens a step down and to the right of
+// the window in front, at its size, so it never lands exactly on top of it.
+function spot(): { bounds: Partial<Rectangle>; maximized?: boolean } {
+  const near = front()
+  if (!near) {
+    const r = remembered()
+    return { bounds: r.bounds ?? { width: 1440, height: 900 }, maximized: r.maximized }
+  }
+  const b = near.getNormalBounds()
+  const area = screen.getDisplayMatching(b).workArea
+  const fits = b.x + 28 + b.width <= area.x + area.width && b.y + 28 + b.height <= area.y + area.height
+  return { bounds: { x: fits ? b.x + 28 : area.x + 28, y: fits ? b.y + 28 : area.y + 28, width: b.width, height: b.height } }
+}
+
+function createWindow(room?: string) {
   const dark = nativeTheme.shouldUseDarkColors
-  win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+  const at = spot()
+  const win = new BrowserWindow({
+    ...at.bounds,
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: dark ? '#080807' : '#f4f3ef',
+    backgroundColor: dark ? '#080807' : '#efeee9',
     // Windows draws its own buttons into the header, as tall as the room header so they sit level
     // with it. Linux keeps the desktop's own title bar: each desktop draws overlay buttons in its
     // own size and style, and they never line up.
@@ -102,40 +157,96 @@ function createWindow() {
     ...(mac ? {} : { icon: join(__dirname, '../build/icon-1024.png') }),
     webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false },
   })
-  win.once('ready-to-show', () => win?.show())
+  wins.add(win)
+  last = win
+  if (at.maximized) win.maximize()
+  win.once('ready-to-show', () => win.show())
+  win.on('focus', () => { last = win })
+  for (const e of ['resize', 'move', 'maximize', 'unmaximize'] as const) win.on(e as 'resize', () => remember(win))
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url)
     return { action: 'deny' }
   })
   win.webContents.on('will-navigate', (e) => { if (!process.env.VITE_URL) e.preventDefault() })
-  if (process.env.VITE_URL) win.loadURL(process.env.VITE_URL)
-  else win.loadFile(join(__dirname, 'renderer/index.html'))
-  // The agent browser's pages live in this window, so they go with it.
-  win.on('closed', () => { win = null; browser?.destroy() })
+  // A window opened on a room starts in it; any other starts at home.
+  if (process.env.VITE_URL) win.loadURL(room ? `${process.env.VITE_URL}?room=${encodeURIComponent(room)}` : process.env.VITE_URL)
+  else win.loadFile(join(__dirname, 'renderer/index.html'), room ? { query: { room } } : undefined)
+  win.on('closed', () => {
+    wins.delete(win)
+    showing.delete(win)
+    if (last === win) last = null
+    if (webHost === win) webHost = null
+    // The browser's pages move to a window that is still open. With none left they close, as
+    // there is nothing to draw them in.
+    if (wins.size) browser?.rehome(win)
+    else browser?.destroy()
+  })
+  return win
+}
+
+function raise(w: BrowserWindow) {
+  if (w.isMinimized()) w.restore()
+  w.show()
+  w.focus()
+}
+
+// The menu's shortcut and the window's own key handler can both ask for the same new window.
+let opened = 0
+function newWindow(room?: string) {
+  if (Date.now() - opened < 400) return
+  opened = Date.now()
+  createWindow(room)
+}
+
+function menus() {
+  const fresh = { label: 'New Window', accelerator: 'CmdOrCtrl+Shift+N', click: () => newWindow() }
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(mac ? [{ role: 'appMenu' as const }] : []),
+    { label: 'File', submenu: [fresh, { type: 'separator' as const }, { role: mac ? 'close' as const : 'quit' as const }] },
+    { role: 'editMenu' as const },
+    { role: 'viewMenu' as const },
+    { role: 'windowMenu' as const },
+  ]))
+  if (mac) app.dock?.setMenu(Menu.buildFromTemplate([{ label: 'New Window', click: () => newWindow() }]))
 }
 
 function notify(title: string, body: string, room: string) {
   const fromPhone = store.events(room).findLast((e) => e.kind === 'you')
-  if (!win?.isFocused() || (fromPhone?.kind === 'you' && fromPhone.from === 'phone')) remote?.forward(room, body)
-  if (!store.settings.notify || !Notification.isSupported() || win?.isFocused()) return
+  if (!anyFocused() || (fromPhone?.kind === 'you' && fromPhone.from === 'phone')) remote?.forward(room, body)
+  if (!store.settings.notify || !Notification.isSupported() || anyFocused()) return
   const n = new Notification({ title, body, silent: body === 'Done' })
   n.on('click', () => {
-    if (!win) createWindow()
-    win?.show()
-    win?.focus()
-    emit('open-room', room)
+    // The window already on that room comes forward. Otherwise the one in front goes to it.
+    const on = [...showing].find(([w, r]) => r === room && !w.isDestroyed())?.[0]
+    const w = on ?? front() ?? createWindow(room)
+    raise(w)
+    if (!on) w.webContents.send('open-room', room)
   })
   n.show()
 }
 
-function wire() {
-  // Only the app's own window may call in, never a page inside the agent browser or a frame.
-  const h = (channel: string, fn: (...args: any[]) => unknown) => ipcMain.handle(channel, (e, ...args) => {
-    if (e.sender !== win?.webContents || e.senderFrame !== e.sender.mainFrame) throw new Error('Not allowed')
-    return fn(...args)
-  })
+// Two windows on one room each have a message box. The same text for the same room, from two
+// windows in the same moment, is one message.
+let lately: { room: string; text: string; from: BrowserWindow; at: number } | null = null
+function twice(room: string, text: string, from: BrowserWindow) {
+  const same = !!lately && lately.room === room && lately.text === text && lately.from !== from && Date.now() - lately.at < 1500
+  if (!same) lately = { room, text, from, at: Date.now() }
+  return same
+}
 
-  h('env', () => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir }))
+function wire() {
+  // Only the app's own windows may call in, never a page inside the agent browser, a sign in
+  // window it opened, or a frame. hw hands the handler the window that asked.
+  const hw = (channel: string, fn: (from: BrowserWindow, ...args: any[]) => unknown) => ipcMain.handle(channel, (e, ...args) => {
+    const from = [...wins].find((w) => !w.isDestroyed() && w.webContents === e.sender)
+    if (!from || e.senderFrame !== e.sender.mainFrame) throw new Error('Not allowed')
+    return fn(from, ...args)
+  })
+  const h = (channel: string, fn: (...args: any[]) => unknown) => hw(channel, (_from, ...args) => fn(...args))
+
+  hw('env', (from) => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, window: from.webContents.id }))
+  hw('window:new', (_from, room?: string) => { newWindow(typeof room === 'string' && store.room(room) ? room : undefined) })
+  hw('window:view', (from, room: string | null) => { if (typeof room === 'string') showing.set(from, room); else showing.delete(from) })
   h('agents', () => engine.agents)
   h('agents:refresh', () => { resetPath(); return engine.refresh() })
   h('limits', () => limits.get())
@@ -163,11 +274,32 @@ function wire() {
   h('room:rename', (id: string, name: string) => engine.rename(id, name))
   h('room:mark', (id: string, patch: { pinned?: boolean; archived?: boolean }) => { if (patch.archived) browser.closeRoom(id); return engine.mark(id, patch) })
   h('inbox', () => engine.inbox())
+  // Chats from the agents' own apps. A session a room already continues is left off the list.
+  h('import:list', () => {
+    const taken = new Set(store.list().flatMap((m) => Object.values(m.sessions)))
+    return found(chatHome(), 150, (id) => taken.has(id))
+  })
+  h('import:take', async (agent: ChatSource, file: string) => {
+    if (!['claude', 'codex', 'gemini', 'grok'].includes(agent) || typeof file !== 'string' || !allowed(file, agent, chatHome())) throw new Error('That chat is no longer there')
+    const chat = await read(agent, file, chatHome())
+    if (!chat.turns.some((t) => t.you)) throw new Error('That chat has no messages to bring in')
+    const there = !!chat.folder && existsSync(chat.folder) && statSync(chat.folder).isDirectory()
+    const ready = !engine.why(agent)
+    // Claude Code looks a session up under the folder it was started in, so it can only be
+    // picked up from there.
+    const findable = agent !== 'claude' || basename(dirname(file)) === claudeDir(chat.folder)
+    const resumed = there && ready && resumes(agent) && !!chat.id && findable
+    const made = roomFrom(chat, { resumed, folderGone: !there, ready })
+    const crew = ready ? [agent] : defaults().crew.length ? defaults().crew : [agent]
+    const workspace = there ? chat.folder : roomFolder(made.name)
+    mkdirSync(workspace, { recursive: true })
+    return engine.adopt({ name: made.name, crew, workspace, events: made.events, about: made.about, session: resumed ? { who: agent, id: chat.id } : undefined })
+  })
   h('room:remove', (id: string) => { browser.closeRoom(id); return engine.remove(id) })
   h('room:fork', (id: string, at: string) => engine.fork(id, at))
   h('room:crew', (id: string, crew: string[]) => engine.setCrew(id, crew))
   h('room:workspace', (id: string, path: string) => engine.setWorkspace(id, path))
-  h('room:send', (id: string, text: string, access: Access, arena: boolean, files?: string[]) => { engine.send(id, text, access, { arena, files: files?.length ? into(id, files) : files }) })
+  hw('room:send', (from, id: string, text: string, access: Access, arena: boolean, files?: string[]) => { if (!twice(id, text, from)) engine.send(id, text, access, { arena, files: files?.length ? into(id, files) : files }) })
   h('room:project', (id: string, on: boolean) => engine.setProject(id, on))
   h('room:rewind', (id: string, target: { event?: string; ref?: string }) => engine.rewind(id, target))
   h('room:changed', (id: string, event: string) => engine.changedSince(id, event))
@@ -188,17 +320,16 @@ function wire() {
       ? saveAs('Export as Markdown', `${slug(meta.name)}.md`, 'md', markdown(meta, events, name))
       : saveAs('Share as a replay', `${slug(meta.name)}.html`, 'html', replay(meta, events, name)).then((file) => { if (file) shell.showItemInFolder(file); return file })
   })
-  h('save:png', (dataUrl: string, file: string) => {
+  hw('save:png', (win, dataUrl: string, file: string) => {
     const m = dataUrl.match(/^data:image\/png;base64,(.+)$/)
-    if (!m || !win) return null
+    if (!m) return null
     return dialog.showSaveDialog(win, { title: 'Save image', defaultPath: join(app.getPath('downloads'), file), filters: [{ name: 'PNG', extensions: ['png'] }] }).then((r) => {
       if (r.canceled || !r.filePath) return null
       writeFileSync(r.filePath, Buffer.from(m[1], 'base64'))
       return r.filePath
     })
   })
-  h('attach', async () => {
-    if (!win) return []
+  hw('attach', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Attach files', properties: ['openFile', 'multiSelections'] })
     return r.canceled ? [] : r.filePaths
   })
@@ -217,7 +348,13 @@ function wire() {
   h('flows:toggle', (id: string, on: boolean) => flows.toggle(id, on))
   h('flows:run', (id: string) => flows.run(id).room)
   h('browser', () => browser.state())
-  h('browser:place', (b: { x: number; y: number; width: number; height: number } | null) => browser.place(b))
+  // The pages are drawn in the window that asked last. A window that is not showing them cannot
+  // take them off the one that is.
+  hw('browser:place', (from, b: { x: number; y: number; width: number; height: number } | null) => {
+    if (b) webHost = from
+    else if (webHost && webHost !== from) return
+    browser.place(b)
+  })
   h('browser:open', (url: string) => browser.open(String(url)))
   h('browser:select', (id: string) => browser.select(String(id)))
   h('browser:close', (id: string) => browser.close(String(id)))
@@ -280,6 +417,7 @@ function wire() {
     if (patch.autoUpdate !== undefined) updates?.setAuto(patch.autoUpdate)
     if (patch.models || patch.disabled || patch.connectors || patch.endpoints) await engine.refresh()
     if (patch.budgets) emit('ledger', engine.ledger())
+    emit('settings', store.settings)
     return store.settings
   })
   h('spent:clear', (id: string) => { delete store.spent[id]; store.saveState(); emit('ledger', engine.ledger()) })
@@ -302,14 +440,15 @@ function wire() {
   // An installer may have just added its folder to the shell profile, so the PATH is read again.
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
   h('packs', () => packs())
-  h('packs:import', async () => {
-    if (!win) return null
+  hw('packs:import', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Import a pack', filters: [{ name: 'Lunchbox pack', extensions: ['json'] }], properties: ['openFile'] })
     if (r.canceled) return null
-    return importPack(r.filePaths[0], join(store.dir, 'packs'))
+    const pack = importPack(r.filePaths[0], join(store.dir, 'packs'))
+    emit('packs', packs())
+    return pack
   })
-  h('packs:link', (url: string) => fetchPack(url, join(store.dir, 'packs')))
-  h('packs:remove', (id: string) => removePack(id, join(store.dir, 'packs')))
+  h('packs:link', async (url: string) => { const pack = await fetchPack(url, join(store.dir, 'packs')); emit('packs', packs()); return pack })
+  h('packs:remove', (id: string) => { const r = removePack(id, join(store.dir, 'packs')); emit('packs', packs()); return r })
   h('packs:export', (id: string) => {
     const p = packs().find((x) => x.id === id)
     return p ? saveAs('Share a pack', `${p.id}.json`, 'json', packJson(p)) : null
@@ -318,8 +457,7 @@ function wire() {
     const s = store.skills.find((x) => x.id === id)
     return s ? saveAs('Share a skill', `${slug(s.name)}.skill.json`, 'json', JSON.stringify({ kind: 'lunchbox-skill', ...s, from: undefined }, null, 2)) : null
   })
-  h('skills:import', async () => {
-    if (!win) return null
+  hw('skills:import', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Import a skill', filters: [{ name: 'Lunchbox skill', extensions: ['json'] }], properties: ['openFile'] })
     if (r.canceled) return null
     const s = JSON.parse(readFileSync(r.filePaths[0], 'utf8')) as Partial<Skill>
@@ -338,8 +476,7 @@ function wire() {
     return store.skills
   })
   h('search', (q: string) => engine.search(q))
-  h('pick', async () => {
-    if (!win) return null
+  hw('pick', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Choose a folder', properties: ['openDirectory', 'createDirectory'] })
     return r.canceled ? null : r.filePaths[0]
   })
@@ -347,7 +484,10 @@ function wire() {
   // path can come from an agent's message, and opening a program or a script would run it.
   h('reveal', (path: string) => {
     if (typeof path !== 'string' || !existsSync(path)) return 'missing'
-    if (statSync(path).isDirectory() || IMAGE_TYPES[extname(path).toLowerCase()]) return shell.openPath(path)
+    // A link is shown, never followed, and an app is a folder that would start if it were opened.
+    const s = lstatSync(path)
+    const app = /\.(app|appex|bundle|framework|kext|plugin|prefpane|saver|workflow|action|command|tool)$/i.test(path.replace(/[\\/]+$/, ''))
+    if (!s.isSymbolicLink() && !app && (s.isDirectory() || IMAGE_TYPES[extname(path).toLowerCase()])) return shell.openPath(path)
     shell.showItemInFolder(path)
     return ''
   })
@@ -357,7 +497,7 @@ function wire() {
     return `data:${type};base64,${readFileSync(path).toString('base64')}`
   })
   h('theme', (dark: boolean) => {
-    if (process.platform === 'win32' && win) win.setTitleBarOverlay({ color: '#00000000', symbolColor: dark ? '#f2f0ea' : '#0d0d0c', height: 52 })
+    if (process.platform === 'win32') for (const w of wins) w.setTitleBarOverlay({ color: '#00000000', symbolColor: dark ? '#f2f0ea' : '#0d0d0c', height: 52 })
   })
 }
 
@@ -387,13 +527,27 @@ function into(room: string, files: string[]) {
   })
 }
 
+// One Lunchbox per profile: two would write the same rooms and settings over each other. The one
+// that is running does the work of a second: on a Mac a second launch can only be asked for on
+// purpose (open -n), so it gets a window of its own. Elsewhere a second launch is what clicking
+// the icon again does, so it brings the window forward, unless it was started with --new-window.
+const first = app.requestSingleInstanceLock()
+if (!first) app.quit()
+app.on('second-instance', (_e, argv) => {
+  if (!store) return
+  const w = front()
+  if (!w || mac || argv.includes('--new-window')) return void raise(createWindow())
+  raise(w)
+})
+
 app.whenReady().then(async () => {
+  if (!first) return
   // The Lunchbox folder exists from the first launch, so the first room has somewhere to go.
   try { mkdirSync(workspace(), { recursive: true }) } catch {}
   store = new Store(join(app.getPath('userData'), 'data'), cipher)
   const hands = new Hands()
   await hands.start().catch(() => {})
-  browser = new Browser(() => win, emit)
+  browser = new Browser(() => (webHost && !webHost.isDestroyed() ? webHost : front()), emit)
   toolbox = new Toolbox(store, emit)
   const tools = (who: string, folder: string, access: Access, room: string) => [
     // The browser reaches the internet and signed in pages, so it waits for Auto or Full; Plan
@@ -412,6 +566,7 @@ app.whenReady().then(async () => {
   if (mac && existsSync(icon)) app.dock?.setIcon(icon)
   useConnectors(store.settings.connectors)
   useEndpoints()
+  menus()
   createWindow()
   updates = new Updates(store, emit)
   updates.start()
@@ -426,4 +581,4 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => { engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush() })
 app.on('will-quit', finishStops)
 app.on('window-all-closed', () => { if (!mac) app.quit() })
-app.on('activate', () => { if (!win) createWindow() })
+app.on('activate', () => { if (!wins.size && store) createWindow() })

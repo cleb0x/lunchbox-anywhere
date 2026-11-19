@@ -172,6 +172,9 @@ const HERE: Record<string, (...a: any[]) => unknown> = {
   'packs:import': async () => { const [f] = await choose({ accept: '.json,application/json' }); if (!f) return null; const p = upload(f); await Promise.all([...uploads]); return raw('packs:import:file', [p]) },
   'skills:import': async () => { const [f] = await choose({ accept: '.json,application/json' }); if (!f) return null; const p = upload(f); await Promise.all([...uploads]); return raw('skills:import:file', [p]) },
   'clipboard:key': async (provider: string) => { const t = (await navigator.clipboard.readText().catch(() => '')).trim(); return KEYS[provider]?.test(t) ? t : '' },
+  // A new window is a new tab on the same Lunchbox. Opened this way the tab gets this one's
+  // session storage, so it connects to the same computer straight away.
+  'window:new': (room?: string) => { window.open(`${location.pathname}${typeof room === 'string' ? `?room=${encodeURIComponent(room)}` : ''}`, '_blank'); return null },
   'image:copy': async (data: string) => { const blob = await (await fetch(data)).blob(); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); return true },
 }
 

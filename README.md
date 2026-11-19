@@ -23,6 +23,17 @@ files there, from any browser.
 Lunchbox is made by Noah ([@fsconfig](https://x.com/fsconfig)). This is a fork, made with his
 permission. His original README is in [docs/original-README.md](docs/original-README.md).
 
+**Up to date with Lunchbox 0.1.7.** That brings themes (made by hand or by an agent), Find in a
+room (Ctrl+F), quoting part of a message (Q), copy buttons on code, coloured code, drafts and
+message history kept per room, importing chats from Claude Code, Codex, Gemini CLI and Grok,
+several windows, and many fixes. How they work here:
+
+- **Import a chat** works when the website is connected to your computer or Cloud Shell, where
+  the agents keep their chats. On a computer that has your Claude Code history, those chats show up.
+- **New window** opens a new browser tab on the same Lunchbox when connected. On its own, the
+  website stays in one tab, because two tabs there would write over each other.
+- Everything else works the same in all three ways of using it.
+
 ## Three ways to use it
 
 The website picks for you: your computer at home if it is running, otherwise your Cloud Shell, and
@@ -131,6 +142,14 @@ the ready-made build the launchers download, on every push to `main`.
 | API keys the desktop app saved are locked with the PC's keychain | Enter them again on the website; Claude Code and the other command line agents don't need them |
 | The desktop app and the website use the same rooms on the PC | Only one can run at a time; the launcher says so |
 | Some providers (NVIDIA) block requests from websites | Use them through OpenRouter, or from your PC |
+| Lunchbox 0.1.7 asks before the agents' browser opens a new site, and in the browser version agents open pages by file name, which looked like a site | Files in the room's folder count as local, as `localhost` does on the desktop, so only real sites are asked about |
+
+## Keeping it up to date with Lunchbox
+
+New versions of Lunchbox are merged into this fork from [noah-thing/lunchbox](https://github.com/noah-thing/lunchbox).
+The screens in `src/` come over unchanged. New things the desktop app's main process answers are
+added to `web/main.ts` (on its own) and `server/main.ts` (connected), and anything that needs a
+desktop is left out or done the browser's way.
 
 ## What doesn't work yet
 

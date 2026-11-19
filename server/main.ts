@@ -9,10 +9,10 @@ import { createCipheriv, createHash, createHmac, randomBytes, randomUUID, timing
 import { appendFileSync, copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { homedir, hostname } from 'node:os'
-import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { app } from 'electron'
-import type { Access, Connector, Flow, Report, Settings, Skill } from '../shared/types'
+import type { Access, ChatSource, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from '../electron/count'
 import { installed, modelsFor, testConnector, useConnectors } from '../electron/agents'
 import { setBase } from '../electron/agents/http'
@@ -31,6 +31,7 @@ import { Toolbox } from '../electron/tools'
 import { Store, type Cipher } from '../electron/store'
 import { cancelPull, pull, start } from '../electron/local'
 import { Limits } from '../electron/limits'
+import { allowed, claudeDir, found, read, resumes, room as roomFrom } from '../electron/import'
 
 const PORT = Number(process.env.PORT || process.env.LUNCHBOX_PORT || 8080)
 const HOST = process.env.LUNCHBOX_HOST || '0.0.0.0'
@@ -53,6 +54,17 @@ const emit = (channel: string, value: unknown) => { for (const ws of clients) se
 // Things only the page can do (save a file, open a picture, show a notification) go to the page
 // that asked, or to every page when nobody in particular did.
 let asking: WebSocket | null = null
+const pages = new WeakMap<WebSocket, number>()
+let pageCount = 0
+const pageId = (ws: WebSocket) => { if (!pages.has(ws)) pages.set(ws, ++pageCount); return pages.get(ws)! }
+// Two tabs on one room each have a message box. The same text for the same room, from two tabs in
+// the same moment, is one message.
+let lately: { room: string; text: string; from: WebSocket | null; at: number } | null = null
+function twice(room: string, text: string) {
+  const same = !!lately && lately.room === room && lately.text === text && lately.from !== asking && Date.now() - lately.at < 1500
+  if (!same) lately = { room, text, from: asking, at: Date.now() }
+  return same
+}
 const toPage = (ev: string, value: unknown) => { if (asking && clients.has(asking)) sendTo(asking, { ev, value }); else emit(ev, value) }
 
 // Keys the desktop app sealed with the system keychain (v1) can only be opened by the desktop app;
@@ -98,6 +110,7 @@ function defaults() {
   return { crew: preferred.length ? preferred : ready.slice(0, 3), workspace: workspace() }
 }
 const workspace = () => process.env.LB_WORKSPACE || join(app.getPath('documents'), 'Lunchbox')
+const chatHome = () => process.env.LB_IMPORT_HOME || homedir()
 
 function roomFolder(about: string) {
   const s = about.toLowerCase().normalize('NFKD').replace(/[^a-z0-9\s-]/g, '').trim().split(/\s+/).filter(Boolean).slice(0, 5).join('-').slice(0, 48) || 'room'
@@ -123,7 +136,28 @@ const handlers = new Map<string, (...args: any[]) => unknown>()
 function wire() {
   const h = (channel: string, fn: (...args: any[]) => unknown) => handlers.set(channel, fn)
 
-  h('env', () => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, uploads: join(app.getPath('userData'), 'uploads') }))
+  h('env', () => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, uploads: join(app.getPath('userData'), 'uploads'), window: asking ? pageId(asking) : 0 }))
+  // Each browser tab is a window. New ones are opened by the page itself (server/ui/bridge.ts).
+  h('window:view', () => {})
+  // Chats from the agents' own apps on this computer. A session a room already continues is left off.
+  h('import:list', () => {
+    const taken = new Set(store.list().flatMap((m) => Object.values(m.sessions)))
+    return found(chatHome(), 150, (id) => taken.has(id))
+  })
+  h('import:take', async (agent: ChatSource, file: string) => {
+    if (!['claude', 'codex', 'gemini', 'grok'].includes(agent) || typeof file !== 'string' || !allowed(file, agent, chatHome())) throw new Error('That chat is no longer there')
+    const chat = await read(agent, file, chatHome())
+    if (!chat.turns.some((t) => t.you)) throw new Error('That chat has no messages to bring in')
+    const there = !!chat.folder && existsSync(chat.folder) && statSync(chat.folder).isDirectory()
+    const ready = !engine.why(agent)
+    const findable = agent !== 'claude' || basename(dirname(file)) === claudeDir(chat.folder)
+    const resumed = there && ready && resumes(agent) && !!chat.id && findable
+    const made = roomFrom(chat, { resumed, folderGone: !there, ready })
+    const crew = ready ? [agent] : defaults().crew.length ? defaults().crew : [agent]
+    const folder = there ? chat.folder : roomFolder(made.name)
+    mkdirSync(folder, { recursive: true })
+    return engine.adopt({ name: made.name, crew, workspace: folder, events: made.events, about: made.about, session: resumed ? { who: agent, id: chat.id } : undefined })
+  })
   h('agents', () => engine.agents)
   h('agents:refresh', () => { resetPath(); return engine.refresh() })
   h('limits', () => limits.get())
@@ -146,7 +180,7 @@ function wire() {
   h('room:fork', (id: string, at: string) => engine.fork(id, at))
   h('room:crew', (id: string, crew: string[]) => engine.setCrew(id, crew))
   h('room:workspace', (id: string, path: string) => engine.setWorkspace(id, path))
-  h('room:send', (id: string, text: string, access: Access, arena: boolean, files?: string[]) => { engine.send(id, text, access, { arena, files: files?.length ? into(id, files) : files }) })
+  h('room:send', (id: string, text: string, access: Access, arena: boolean, files?: string[]) => { if (!twice(id, text)) engine.send(id, text, access, { arena, files: files?.length ? into(id, files) : files }) })
   h('room:project', (id: string, on: boolean) => engine.setProject(id, on))
   h('room:rewind', (id: string, target: { event?: string; ref?: string }) => engine.rewind(id, target))
   h('room:changed', (id: string, event: string) => engine.changedSince(id, event))
@@ -231,6 +265,7 @@ function wire() {
     if (patch.endpoints) useEndpoints()
     if (patch.models || patch.disabled || patch.connectors || patch.endpoints) await engine.refresh()
     if (patch.budgets) emit('ledger', engine.ledger())
+    emit('settings', store.settings)
     return store.settings
   })
   h('spent:clear', (id: string) => { delete store.spent[id]; store.saveState(); emit('ledger', engine.ledger()) })
@@ -250,9 +285,9 @@ function wire() {
   h('connector:test', (c: Connector, key: string, headers?: string) => testConnector(c, key ?? '', typeof headers === 'string' ? headers : ''))
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
   h('packs', () => packs())
-  h('packs:import:file', (path: string) => importPack(path, join(store.dir, 'packs')))
-  h('packs:link', (url: string) => fetchPack(url, join(store.dir, 'packs')))
-  h('packs:remove', (id: string) => removePack(id, join(store.dir, 'packs')))
+  h('packs:import:file', (path: string) => { const pack = importPack(path, join(store.dir, 'packs')); emit('packs', packs()); return pack })
+  h('packs:link', async (url: string) => { const pack = await fetchPack(url, join(store.dir, 'packs')); emit('packs', packs()); return pack })
+  h('packs:remove', (id: string) => { const r = removePack(id, join(store.dir, 'packs')); emit('packs', packs()); return r })
   h('packs:export', (id: string) => {
     const p = packs().find((x) => x.id === id)
     return p ? saveAs('Share a pack', `${p.id}.json`, 'json', packJson(p)) : null

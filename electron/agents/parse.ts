@@ -459,5 +459,7 @@ export function plain(text: string) {
   }
   const model = message.match(/['"`]([\w.:-]+)['"`] model is not supported when using Codex with a ChatGPT account/)
   if (model) return `its model ${model[1]} is not available on a ChatGPT plan. Pick another model for Codex in Agents, or change model in ~/.codex/config.toml`
+  // Google closed the free personal sign in for Gemini CLI in November 2026.
+  if (/IneligibleTierError|no longer supported for Gemini Code Assist for individuals/i.test(message)) return 'Google no longer lets Gemini CLI sign in with a personal Google account. Add Gemini API in Agents with a free key from aistudio.google.com, or run gemini once in a terminal and sign in with that key'
   return message.replace(/\s+/g, ' ').trim()
 }

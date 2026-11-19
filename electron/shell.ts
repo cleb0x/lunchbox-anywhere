@@ -27,6 +27,9 @@ export function kill(id: string) {
 
 const TAIL = 12000
 
+// git diff, show and log as reads: the repository's own diff tool and text converters stay off.
+export const plainGit = (command: string) => command.replace(/\b(git(?:\s+-[cC]\s+\S+)*\s+(?:diff|show|log))\b/g, '$1 --no-ext-diff --no-textconv')
+
 export async function execute(req: { id: string; command: string; cwd: string; root: string; access: Access; memory: Set<string> }, hooks: Hooks): Promise<Ran> {
   const verdict = decide(req.access, req.command, req.cwd, req.root, req.memory)
   hooks.verdict(verdict)
@@ -39,8 +42,13 @@ export async function execute(req: { id: string; command: string; cwd: string; r
     how = a === 'always' ? 'allowed always' : 'allowed once'
   }
   const t0 = Date.now()
-  const { file, args, raw } = shellFor(req.command)
-  const child = launch(file, args, { windowsVerbatimArguments: raw, cwd: req.cwd, env: await env({ CI: '1' }), stdio: ['ignore', 'pipe', 'pipe'] })
+  // A command let through as a read must not start a program the repository's own git config
+  // names: its file watcher, its diff tool or a text converter. An empty diff.external would make
+  // git try to run a program called "", so diffs are told by flag instead.
+  const read = verdict.kind === 'read' && /\bgit\b/.test(req.command)
+  const quiet: Record<string, string> = read ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false' } : {}
+  const { file, args, raw } = shellFor(read ? plainGit(req.command) : req.command)
+  const child = launch(file, args, { windowsVerbatimArguments: raw, cwd: req.cwd, env: await env({ CI: '1', ...quiet }), stdio: ['ignore', 'pipe', 'pipe'] })
   running.set(req.id, child)
   hooks.start()
   let out = ''

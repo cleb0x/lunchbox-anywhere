@@ -13,6 +13,7 @@ export const IconDown = () => <svg {...P} width={10} height={10}><path d="M4 6l4
 export const IconAgents = () => <svg {...P}><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></svg>
 export const IconSettings = () => <svg {...P}><path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6" /><circle cx="10" cy="5" r="1.5" /><circle cx="6" cy="11" r="1.5" /></svg>
 export const IconMore = () => <svg {...P}><circle cx="3.5" cy="8" r=".9" fill="currentColor" stroke="none" /><circle cx="8" cy="8" r=".9" fill="currentColor" stroke="none" /><circle cx="12.5" cy="8" r=".9" fill="currentColor" stroke="none" /></svg>
+export const IconImport = () => <svg {...P}><path d="M8 2.5v7M5.2 6.9 8 9.7l2.8-2.8" /><path d="M2.5 9.5v3h11v-3" /></svg>
 export const IconInbox = () => <svg {...P}><path d="M2.5 9.5 4 3.5h8l1.5 6v3h-11zM2.5 9.5h3.2l.8 1.5h3l.8-1.5h3.2" /></svg>
 export const IconReview = () => <svg {...P}><path d="M7 12.5a5.5 5.5 0 1 1 3.9-1.6L13.5 13.5" /><path d="M5 7.2l1.5 1.5L9.2 6" /></svg>
 export const IconPin = () => <svg {...P}><path d="M6 2.5h4M7 2.5v4L4.5 9h7L9 6.5v-4M8 9v4.5" /></svg>
@@ -44,3 +45,7 @@ export const IconCode = () => <svg {...P}><path d="M5.5 5 2.5 8l3 3M10.5 5l3 3-3
 export const IconBranches = () => <svg {...P}><circle cx="4" cy="3.5" r="1.5" /><path d="M4 5v8" /><path d="M4 7.5c0 1.6 1 2 2.6 2h3.9" /><path d="M4 5.8c0 .9.7 1.2 1.6 1.2h4.9" /><circle cx="12" cy="7" r="1.25" /><circle cx="12" cy="9.5" r="1.25" /></svg>
 export const IconChevron = () => <svg className="chev" width="10" height="10" viewBox="0 0 16 16" aria-hidden><path d="m6 3.5 4.5 4.5L6 12.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 export const IconStop = () => <svg {...P}><rect x="4.5" y="4.5" width="7" height="7" rx="1" fill="currentColor" stroke="none" /></svg>
+export const IconEdit = () => <svg {...P}><path d="M10.5 3.2l2.3 2.3L6 12.3l-3 .7.7-3z" /><path d="M9.3 4.4l2.3 2.3" /></svg>
+export const IconTrash = () => <svg {...P}><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" /></svg>
+// A palette: a theme made with an agent.
+export const IconPalette = () => <svg {...P}><path d="M8 2.5a5.5 5.5 0 1 0 0 11c.9 0 1.3-.6 1.1-1.3-.3-1 .2-1.7 1.2-1.7h1.4c1.1 0 1.8-.8 1.8-1.9C13.5 4.9 11.1 2.5 8 2.5z" /><circle cx="5.3" cy="7.3" r=".6" /><circle cx="7.6" cy="5" r=".6" /><circle cx="10.5" cy="6" r=".6" /></svg>

@@ -49,6 +49,8 @@ export function Band({ rows = 9, label = '', word, busy = false, patterned = fal
     const dpr = Math.min(2, devicePixelRatio || 1)
     let w = 0, cw = 7.2, raf = 0, drawn = 0, clock = 0, prev = performance.now()
     let ink = '#f0eee8'
+    // A theme's ASCII ramp, faint to bright; without one the band is ink at eight strengths.
+    let ramp: string[] | null = null
     let shownWord = props.current.word, wordAt = performance.now() / 1000 + 0.3, wordK = 0
     let shownLabel = props.current.label, labelAt = 0
     const h = rows * LH
@@ -138,7 +140,9 @@ export function Band({ rows = 9, label = '', word, busy = false, patterned = fal
         }
         for (let s = 1; s < STEPS; s++) {
           if (!line[s].length) continue
-          ctx.globalAlpha = s / (STEPS - 1)
+          const k = s / (STEPS - 1)
+          if (ramp) { ctx.fillStyle = ramp[Math.min(3, Math.floor(k * 4))]; ctx.globalAlpha = 0.45 + 0.55 * k }
+          else ctx.globalAlpha = k
           ctx.fillText(line[s].join(''), 0, y)
         }
       }
@@ -158,10 +162,15 @@ export function Band({ rows = 9, label = '', word, busy = false, patterned = fal
     const wake = () => { if (!raf && visible && !document.hidden && !still()) { prev = performance.now(); raf = requestAnimationFrame(loop) } }
 
     // The ink follows the theme the moment it flips, not on a later frame.
-    const colour = () => { ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || ink }
+    const colour = () => {
+      const css = getComputedStyle(document.documentElement)
+      ink = css.getPropertyValue('--ink').trim() || ink
+      const stops = [1, 2, 3, 4].map((i) => css.getPropertyValue(`--glyph-${i}`).trim())
+      ramp = document.documentElement.hasAttribute('data-glyphs') && stops.every(Boolean) ? stops : null
+    }
     colour()
     const theme = new MutationObserver(() => { colour(); draw(performance.now()) })
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-look'] })
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-look', 'data-palette', 'data-ascii', 'data-glyphs', 'style'] })
     size()
     const ro = new ResizeObserver(() => { size(); draw(performance.now()) })
     ro.observe(el)

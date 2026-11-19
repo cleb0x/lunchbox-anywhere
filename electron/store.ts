@@ -16,8 +16,13 @@ const RETRY = 5000
 const DEFAULTS: Settings = { models: {}, budgets: {}, disabled: [], notify: true, defaultCrew: [] }
 const zero = (): Usage => ({ input: 0, output: 0, cached: 0, cost: 0 })
 
+// A file that parses but holds the wrong kind of thing, null or a list where an object belongs,
+// is treated like one that does not parse, so a damaged file can never keep the app from opening.
 function readJson<T>(file: string, fallback: T): T {
-  try { return JSON.parse(readFileSync(file, 'utf8')) as T } catch { return fallback }
+  try {
+    const v = JSON.parse(readFileSync(file, 'utf8'))
+    return v !== null && typeof v === 'object' && Array.isArray(v) === Array.isArray(fallback) ? (v as T) : fallback
+  } catch { return fallback }
 }
 
 function writeJson(file: string, value: unknown, mode?: number) {
@@ -345,7 +350,8 @@ export class Store {
     day.setHours(0, 0, 0, 0)
     const week = Date.now() - 7 * 86400e3
     const days = Array.from({ length: DAYS }, (_, i) => {
-      const d = new Date(day.getTime() - (DAYS - 1 - i) * 86400e3)
+      // By the calendar, not in steps of 24 hours, which land an hour off after the clocks change.
+      const d = new Date(day.getFullYear(), day.getMonth(), day.getDate() - (DAYS - 1 - i))
       return { day: localDay(d), start: d.getTime(), cost: 0, tokens: 0, input: 0, cached: 0, saved: 0, gross: 0, kept: 0, cut: 0, held: 0, spared: 0, trimmed: 0, warmed: 0, pings: 0 }
     })
     const out: Ledger = { today: {}, week: {}, arena: { ...this.arena }, ratings: this.ratings, days: [], rooms: {} }

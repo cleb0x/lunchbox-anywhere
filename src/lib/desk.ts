@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import type { Access, AgentInfo, Env, Flow, FlowState, Kind, Ledger, Pack, RoomSummary, Settings, Skill, Spent, PlanLimits } from '../../shared/types'
 
+import { prune } from './drafts'
+
 export type { Access, Kind }
 export type LedgerView = Ledger & { spent: Record<string, Spent>; budgets: Record<string, number> }
 
@@ -69,12 +71,15 @@ let booted: Promise<void> | null = null
 export function boot() {
   booted ??= (async () => {
     desk.on('agents', (agents) => set({ agents }))
-    desk.on('rooms', (rooms) => set({ rooms }))
+    desk.on('rooms', (rooms: RoomSummary[]) => { set({ rooms }); prune(rooms.map((r) => r.id)) })
     desk.on('ledger', (ledger) => set({ ledger }))
     desk.on('limits', (limits) => set({ limits }))
     desk.call('limits').then((limits) => limits && set({ limits }))
     desk.on('skills', (skills) => set({ skills }))
     desk.on('flows', (f) => set({ flows: f.flows, running: f.running }))
+    // Saved in another window.
+    desk.on('settings', (settings) => settings && set({ settings }))
+    desk.on('packs', (packs) => set({ packs: packs ?? [] }))
     // One part failing to load must not leave the app on its loading screen for good: the rest
     // opens, and that part starts empty.
     const [env, agents, rooms, settings, ledger, skills, packs, flows] = await Promise.all(
@@ -91,9 +96,16 @@ export const reload = {
   // which takes a moment; a second change made in that moment used to be built on the old
   // settings and undo the first.
   settings: async (patch: Partial<Settings>) => {
-    set({ settings: { ...state.settings, ...patch } })
-    const saved = await desk.call('settings:set', patch)
-    if (saved) set({ settings: saved })
+    const before = state.settings
+    set({ settings: { ...before, ...patch } })
+    try {
+      const saved = await desk.call('settings:set', patch)
+      if (saved) set({ settings: saved })
+    } catch (e) {
+      // Not saved, so the screen goes back to what is.
+      set({ settings: before })
+      throw e
+    }
   },
   agents: async () => set({ agents: await desk.call('agents:refresh') }),
 }
@@ -152,11 +164,13 @@ export function upcoming(t: number) {
 
 export function tokens(n: number) {
   if (n < 1000) return String(Math.round(n))
-  if (n < 1e6) return `${(n / 1000).toFixed(n < 1e4 ? 1 : 0)}k`
+  // The unit is picked after rounding, so 999,999 reads 1.0M and never 1000k.
+  if (n < 9995) return `${(n / 1000).toFixed(1)}k`
+  if (n < 999500) return `${Math.round(n / 1000)}k`
   return `${(n / 1e6).toFixed(1)}M`
 }
 
-export const money = (n: number) => (n >= 1 ? `$${n.toFixed(2)}` : n > 0 ? `${Math.max(1, Math.round(n * 100))}¢` : '$0')
+export const money = (n: number) => (n >= 0.995 ? `$${n.toFixed(2)}` : n > 0 ? `${Math.max(1, Math.round(n * 100))}¢` : '$0')
 
 // Why an agent cannot take work right now, in the words the panel shows. Mirrors Engine.why.
 export function unavailable(a: AgentInfo, s: State = state): string | null {

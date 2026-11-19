@@ -11,7 +11,8 @@ import { AXE_RUN, CONTROLS, FOCUSED, MEASURE, STRETCH, report, type Axe, type Me
 import { describeModel, imagePage, modelPage, type View } from './viewer'
 
 export type TabState = { id: string; who: string; room?: string; url: string; title: string; loading: boolean; back: boolean; forward: boolean; device: Device; action?: string; busy: boolean }
-export type BrowserState = { tabs: TabState[]; active: string | null; shown: boolean }
+// host: the window the pages are drawn in, by the id of its contents.
+export type BrowserState = { tabs: TabState[]; active: string | null; shown: boolean; host?: number }
 export type Device = 'desktop' | 'tablet' | 'phone'
 
 const DEVICES: Record<Device, { ua?: string }> = {
@@ -88,6 +89,13 @@ type Box = { x: number; y: number; w: number; h: number; label: string }
 
 const web = (u: string) => /^https?:\/\//i.test(u) && !/^https?:\/\/(169\.254\.|0\.0\.0\.0|\[?::\]?)/i.test(u)
 
+// Pages and their sign in popups only ever go to the web. A popup's own popups stay inside it.
+function guard(wc: Electron.WebContents, popup = false) {
+  wc.on('will-navigate', (e, url) => { if (!web(url)) e.preventDefault() })
+  wc.on('will-redirect', (e, url) => { if (!web(url)) e.preventDefault() })
+  if (popup) wc.setWindowOpenHandler(({ url }) => { if (web(url)) wc.loadURL(url); return { action: 'deny' } })
+}
+
 // axe-core, read once on first use. It is the accessibility engine most checkers are built on.
 let axeSource: string | null = null
 const axe = () => (axeSource ??= readFileSync(createRequire(__filename).resolve('axe-core/axe.min.js'), 'utf8'))
@@ -116,11 +124,19 @@ export class Browser {
     const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:browser', backgroundThrottling: false } })
     view.setBackgroundColor('#00000000')
     const wc = view.webContents
-    // Pages open new windows in the same view, and only on the web: never file:, app or
+    // Links that open a new tab load in the same view, and only on the web: never file:, app or
     // javascript: schemes, whether a person clicks or a page or an agent asks.
-    wc.setWindowOpenHandler(({ url }) => { if (web(url)) wc.loadURL(url); return { action: 'deny' } })
-    wc.on('will-navigate', (e, url) => { if (!web(url)) e.preventDefault() })
-    wc.on('will-redirect', (e, url) => { if (!web(url)) e.preventDefault() })
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      if (!web(url)) return { action: 'deny' }
+      // A sized popup is a sign in window (Google, Apple, Microsoft). It has to stay a real window
+      // with its opener, or it cannot hand the login back to the page that asked for it.
+      // Only the person's own page: an agent has no login to hand back, and its pages stay in tabs.
+      if (disposition === 'new-window' && who === YOU) return { action: 'allow', overrideBrowserWindowOptions: { parent: win, autoHideMenuBar: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:browser' } } }
+      wc.loadURL(url)
+      return { action: 'deny' }
+    })
+    wc.on('did-create-window', (popup) => guard(popup.webContents, true))
+    guard(wc)
     // Camera, microphone, location, notifications: no page in the agent browser gets them.
     wc.session.setPermissionRequestHandler((_w, _p, done) => done(false))
     wc.session.setPermissionCheckHandler(() => false)
@@ -179,7 +195,7 @@ export class Browser {
         device: t.device, action: t.action, busy: t.busy,
       }
     })
-    return { tabs, active: this.active, shown: this.shown }
+    return { tabs, active: this.active, shown: this.shown, host: this.host && !this.host.isDestroyed() ? this.host.webContents.id : undefined }
   }
 
   private changed() {
@@ -196,10 +212,16 @@ export class Browser {
 
   private layout() {
     const win = this.win()
-    // A window opened again after the last one closed takes the pages over.
+    // The pages follow the window that shows them: another window that opens the Browser page,
+    // or one opened again after the last one closed.
     if (win && this.host !== win) {
+      const old = this.host
       this.host = win
-      for (const t of this.tabs.values()) if (this.alive(t)) win.contentView.addChildView(t.view)
+      for (const t of this.tabs.values()) {
+        if (!this.alive(t)) continue
+        try { if (old && !old.isDestroyed()) old.contentView.removeChildView(t.view) } catch {}
+        win.contentView.addChildView(t.view)
+      }
     }
     const b = this.bounds
     const size = b.width > 0 ? b : { x: 0, y: 0, width: 1280, height: 800 }
@@ -814,6 +836,15 @@ ${crops.map((c) => `<div class="r"><b>${c.kind}</b><span>${esc(c.label)}</span><
         }),
       },
     ]
+  }
+
+  // The window the pages were in has closed while others are open. They move, out of sight,
+  // until a window opens the Browser page again.
+  rehome(closed: BrowserWindow) {
+    if (this.host !== closed) return
+    this.shown = false
+    this.layout()
+    this.changed()
   }
 
   destroy() {

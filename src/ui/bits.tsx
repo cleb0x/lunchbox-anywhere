@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { dots, glyph } from './glyphs'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { glyph } from './glyphs'
 
 export const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -64,80 +64,6 @@ export function Meter({ value, cells = 20, tone }: { value: number; cells?: numb
   )
 }
 
-// Text drawn in our own dot matrix. Dots arrive column by column when it first appears.
-export function Matrix({ text, dot = 4, gap = 2, animate = true, className = '' }: { text: string; dot?: number; gap?: number; animate?: boolean; className?: string }) {
-  const m = useMemo(() => dots(text), [text])
-  const step = dot + gap
-  return (
-    <svg className={`matrix ${animate ? 'in' : ''} ${className}`} width={m.width * step - gap} height={m.height * step - gap} role="img" aria-label={text}>
-      {m.dots.map(([x, y], i) => (
-        <rect key={i} x={x * step} y={y * step} width={dot} height={dot} rx={dot * 0.18} style={{ '--d': `${x * 14 + y * 6}ms` } as CSSProperties} />
-      ))}
-    </svg>
-  )
-}
-
-// One shared clock for every small live strip, so twenty of them cost one frame callback.
-const strips = new Set<() => void>()
-let clock = 0
-function tickStrips() {
-  let last = 0
-  const frame = (now: number) => {
-    clock = requestAnimationFrame(frame)
-    if (now - last < 80) return
-    last = now
-    strips.forEach((f) => f())
-  }
-  clock = requestAnimationFrame(frame)
-}
-
-// A line of an agent's own alphabet, drifting. Used wherever an agent is working.
-export function Strip({ alphabet, length = 18, calm = false }: { alphabet: string; length?: number; calm?: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null)
-  useEffect(() => {
-    const ramp = ' ' + alphabet
-    const seed = Math.random() * 10
-    const draw = () => {
-      const now = performance.now() / (calm ? 900 : 380)
-      let line = ''
-      for (let i = 0; i < length; i++) {
-        const v = Math.sin(i * 0.6 + now + seed) + Math.sin(i * 0.23 - now * 0.7)
-        line += ramp[Math.max(0, Math.min(ramp.length - 1, Math.floor(((v + 2) / 4) * ramp.length)))]
-      }
-      if (ref.current) ref.current.textContent = line
-    }
-    draw()
-    if (still()) return
-    strips.add(draw)
-    if (strips.size === 1) tickStrips()
-    return () => { strips.delete(draw); if (!strips.size) cancelAnimationFrame(clock) }
-  }, [alphabet, length, calm])
-  return <span ref={ref} className="strip" aria-hidden="true" />
-}
-
-const NOISE = '#%*+=-:.'
-
-// Settles out of characters, left to right, once. For headings that matter, never for body text.
-export function Resolve({ text, speed = 28, delay = 0 }: { text: string; speed?: number; delay?: number }) {
-  const [shown, setShown] = useState(still() ? text : '')
-  useEffect(() => {
-    if (still()) return setShown(text)
-    let raf = 0
-    const t0 = performance.now() + delay
-    const frame = (now: number) => {
-      const k = Math.max(0, (now - t0) / speed)
-      const settled = Math.floor(k / 2)
-      let out = text.slice(0, settled)
-      for (let i = settled; i < Math.min(text.length, settled + 6); i++) out += text[i] === ' ' ? ' ' : NOISE[(i * 7 + Math.floor(now / 40)) % NOISE.length]
-      setShown(out)
-      if (settled < text.length) raf = requestAnimationFrame(frame)
-    }
-    raf = requestAnimationFrame(frame)
-    return () => cancelAnimationFrame(raf)
-  }, [text, speed, delay])
-  return <span className="resolve" aria-label={text}><span aria-hidden="true">{shown}</span><span className="ghost" aria-hidden="true">{text.slice(shown.length)}</span></span>
-}
-
 // A small preview of a file on disk: the image itself when it is one, its extension otherwise.
 export function Thumb({ path }: { path: string }) {
   const [src, setSrc] = useState<string | null>(null)
@@ -155,12 +81,12 @@ export function Thumb({ path }: { path: string }) {
 
 // A destructive button that asks twice. Moving the pointer away, tabbing away or Esc disarms it,
 // so a stray second click later never deletes anything.
-export function Sure({ act, className, label, children }: { act: () => void; className: string; label?: string; children: (sure: boolean) => ReactNode }) {
+export function Sure({ act, className, label, children }: { act: () => unknown; className: string; label?: string; children: (sure: boolean) => ReactNode }) {
   const [sure, setSure] = useState(false)
   const off = () => setSure(false)
   return (
     <button className={`${className}${sure ? ' sure' : ''}`} aria-label={sure ? undefined : label} title={label}
-      onClick={() => { if (!sure) return setSure(true); off(); act() }} onMouseLeave={off} onBlur={off}
+      onClick={() => { if (!sure) return setSure(true); off(); const r = act(); if (r instanceof Promise) r.catch(() => {}) }} onMouseLeave={off} onBlur={off}
       onKeyDown={(e) => { if (e.key === 'Escape' && sure) { e.preventDefault(); e.stopPropagation(); off() } }}>
       {children(sure)}
     </button>

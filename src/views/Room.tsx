@@ -2,21 +2,24 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import { cash, savedIn, savedLine } from '../lib/saved'
 import type { Act, AgentInfo, Event, Live, LiveRun, LiveTurn, RoomMeta, Verdict } from '../../shared/types'
 import { wallWhy } from '../../shared/wall'
+import { clean } from '../../shared/clean'
 import { plan, planOn, plansBefore, type Step } from '../../shared/plan'
 import { searchOf, stepOf, type Search } from '../../shared/steps'
 import { cut } from '../../shared/weave'
 import { glide, reflow, reflowing, type Glide } from '../lib/glide'
-import { Loader, Mark, Meter, Sure, Thumb } from '../ui/bits'
+import { Loader, Mark, Meter, still, Sure, Thumb } from '../ui/bits'
 import { Field, type Scene } from '../ui/Field'
 import { Menu } from '../ui/Access'
 import { Inline, Rich } from '../ui/Rich'
 import { Bar, handingOver, onHanded, planDrawing, PlanRow } from '../ui/Plan'
 import { roomCard } from '../ui/roomcard'
 import { openReport } from '../lib/report'
-import { IconBranches, IconChevron, IconClock, IconCopy, IconDiff, IconFolder, IconFork, IconMore, IconPanel, IconPhone, IconPin, IconReview, IconRewind, IconSplit, IconGlobe, IconX } from '../ui/icons'
+import { IconBranches, IconCheck, IconChevron, IconDown, IconClock, IconCopy, IconDiff, IconFolder, IconFork, IconMore, IconPanel, IconPhone, IconPin, IconReview, IconRewind, IconSplit, IconGlobe, IconX } from '../ui/icons'
 import { agentOf, clock, desk, KIND_LABEL, mod, money, reason, short, tail, tokens, unavailable, useApp, type Access } from '../lib/desk'
 import { Changes } from './Changes'
 import { Composer } from './Composer'
+import { Find } from './Find'
+import { Quote } from './Quote'
 
 type Data = { meta: RoomMeta; events: Event[]; live: Live }
 type Say = Extract<Event, { kind: 'say' }>
@@ -193,7 +196,10 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
 
   return (
     <div className={`room${panel ? ' withdetails' : ''}${stopping ? ' stopping' : ''}`}>
-      <section className="convo">
+      <section className="convo"
+        // A file dropped anywhere in the room lands in the message box.
+        onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+        onDrop={(e) => { if (!e.dataTransfer.files.length || (e.target as HTMLElement).closest('.composer')) return; e.preventDefault(); dispatchEvent(new CustomEvent('lb:files', { detail: e.dataTransfer.files })) }}>
         <header className="roomhead">
           <Title name={meta.name} rename={(n) => desk.call('room:rename', id, n)} />
           {meta.forkedFrom && <button className="tag" onClick={() => open(meta.forkedFrom!.room)}>fork</button>}
@@ -213,7 +219,7 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
         <div className="dock">
           <Composer
             crew={meta.crew} setCrew={(c) => desk.call('room:crew', id, c)} onSend={send} access={access} setAccess={setAccess}
-            busy={busy} onStop={stop} arena={arena} setArena={setArena} studio={!!meta.studio} setStudio={(on) => desk.call('room:studio', id, on)} pack={meta.pack} folder={meta.workspace} draft={returned}
+            busy={busy} onStop={stop} arena={arena} setArena={setArena} studio={!!meta.studio} setStudio={(on) => desk.call('room:studio', id, on)} pack={meta.pack} folder={meta.workspace} draft={returned} room={id}
             placeholder={meta.crew.length > 1 ? 'Message the room. Start with a name, like "Claude, ...", to ask one agent. ! runs a command.' : 'Message the room. Start with ! to run a command.'}
           />
         </div>
@@ -311,13 +317,28 @@ function RoomMenu({ id, meta, events, canReplay, replay, open, say }: { id: stri
 }
 
 // The saved event a live row turns into when its turn ends.
-const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'say' ? e.who === t.who : e.kind === 'hands' ? e.to === t.who : e.kind === 'image' && !!t.image && e.by === t.who)
+const replaces = (e: Event, t: LiveTurn) => e.at >= t.started && (e.kind === 'say' ? e.who === t.who : e.kind === 'hands' ? e.to === t.who && e.via !== 'cli' : e.kind === 'image' && !!t.image && e.by === t.who)
 
 // The transcript is a timeline. Agent turns hang off a thin thread in the gutter so a chain of
 // handoffs reads as one piece of work; your messages sit on the right and break the thread.
 function Transcript({ events, live, agents, actions, focus, empty }: { events: Event[]; live: Live | null; agents: AgentInfo[]; actions: Actions; focus?: string; empty: boolean }) {
   const box = useRef<HTMLDivElement>(null)
+  const wrap = useRef<HTMLDivElement>(null)
+  const [finding, setFinding] = useState(false)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f' || document.querySelector('.scrim')) return
+      e.preventDefault()
+      // Pressed again while open, it goes back to the field with the words selected.
+      if (finding) dispatchEvent(new Event('lb:find'))
+      else setFinding(true)
+    }
+    addEventListener('keydown', key)
+    return () => removeEventListener('keydown', key)
+  }, [finding])
   const stick = useRef(true)
+  // Far enough up that the newest message is out of sight: a way back down is offered.
+  const [away, setAway] = useState(false)
   const size = events.length + (live ? live.turns.reduce((n, t) => n + t.text.length + t.acts.length, 0) + live.runs.reduce((n, r) => n + r.out.length + r.state.length, 0) : 0)
   // Opening a room lands at the bottom at once. After that the view eases after new content
   // instead of jumping to it, for as long as you stay at the bottom.
@@ -331,6 +352,13 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
     if (!opened.current) { el.scrollTop = el.scrollHeight; ours.current = el.scrollTop; opened.current = events.length > 0; return }
   }, [size])
   const working = !!live?.turns.length || !!live?.runs.length
+  // A message the person just sent is where they want to be, wherever they had scrolled to.
+  const mine = events.findLast((e) => e.kind === 'you' && !e.from && !e.inside)?.id
+  const sentBefore = useRef(mine)
+  useLayoutEffect(() => {
+    if (mine && mine !== sentBefore.current && opened.current) { stick.current = true; setAway(false); flow.current?.wake() }
+    sentBefore.current = mine
+  }, [mine])
   // Rows pushed down by what grows above them travel there at the pace the view follows, so
   // nothing in the room moves in one step.
   const flow = useRef<Glide | null>(null)
@@ -398,7 +426,8 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
   const picks = useMemo(() => new Map(events.flatMap((e) => (e.kind === 'pick' ? [[e.arena, e.who] as const] : []))), [events])
   const priors = useMemo(() => plansBefore(events), [events])
   const current = useMemo(() => plan(events), [events])
-  const going = useMemo(() => planOn(current, liveEvents(live ?? undefined)), [current, live])
+  // Every live update makes a new list; rows only draw again when a step in it has changed.
+  const going = useSame(useMemo(() => planOn(current, liveEvents(live ?? undefined)), [current, live]))
   const turns = live?.turns ?? []
   const landed = (t: LiveTurn) => events.some((e) => replaces(e, t))
   // Help a turn called for while it ran is shown inside that turn, where it was asked for: the
@@ -493,7 +522,10 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
   )
 
   return (
-    <div className="transcript" ref={box}
+    <div className="transwrap" ref={wrap}>
+    {finding && <Find box={box} close={() => setFinding(false)} moving={() => { stick.current = false }} />}
+    <Quote wrap={wrap} />
+    <div className="transcript" ref={box} data-fade="24 32"
       onScroll={(e) => {
         // Following stops on any move up the reader makes, by wheel, scrollbar, keys or j and k,
         // and starts again once they come back within reach of the bottom.
@@ -504,6 +536,7 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         if (Math.abs(top - ours.current) < 1) return
         const gap = el.scrollHeight - el.clientHeight - top
         stick.current = gap < 2 || (!up && gap < 80)
+        if (gap > 600 !== away) setAway(gap > 600)
       }}>
       <div className="column" ref={column}>
         {empty && !live?.turns.length && <div className="roomempty">Nothing here yet. Say what you need and the crew takes it from there.</div>}
@@ -511,15 +544,29 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         <div className="tail" />
       </div>
     </div>
+    {away && (
+      <button type="button" className="tolatest" onClick={() => { const el = box.current!; stick.current = true; setAway(false); el.scrollTo({ top: el.scrollHeight, behavior: still() ? 'auto' : 'smooth' }) }}>
+        <IconDown />{working ? 'Follow the work' : 'Latest'}
+      </button>
+    )}
+    </div>
   )
+}
+
+// The value from the last render for as long as the new one holds the same thing.
+function useSame<T>(value: T): T {
+  const last = useRef(value)
+  if (last.current !== value && JSON.stringify(last.current) !== JSON.stringify(value)) last.current = value
+  return last.current
 }
 
 const Settled = createContext(false)
 
-function Ev({ mark, grouped = false, className = '', id, still = false, children }: { mark: ReactNode; grouped?: boolean; className?: string; id?: string; still?: boolean; children: ReactNode }) {
+// who: the name a quote from this row is given.
+function Ev({ mark, grouped = false, className = '', id, still = false, who, children }: { mark: ReactNode; grouped?: boolean; className?: string; id?: string; still?: boolean; who?: string; children: ReactNode }) {
   const settled = useContext(Settled) || still
   return (
-    <div className={`ev ${className}${grouped ? ' grouped' : ''}${settled ? ' settled' : ''}`} data-id={id}>
+    <div className={`ev ${className}${grouped ? ' grouped' : ''}${settled ? ' settled' : ''}`} data-id={id} data-who={who}>
       <div className="gut">{!grouped && mark}</div>
       <div className="evbody">{children}</div>
     </div>
@@ -537,16 +584,30 @@ function wallText(e: Extract<Event, { kind: 'wall' }>, agents: AgentInfo[]) {
 // the tail the outcome, the acts and the message tools.
 type Piece = 'head' | 'mid' | 'tail'
 
+// A long message from the person, a brief or a big paste, shows its opening lines and folds the
+// rest away behind one button, so the room reads as a conversation.
+function Folded({ text }: { text: string }) {
+  const long = text.length > 700 || text.split('\n').length > 14
+  const [open, setOpen] = useState(false)
+  if (!long) return <Rich text={text} />
+  return (
+    <>
+      <div className={`folded${open ? ' open' : ''}`}><Rich text={text} /></div>
+      <button type="button" className="unfoldbtn" onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Show all'}</button>
+    </>
+  )
+}
+
 function Row({ e, agents, actions, chosen }: { e: Event; agents: AgentInfo[]; actions: Actions; chosen: Map<string, string> }) {
   switch (e.kind) {
     case 'you':
       return (
-        <div className="mine" data-id={e.id}>
+        <div className="mine" data-id={e.id} data-who="You">
           {e.from && <span className="to">{e.from === 'flow' ? <><IconClock />from a flow</> : <><IconPhone />from your phone</>}</span>}
           {e.to && <span className="to">to {e.to.map((w) => agentOf(w, agents).short).join(', ')}</span>}
           {e.arena && <span className="to"><IconSplit />side by side</span>}
           <div className="bubble">
-            <Rich text={e.text} />
+            <Folded text={e.text} />
             {e.files && <div className="attached">{e.files.map((f) => <span key={f} className="file" title={f}><Thumb path={f} /><span>{f.split(/[\\/]/).pop()}</span></span>)}</div>}
           </div>
           {/* The room for it is kept from the start: the checkpoint is recorded a moment after the message lands. */}
@@ -646,13 +707,14 @@ function Turn({ who, e, t, piece, text, grouped, still, doing = '', helper, prio
 }) {
   const a = agentOf(who, agents)
   const flowing = useRef(!!t).current
-  const raw = t ? spoken(t) : text ?? e?.text ?? ''
+  const said = t ? spoken(t) : text ?? e?.text ?? ''
+  const raw = useMemo(() => clean(said), [said])
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const words = piece === 'head' || piece === 'mid'
   const work = useLeaving(t)
   return (
-    <Ev id={piece === 'mid' || piece === 'tail' ? undefined : e?.id} mark={<Mark seed={a.mark} size={16} active={!!t} />} grouped={grouped || piece === 'mid'} className={`turn${t ? ' live' : ''}`} still={still}>
+    <Ev id={piece === 'mid' || piece === 'tail' ? undefined : e?.id} mark={<Mark seed={a.mark} size={16} active={!!t} />} grouped={grouped || piece === 'mid'} className={`turn${t ? ' live' : ''}`} still={still} who={a.short}>
       {!grouped && piece !== 'mid' && <div className="who"><b className="name">{a.short}</b>{e && <span className="when">{clock(e.at)}</span>}</div>}
       {raw.trim() && <Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} />}
       {!words && e?.error && <div className={`err${e.error === 'Stopped' ? ' soft' : ''}`}>{e.error === 'Stopped' ? 'Stopped' : e.error}{e.error !== 'Stopped' && <button className="reportbtn" onClick={() => openReport({ context: `${a.short}: ${e.error}` })}>Report this</button>}</div>}
@@ -672,21 +734,27 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
   const to = agentOf(t ? t.who : e!.to, agents)
   const from = agentOf(t ? t.from ?? '' : e!.from, agents)
   const flowing = useRef(!!t).current
-  const raw = t ? t.text : e!.answer
+  const answer = t ? t.text : e!.answer
+  const raw = useMemo(() => clean(answer), [answer])
   const shown = useSmooth(raw, flowing)
   const writing = !!t || shown.length < raw.length
   const tool = e?.via === 'tool'
+  // One agent started the other from its own command line. It ran outside the room, so all the
+  // room has is what the command printed.
+  const cli = e?.via === 'cli'
   const work = useLeaving(t)
   return (
-    <Ev id={e?.id} mark={<Mark seed={to.mark} size={16} active={!!t} />} className={`hands${t ? ' live' : ''}`}>
+    <Ev id={e?.id} mark={<Mark seed={to.mark} size={16} active={!!t} />} className={`hands${t ? ' live' : ''}`} who={to.short}>
       <div className="handhead">
-        <b className="name">{to.short}</b><span>{t ? 'is answering' : tool ? 'lent a hand to' : 'answered'}</span><Mark seed={from.mark} size={12} /><span>{from.short}</span>
-        {tool && <span className="tag" title={`${from.short} called ${to.short} through the room's tools and kept working with the answer`}>mid-turn</span>}
+        <b className="name">{to.short}</b><span>{t ? 'is answering' : cli ? 'was run by' : tool ? 'lent a hand to' : 'answered'}</span><Mark seed={from.mark} size={12} /><span>{from.short}</span>
+        {tool && <span className="tag" title={`${from.short} called ${to.short} through the room's tools and kept working with the answer`}>while working</span>}
+        {cli && <span className="tag" title={`${from.short} started ${to.short} from its own command line. It ran outside the room, without the room's memory or its access mode. This is what the command printed.`}>outside the room</span>}
         {e && <span className="when">{clock(e.at)}</span>}
       </div>
       <div className="exchange">
         <p className="asked">{t ? t.ask : e!.ask}</p>
-        {raw.trim() ? <div className="got"><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></div> : e && <div className="got"><span className="err">{e.error ?? 'No answer'}</span></div>}
+        {raw.trim() ? <div className="got"><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></div>
+          : e && <div className="got"><span className={cli && !e.error ? 'err soft' : 'err'}>{e.error ?? (cli ? 'What it printed went somewhere else, so there is nothing to show here.' : 'No answer')}</span></div>}
         <Acts acts={(t ?? e)?.acts ?? []} live={!!t} />
         {work && <Working t={work} a={to} fallback={doing} leaving={!t} />}
       </div>
@@ -1010,6 +1078,13 @@ function Rewind({ id, actions }: { id: string; actions: Actions }) {
 function Tools({ e, actions }: { e: Extract<Event, { kind: 'say' | 'hands' }>; actions: Actions }) {
   const text = e.kind === 'say' ? e.text : e.answer
   const u = e.usage
+  // The copy button shows a tick for a moment, so the click is seen to have worked.
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(false), 1400)
+    return () => clearTimeout(t)
+  }, [copied])
   return (
     <div className="msgtools">
       {e.ms ? <span>{(e.ms / 1000).toFixed(1)} s</span> : null}
@@ -1017,10 +1092,10 @@ function Tools({ e, actions }: { e: Extract<Event, { kind: 'say' | 'hands' }>; a
       {u && u.cost > 0 ? <span>{money(u.cost)}</span> : null}
       {u && savedIn(u) >= 0.005 ? <span title={`Saved on this message at API list prices: ${savedLine(u)}.`}>saved {cash(savedIn(u))}</span> : null}
       <span className="spacer" />
-      {text && <button onClick={() => navigator.clipboard.writeText(text)} title="Copy"><IconCopy /></button>}
-      {text && <button onClick={() => actions.pin(e.id)} title="Pin to shared memory"><IconPin /></button>}
+      {text && <button onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})} title={copied ? 'Copied' : 'Copy'} aria-label="Copy">{copied ? <IconCheck /> : <IconCopy />}</button>}
+      {text && <button onClick={() => actions.pin(e.id)} title="Pin to shared memory" aria-label="Pin to shared memory"><IconPin /></button>}
       {text && <Review e={e} actions={actions} />}
-      <button onClick={() => actions.fork(e.id)} title="Fork the room from here"><IconFork /></button>
+      <button onClick={() => actions.fork(e.id)} title="Fork the room from here" aria-label="Fork the room from here"><IconFork /></button>
     </div>
   )
 }
@@ -1076,7 +1151,7 @@ function Arena({ id, done, going, picked, agents, pick }: { id: string; done: Sa
           return (
             <div key={c.who + id} className={`arenacol${picked === c.who ? ' picked' : picked ? ' dim' : ''}`}>
               <div className="who"><Mark seed={a.mark} size={14} active={c.live} /><b className="name">{a.short}</b><span className="when">{c.ms ? `${(c.ms / 1000).toFixed(1)} s` : ''}</span></div>
-              {c.text ? <Rich text={c.text} caret={c.live} /> : c.error ? <div className="err">{c.error}</div> : <div className="busyline"><span className="shimmer">Thinking</span></div>}
+              {c.text ? <Rich text={clean(c.text)} caret={c.live} /> : c.error ? <div className="err">{c.error}</div> : <div className="busyline"><span className="shimmer">Thinking</span></div>}
               <Acts acts={c.acts} live={c.live} />
               {settled && !picked && !c.error && <button className="btn small quiet keep" onClick={() => pick(id, c.who)}>Keep this one</button>}
             </div>
@@ -1087,7 +1162,7 @@ function Arena({ id, done, going, picked, agents, pick }: { id: string; done: Sa
   )
 }
 
-type RunView = { id?: string; command: string; cwd: string; state: LiveRun['state'] | 'done' | 'denied'; verdict?: Verdict; out: string; code?: number | null; ms?: number; how?: string; edit?: boolean }
+type RunView = { id?: string; asks?: LiveRun['asks']; command: string; cwd: string; state: LiveRun['state'] | 'done' | 'denied'; verdict?: Verdict; out: string; code?: number | null; ms?: number; how?: string; edit?: boolean }
 
 // A command in the room: what it is, what the mode made of it, and its output.
 function RunBlock({ run, answer, kill, keys = true }: { run: RunView; answer?: Actions['answer']; kill?: Actions['kill']; keys?: boolean }) {
@@ -1126,10 +1201,10 @@ function RunBlock({ run, answer, kill, keys = true }: { run: RunView; answer?: A
       </div>
       {asking && answer && run.id && (
         <div className="ask">
-          {run.edit ? <span>Ask mode checks each change with you first. Allow this one in <code>{short(run.cwd)}</code>?</span> : <span>This {v?.reason}. Run it in <code>{short(run.cwd)}</code>?</span>}
+          {run.asks ? <span>{run.asks.text}</span> : run.edit ? <span>Ask mode checks each change with you first. Allow this one in <code>{short(run.cwd)}</code>?</span> : <span>This {v?.reason}. Run it in <code>{short(run.cwd)}</code>?</span>}
           <div className="row">
             <button className="btn small" onClick={() => answer(run.id!, 'once')}>{run.edit ? 'Allow' : 'Run'} <kbd>{mod}↵</kbd></button>
-            {v?.kind !== 'danger' && <button className="btn small quiet" onClick={() => answer(run.id!, 'always')}>{run.edit ? 'Allow every change in this folder' : 'Always in this folder'}</button>}
+            {v?.kind !== 'danger' && <button className="btn small quiet" onClick={() => answer(run.id!, 'always')}>{run.asks?.always ?? (run.edit ? 'Allow every change in this folder' : 'Always in this folder')}</button>}
             <button className="btn small quiet" onClick={() => answer(run.id!, 'deny')}>{run.edit ? 'Don’t allow' : 'Don’t run'}</button>
           </div>
         </div>
@@ -1296,7 +1371,7 @@ function Receipt({ meta, events, agents, kept }: { meta: RoomMeta; events: Event
   const rows = useMemo(() => {
     const by = new Map<string, { cost: number; tokens: number; turns: number; ms: number }>()
     for (const e of events) {
-      if (e.kind !== 'say' && e.kind !== 'hands') continue
+      if ((e.kind !== 'say' && e.kind !== 'hands') || (e.kind === 'hands' && e.via === 'cli')) continue
       const who = e.kind === 'say' ? e.who : e.to
       const r = by.get(who) ?? { cost: 0, tokens: 0, turns: 0, ms: 0 }
       r.cost += e.usage?.cost ?? 0

@@ -42,7 +42,7 @@ const VERSION = /^(node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|uv|ruby|go|car
 
 // Words as a shell splits them, quotes removed, so "$HOME"/x is one word. A backslash is part of
 // a path on Windows and an escape everywhere else.
-function words(s: string) {
+export function words(s: string) {
   const word = sep === '\\' ? /(?:"[^"]*"|'[^']*'|[^\s"'])+/g : /(?:"[^"]*"|'[^']*'|\\.|[^\s"'\\])+/g
   return [...s.matchAll(word)].map((m) => m[0].replace(sep === '\\' ? /"([^"]*)"|'([^']*)'/g : /"([^"]*)"|'([^']*)'|\\(.)/g, (_m, a, b, c) => a ?? b ?? c ?? ''))
 }
@@ -107,15 +107,65 @@ function wipes(command: string, cwd: string) {
   return false
 }
 
-function segments(command: string) {
+export function segments(command: string) {
   // A single & starts a second command as surely as && does, but the & in 2>&1 or &> only
-  // points one output at another, so those go first. &> still writes a file, so it stays a >.
-  const plain = command.replace(/\d*[<>]&(\d+|-)(?=\s|$|[|;&)])/g, ' ').replace(/&>/g, '>')
-  return plain.split(/&&|\|\||;|\||&|\r|\n/).map((s) => s.trim()).filter(Boolean)
+  // points one output at another, so those go first. &> still writes a file, so it stays a >,
+  // and so does >& before a name: `echo x >&cat` writes a file called cat.
+  const plain = command.replace(/\d*[<>]&(\d+|-)(?=\s|$|[|;&)])/g, ' ').replace(/&>|>&/g, '> ')
+  // Split where the shell would: a | or ; inside quotes is text, as in sed 's|a|b|' or grep "a|b".
+  const out: string[] = []
+  let cur = '', quote = ''
+  for (let i = 0; i < plain.length; i++) {
+    const c = plain[i]
+    if (quote) { if (c === quote) quote = ''; else if (c === '\\' && quote === '"' && sep !== '\\') cur += plain[i++]; cur += plain[i] ?? ''; continue }
+    if (c === '"' || c === "'") { quote = c; cur += c; continue }
+    if (c === '\\' && sep !== '\\') { cur += c + (plain[++i] ?? ''); continue }
+    if (';|&\r\n'.includes(c)) { out.push(cur); cur = ''; continue }
+    cur += c
+  }
+  out.push(cur)
+  // A quote that never closes (an apostrophe in a heredoc, say) would hide every line after it
+  // inside one segment, so each line is judged on its own instead.
+  if (quote) return plain.split(/[;|&\r\n]/).map((s) => s.trim()).filter(Boolean)
+  return out.map((s) => s.trim()).filter(Boolean)
 }
 
+// A sed script that only prints, deletes or substitutes: an optional address, then one command
+// from a short list. Anything else may be e (run a command), w or r (a file), which this does
+// not try to tell apart.
+const SED_ADDR = String.raw`(?:\d+|\$|\/(?:[^\/\\\n]|\\.)*\/)`
+const SED_STEP = new RegExp(String.raw`^\s*(?:${SED_ADDR}(?:\s*,\s*(?:\+?\d+|\$|\/(?:[^\/\\\n]|\\.)*\/))?)?\s*!?\s*(?:[pdqDGHghNnPx=]|s([\/|#,:@])(?:(?!\1)[^\\\n]|\\.)*\1(?:(?!\1)[^\\\n]|\\.)*\1[gpiIm\d]*|y([\/|#,:@])(?:(?!\2)[^\\\n]|\\.)*\2(?:(?!\2)[^\\\n]|\\.)*\2)?\s*$`)
+
+// What a sed call does: nothing but print, change the files it names, or something this cannot
+// follow (a script file, or a script with commands outside the short list).
+function sed(segment: string): 'read' | 'edit' | 'unknown' {
+  const w = words(segment).slice(1)
+  const scripts: string[] = []
+  let inplace = false, named = false
+  for (let i = 0; i < w.length; i++) {
+    const a = w[i]
+    if (/^(-f|--file)/.test(a) || /^-[a-zA-Z]*f/.test(a)) return 'unknown'
+    if (/^--in-place/.test(a) || /^-[a-zA-Z]*i/.test(a)) { inplace = true; continue }
+    if (a === '-e' || a === '--expression') { scripts.push(w[++i] ?? ''); named = true; continue }
+    if (a.startsWith('--expression=')) { scripts.push(a.slice(13)); named = true; continue }
+    if (a.startsWith('-')) continue
+    if (!named && !scripts.length) scripts.push(a)
+  }
+  if (!scripts.every((s) => s.split(/[;\n]/).every((step) => SED_STEP.test(step)))) return 'unknown'
+  return inplace ? 'edit' : 'read'
+}
+
+// Code written on the command line for an interpreter: node -e, python -c, perl -e and the like.
+// It is a program of its own, which the words around it say nothing about.
+const INLINE = /^(?:\S*[\\/])?(?:(?:node|nodejs|bun)(?:\.exe)?\s+(?:-\S+\s+)*(?:-[a-zA-Z]*[ep]\b|--eval|--print)|deno\s+(?:-\S+\s+)*eval\s|python[\d.]*(?:\.exe)?\s+(?:-\S+\s+)*-[a-zA-Z]*c\b|(?:ruby|php)(?:\.exe)?\s+(?:-\S+\s+)*-[a-zA-Z]*[er]\b|perl(?:\.exe)?\s+(?:-\S+\s+)*-[a-zA-Z]*[eE]\b|osascript\s+(?:-\S+\s+)*-e\b|(?:pwsh|powershell)(?:\.exe)?\s+(?:-\S+\s+)*(?:-c\b|-command\b|-e\b|-encodedcommand\b))/i
+// A shell given its commands as one word: sh -c '...'. What is inside is judged as it would be
+// on its own.
+const SHELL_C = /^(?:\S*[\\/])?(?:ba|z|da|k|fi)?sh\s+(?:-[a-zA-Z]*\s+)*-[a-zA-Z]*c\b/
+
+const inner = (segment: string) => { const w = words(segment); return w[w.findIndex((x, i) => i > 0 && /^-[a-zA-Z]*c$/.test(x)) + 1] ?? '' }
+
 function isRead(segment: string) {
-  if (/[^>]>[^&]|^>|>>/.test(segment)) return false
+  if (/>/.test(segment)) return false
   // $(...) and backticks run their own command, and env with arguments launches one.
   if (/\$\(|`|<\(/.test(segment)) return false
   if (/^env\s+\S/i.test(segment)) return false
@@ -123,9 +173,10 @@ function isRead(segment: string) {
   const [first, ...rest] = segment.split(/\s+/)
   const head = first.toLowerCase()
   if (head === 'find') return !rest.some((a) => /^-(delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)$/.test(a))
-  if (head === 'sed') return !rest.some((a) => /^(-i|--in-place)/.test(a)) && !/\bw\s*\S|\/w\b/.test(rest.join(' ')) && !/(^|;)\s*\d*\s*[ew]\b|'\d*[ew]/.test(rest.join(' '))
+  if (head === 'sed') return sed(segment) === 'read'
   if (head === 'tree') return !rest.some((a) => /^(-o|--output)/.test(a))
-  if (head === 'rg') return !rest.some((a) => /^--pre/.test(a))
+  // --pre and --hostname-bin both name a program for rg to run.
+  if (head === 'rg') return !rest.some((a) => /^--(pre|hostname-bin)/.test(a))
   return READ.has(head)
 }
 
@@ -145,8 +196,11 @@ function outside(segment: string, cwd: string, root: string) {
     })
 }
 
-export function classify(command: string, cwd: string, root: string): { kind: Kind; reason: string } {
+export function classify(command: string, cwd: string, root: string, depth = 0): { kind: Kind; reason: string } {
   if (BLOCKED.some((r) => r.test(command)) || wipes(command, cwd)) return { kind: 'blocked', reason: 'would wipe a disk or your home folder' }
+  const shells = depth < 3 ? segments(command).filter((s) => SHELL_C.test(s)).map((s) => classify(inner(s), cwd, root, depth + 1)) : []
+  const wipe = shells.find((r) => r.kind === 'blocked')
+  if (wipe) return wipe
   for (const [r, reason] of DANGER) if (r.test(command)) return { kind: 'danger', reason }
   let kind: Kind = 'read'
   let reason = 'only reads'
@@ -154,6 +208,12 @@ export function classify(command: string, cwd: string, root: string): { kind: Ki
   const cwdOut = relative(root, cwd).startsWith('..')
   for (const s of segments(command)) {
     if (NETWORK.test(s)) bump('network', 'reaches the internet')
+    else if (SHELL_C.test(s)) {
+      const r = inner(s) && depth < 3 ? classify(inner(s), cwd, root, depth + 1) : { kind: 'outside' as Kind, reason: 'runs a script written on the command line' }
+      bump(r.kind, r.reason)
+    }
+    else if (INLINE.test(s)) bump('outside', 'runs code written on the command line')
+    else if (/^sed\s/i.test(s) && sed(s) === 'unknown') bump('outside', 'runs a sed script that can start commands or write files')
     else if (!isRead(s)) {
       if (cwdOut || outside(s, cwd, root)) bump('outside', 'writes outside the workspace')
       else bump('write', 'changes files in the workspace')

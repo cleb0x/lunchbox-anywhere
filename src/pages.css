@@ -120,7 +120,7 @@ input[type=number].select{width:64px}
 .tcard small,.card small{font:10.5px var(--mono);color:var(--faint)}
 .tcard .crewmarks{margin-bottom:8px}
 .tcard small{margin-top:auto;padding-top:8px}
-@media (hover:hover){.tcard:hover,.card:not(.static):hover{box-shadow:inset 0 0 0 1px var(--line2),0 8px 24px -16px rgba(0,0,0,.6);transform:translateY(-1px)}}
+@media (hover:hover){.tcard:hover,.card:not(.static):hover{box-shadow:inset 0 0 0 1px var(--line2),0 8px 24px -16px rgb(0 0 0/calc(.6*var(--shade)));transform:translateY(-1px)}}
 .tcard:active,.card:not(.static):active{transform:scale(.985)}
 .steps{list-style:none;display:flex;flex-direction:column;gap:10px}
 .step{display:flex;align-items:flex-start;gap:14px;padding:14px 12px 12px 16px;border-radius:12px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);animation:land 300ms var(--out) both;transition:box-shadow 160ms var(--out)}
@@ -133,7 +133,7 @@ input[type=number].select{width:64px}
 
 /* Library */
 /* Sticks just under the window's drag strip. */
-.libbar{display:flex;align-items:center;gap:16px;position:sticky;top:-32px;z-index:2;padding:14px 0;margin:-14px 0;background:var(--sheet)}
+.libbar{display:flex;align-items:center;gap:16px;min-width:0;position:sticky;top:-32px;z-index:2;padding:14px 0;margin:-14px 0;background:var(--sheet)}
 /* The bar stays on top while the list scrolls under it, so it needs its own ground and a soft edge. */
 .libbar::after{content:"";position:absolute;left:0;right:0;top:100%;height:16px;background:linear-gradient(var(--sheet),transparent);pointer-events:none}
 [data-look=neyra] .libbar{background:var(--ground)}
@@ -143,7 +143,7 @@ input[type=number].select{width:64px}
 .tabs button small{font:10.5px var(--mono);color:var(--faint)}
 .tabs button.on{background:var(--ink);color:var(--ground)}
 .tabs button.on small{color:color-mix(in srgb,var(--ground) 55%,transparent)}
-.search{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;margin-left:auto;min-width:240px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--line2);color:var(--faint);transition:box-shadow 140ms var(--out)}
+.search{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;margin-left:auto;flex:0 1 240px;min-width:120px;border-radius:9px;box-shadow:inset 0 0 0 1px var(--line2);color:var(--faint);transition:box-shadow 140ms var(--out)}
 .search:focus-within{box-shadow:inset 0 0 0 1px var(--ink)}
 .search input{flex:1;height:100%;font-size:12.5px;color:var(--ink)}
 .search input::placeholder{color:var(--faint)}
@@ -181,7 +181,7 @@ input[type=number].select{width:64px}
 /* Sheet over the page */
 .scrim.center{display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.45);-webkit-app-region:no-drag}
 [data-theme=light] .scrim.center{background:rgba(14,14,13,.2)}
-.sheetcard{width:min(560px,calc(100vw - 48px));max-height:calc(100vh - 96px);overflow:auto;display:flex;flex-direction:column;gap:14px;padding:22px 24px;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgba(0,0,0,.6);animation:menu 260ms var(--out) both}
+.sheetcard{width:min(560px,calc(100vw - 48px));max-height:calc(100vh - 96px);overflow:auto;display:flex;flex-direction:column;gap:14px;padding:22px 24px;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgb(0 0 0/calc(.6*var(--shade)));animation:menu 260ms var(--out) both}
 /* Taller than the window, the card scrolls; its parts keep their size instead of squashing. */
 .sheetcard>*{flex-shrink:0}
 .sheetcard h2{font-size:17px;font-weight:500;letter-spacing:-.01em}
@@ -224,7 +224,7 @@ input[type=number].select{width:64px}
 .receipt .amount{width:52px;text-align:right;color:var(--ink)}
 
 /* Room: changes per message */
-.changes{width:min(1120px,calc(100vw - 64px));height:min(760px,calc(100vh - 80px));display:flex;flex-direction:column;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgba(0,0,0,.6);overflow:hidden;animation:menu 260ms var(--out) both}
+.changes{width:min(1120px,calc(100vw - 64px));height:min(760px,calc(100vh - 80px));display:flex;flex-direction:column;border-radius:14px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 24px 64px -16px rgb(0 0 0/calc(.6*var(--shade)));overflow:hidden;animation:menu 260ms var(--out) both}
 .changeshead{display:flex;align-items:center;gap:12px;height:56px;padding:0 12px 0 20px;border-bottom:1px solid var(--line);flex:none}
 .changeshead .grow{display:flex;align-items:baseline;gap:10px;min-width:0}
 .changeshead b{font-weight:500;font-size:14px}
@@ -284,11 +284,11 @@ input[type=number].select{width:64px}
 @keyframes bload{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
 .seg.small button{height:22px;padding:0 9px;font-size:11.5px}
 .bstage{position:relative;flex:1;min-height:0;display:flex;padding:14px;background:var(--ground)}
-.bdevice{position:relative;flex:1;display:flex;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line2),0 16px 48px -24px rgba(0,0,0,.7);overflow:hidden;background:#fff;transition:box-shadow 300ms var(--out),max-width 420ms var(--out);margin:0 auto;max-width:100%;width:100%}
+.bdevice{position:relative;flex:1;display:flex;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line2),0 16px 48px -24px rgb(0 0 0/calc(.7*var(--shade)));overflow:hidden;background:#fff;transition:box-shadow 300ms var(--out),max-width 420ms var(--out);margin:0 auto;max-width:100%;width:100%}
 .bdevice.tablet,.bdevice.phone{max-width:calc(var(--w) + 2px);border-radius:22px}
 .bdevice.phone{border-radius:28px}
 .bhole{flex:1;display:grid;place-items:center;margin:1px;border-radius:inherit;background:var(--sheet)}
-.browser.driven .bdevice{box-shadow:inset 0 0 0 1px var(--ink),0 0 0 4px var(--hover),0 16px 48px -24px rgba(0,0,0,.7)}
+.browser.driven .bdevice{box-shadow:inset 0 0 0 1px var(--ink),0 0 0 4px var(--hover),0 16px 48px -24px rgb(0 0 0/calc(.7*var(--shade)))}
 /* One page per agent, as tabs. The mark lights while its agent is at work, and the words beside
    it say what the agent is doing, then go back to the page's title. */
 .btabs{display:flex;align-items:center;gap:4px;height:38px;padding:0 14px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none;animation:fadein 220ms var(--out) both}
@@ -340,7 +340,7 @@ input[type=number].select{width:64px}
 .savings .sv-card>header h2{font-size:13.5px;font-weight:500;margin:0}
 .savings .sv-info{position:relative;display:inline-flex;color:var(--faint);cursor:help;outline:none}
 .savings .sv-info:hover,.savings .sv-info:focus-visible{color:var(--dim)}
-.savings .sv-tip{position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:8px 10px;border-radius:8px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 12px 32px -12px rgba(0,0,0,.6);font:400 12px/1.5 var(--sans);color:var(--ink);text-align:left;white-space:normal;pointer-events:none;opacity:0;transform:translate(-50%,4px);transition:opacity 140ms var(--out),transform 140ms var(--out)}
+.savings .sv-tip{position:absolute;z-index:20;left:50%;bottom:calc(100% + 8px);width:max-content;max-width:260px;padding:8px 10px;border-radius:8px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line2),0 12px 32px -12px rgb(0 0 0/calc(.6*var(--shade)));font:400 12px/1.5 var(--sans);color:var(--ink);text-align:left;white-space:normal;pointer-events:none;opacity:0;transform:translate(-50%,4px);transition:opacity 140ms var(--out),transform 140ms var(--out)}
 .savings .sv-info:hover>.sv-tip,.savings .sv-info:focus-visible>.sv-tip,.savings .sv-stack:hover>.sv-tip,.savings .sv-stack:focus-visible>.sv-tip{opacity:1;transform:translate(-50%,0)}
 .savings .sv-legend{display:flex;gap:14px;font-size:12px;color:var(--dim)}
 .savings .sv-legend span{display:flex;align-items:center;gap:6px}
@@ -447,3 +447,31 @@ input[type=number].select{width:64px}
 .checknote{font-size:12px;color:var(--dim)}
 .checknote.bad{color:var(--bad)}
 .connect .presets button small{margin-left:0;font-size:10.5px;color:var(--faint)}
+
+/* Import a chat */
+.sheetcard.importsheet{width:min(640px,calc(100vw - 48px));height:min(620px,calc(100vh - 96px));gap:14px;padding:24px 24px 14px;overflow:hidden}
+.imbar{display:flex;align-items:center;gap:10px}
+.imfind{flex:1;display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:8px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);color:var(--faint)}
+.imfind:focus-within{box-shadow:inset 0 0 0 1px var(--line2)}
+.imfind input{flex:1;height:100%;font-size:13px;color:var(--ink)}
+.imfind input::placeholder{color:var(--faint)}
+.sheetcard>.imlist{flex:1 1 0;min-height:0;overflow:auto;margin:0 -10px;padding:0 0 2px;display:flex;flex-direction:column;gap:1px}
+.imrow{display:flex;align-items:flex-start;gap:12px;width:100%;padding:9px 10px;border-radius:8px;text-align:left;color:var(--dim);flex:none}
+.imrow.on{background:var(--hover);color:var(--ink)}
+.imrow:disabled{opacity:.45}
+.imrow>svg,.imrow>.mark,.imrow>:first-child{flex:none;margin-top:2px}
+.imrow .grow{min-width:0;display:flex;flex-direction:column;gap:2px}
+.imrow b{font-weight:500;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imrow .imfirst{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imrow small{display:flex;align-items:center;gap:10px;font:11px var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden}
+.imrow small span:first-child{overflow:hidden;text-overflow:ellipsis}
+.imrow small em{font-style:normal;color:var(--dim)}
+.imnone{display:flex;flex-direction:column;align-items:center;gap:8px;margin:auto;padding:32px;text-align:center;color:var(--dim);font-size:12.5px}
+.imnone b{font-weight:500;color:var(--ink);font-size:13.5px}
+.imnone span{max-width:380px}
+.sblabel{display:flex;align-items:center;justify-content:space-between}
+.sbimport{display:flex;padding:3px;margin:-3px -2px -3px 0;border-radius:5px;color:var(--faint);opacity:0;transition:opacity 140ms var(--out),color 140ms var(--out)}
+.sidebar:hover .sbimport,.sbimport:focus-visible{opacity:1}
+.sbimport svg{width:13px;height:13px}
+@media (hover:hover){.sbimport:hover{color:var(--ink)}}
+.bhole .linkbtn{margin-left:4px}

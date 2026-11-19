@@ -7,8 +7,12 @@ import type { View } from '../App'
 // here or in their room.
 export function WaitingPage({ go, access }: { go: (v: View) => void; access: Access }) {
   const rooms = useApp((s) => s.rooms)
-  const [list, setList] = useState<Waiting[]>([])
-  useEffect(() => { desk.call('inbox').then(setList).catch(() => {}) }, [rooms])
+  const [list, setList] = useState<Waiting[] | null>(null)
+  const load = () => desk.call('inbox').then((l: Waiting[] | null) => setList(l ?? []), () => setList([]))
+  useEffect(() => { load() }, [rooms])
+  // An answered row leaves at once, so it cannot be answered twice while the room catches up.
+  const answered = (room: string, key: string) => setList((l) => (l ?? []).map((w) => (w.room === room ? { ...w, items: w.items.filter((it) => (it.kind === 'decide' ? it.ref : it.id) !== key) } : w)).filter((w) => w.items.length))
+  const act = (room: string, key: string, call: Promise<unknown>) => { answered(room, key); call.catch(() => {}).finally(load) }
   return (
     <div className="page">
       <div className="pagebody">
@@ -16,8 +20,8 @@ export function WaitingPage({ go, access }: { go: (v: View) => void; access: Acc
           <h1>Needs you</h1>
           <p>Decisions and commands waiting across your rooms. Answer here, or open the room to see the work around it.</p>
         </header>
-        {!list.length && <p className="hint rise">Nothing is waiting. Rooms that need you show up here and in the sidebar.</p>}
-        {list.map((w, i) => (
+        {list && !list.length && <p className="hint rise">Nothing is waiting. Rooms that need you show up here and in the sidebar.</p>}
+        {(list ?? []).map((w, i) => (
           <section key={w.room} className="group rise" style={{ '--i': i + 1 } as CSSProperties}>
             <h2>{w.name}<button className="btn small quiet" onClick={() => go({ name: 'room', id: w.room })}>Open room</button></h2>
             <div className="settings">
@@ -25,15 +29,15 @@ export function WaitingPage({ go, access }: { go: (v: View) => void; access: Acc
                 <div key={it.ref} className="setting inboxrow">
                   <div className="grow"><b>{it.text}</b></div>
                   <div className="row">{it.options.map((o, n) => (
-                    <button key={o} className={`btn small${n ? ' quiet' : ''}`} onClick={() => desk.call('room:decide', w.room, it.ref, n, access)}>{o}</button>
+                    <button key={o} className={`btn small${n ? ' quiet' : ''}`} onClick={() => act(w.room, it.ref, desk.call('room:decide', w.room, it.ref, n, access))}>{o}</button>
                   ))}</div>
                 </div>
               ) : (
                 <div key={it.id} className="setting inboxrow">
                   <div className="grow"><b className="mono">{it.command}</b>{it.reason && <span>Asks because it {it.reason}</span>}</div>
                   <div className="row">
-                    <button className="btn small" onClick={() => desk.call('run:answer', it.id, 'once')}>Run</button>
-                    <button className="btn small quiet" onClick={() => desk.call('run:answer', it.id, 'deny')}>Refuse</button>
+                    <button className="btn small" onClick={() => act(w.room, it.id, desk.call('run:answer', it.id, 'once'))}>Run</button>
+                    <button className="btn small quiet" onClick={() => act(w.room, it.id, desk.call('run:answer', it.id, 'deny'))}>Refuse</button>
                   </div>
                 </div>
               ))}

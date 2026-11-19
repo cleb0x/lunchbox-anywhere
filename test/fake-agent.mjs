@@ -10,6 +10,11 @@ if (args[0] === '--version') {
   console.log(`${name} 1.0.0`)
   process.exit(0)
 }
+// Asked for plain text, the way one agent starts another from a shell: a short written answer.
+if (args[args.indexOf('--output-format') + 1] === 'text') {
+  console.log('The plan holds up. One risk: step 3 assumes the API key is already set.')
+  process.exit(0)
+}
 const file = args[args.indexOf('--prompt-file') + 1]
 let input = ''
 if (args.includes('--prompt-file')) input = readFileSync(file, 'utf8')
@@ -97,6 +102,59 @@ if (process.env.FAKE_SCRIPT === 'prose' && name === 'claude') {
   process.exit(0)
 }
 
+// FAKE_SCRIPT=theme: Claude answers the theme brief with a designed theme in a lunchbox-theme block.
+if (process.env.FAKE_SCRIPT === 'theme' && name === 'claude') {
+  const theme = { name: 'Harbour', note: 'Tar, rope and signal orange', base: '#2f4a5a', tint: 0.022,
+    night: { block: '#e9dcc2', accent: '#ff7a3d', ascii: ['#2f4a5a', '#6f8fa0', '#e9dcc2', '#ff7a3d'] },
+    day: { block: '#1f3340', accent: '#e8611f', ascii: ['#b9c9d2', '#6f8fa0', '#1f3340', '#e8611f'] } }
+  const reply = 'From a working harbour at dusk: tarred wood, hemp rope and the orange of a signal buoy.\n\n```lunchbox-theme\n' + JSON.stringify(theme, null, 2) + '\n```'
+  say({ type: 'system', subtype: 'init', session_id: 'theme', model: 'claude-sonnet-5-5' })
+  say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'theme', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
+  process.exit(0)
+}
+
+// FAKE_SCRIPT=rich: one reply with everything a reply can hold, and the things that used to leak
+// into one: a table, a rule, emphasis, a quote, code, a very long word and terminal leftovers.
+if (process.env.FAKE_SCRIPT === 'rich' && name === 'claude') {
+  const reply = [
+    '\x1b[32mHere is the comparison\x1b[0m you asked for, with *one* caveat and a **bold** claim.<|im_end|>',
+    '| Agent | Best at | Cost per turn |\n|---|---|---:|\n| Claude | Careful edits and long reasoning across many files | `$0.04` |\n| Codex | Building, running and fixing tests | `$0.02` |\n| Grok | Live search | free |',
+    '---',
+    '> Limits are the top complaint.\n>\n> Second paragraph of the quote.',
+    '```ts\nexport const answer = (question: string) => question.length > 40 ? "a very long line of code that runs past the edge of the column so it has to scroll sideways" : "short"\n```',
+    'A link that never breaks: https://example.com/' + 'a-very-long-path-segment/'.repeat(8) + ' and a word ' + 'Donaudampfschifffahrtsgesellschaft'.repeat(4) + '.',
+    '1. First step\n2. Second step\n   ```\n   npm test\n   ```',
+    'سلام، این یک جمله فارسی است. 👨‍👩‍👧 done.',
+  ].join('\n\n')
+  say({ type: 'system', subtype: 'init', session_id: 'rich', model: 'claude-sonnet-5-5' })
+  say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'rich', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
+  process.exit(0)
+}
+
+// FAKE_SCRIPT=code: one reply with code in the languages people paste most, for the colours, and
+// words that repeat, for find. A later message gets a short answer.
+if (process.env.FAKE_SCRIPT === 'code' && name === 'claude' && !/^Shell: /m.test(input)) {
+  const first = !args.includes('--resume')
+  const reply = first ? [
+    'The parser reads the month before the day. Here is the fix, the config it needs and how to check it.',
+    '```ts\n// Picks the order from the locale, so 13/02 is a date again.\nexport function parseDate(text: string, locale = \'en-GB\'): Date | null {\n  const [a, b, year] = text.split(\'/\').map(Number)\n  if (!year) return null\n  const dayFirst = locale !== \'en-US\'\n  return new Date(year, (dayFirst ? b : a) - 1, dayFirst ? a : b)\n}\n```',
+    '```json\n{\n  "name": "dates",\n  "version": "1.4.0",\n  "strict": true,\n  "retries": 3,\n  "locales": ["en-GB", "sv-SE"]\n}\n```',
+    '```py\ndef parse_date(text: str, day_first: bool = True) -> date | None:\n    """Same rule as the parser in the app."""\n    a, b, year = (int(p) for p in text.split("/"))  # raises on junk\n    return date(year, b if day_first else a, a if day_first else b)\n```',
+    '```bash\n# Run the parser tests, then the whole suite\nnpm test -- parseDate && echo "parser ok: $?"\nfor f in src/*.ts; do wc -l "$f"; done\n```',
+    '```css\n@media (hover: hover) {\n  .date:hover { color: #f2f0ea; padding: 4px 12px; }\n}\n/* the field */\n.date::after { content: "dd/mm"; opacity: .5 }\n```',
+    '```diff\n@@ -3,2 +3,3 @@ export function parseDate\n-  return new Date(year, a - 1, b)\n+  const dayFirst = locale !== \'en-US\'\n+  return new Date(year, (dayFirst ? b : a) - 1, dayFirst ? a : b)\n```',
+    'And a prompt for the release note, ready to paste:',
+    '```text\nWrite a release note for version 1.4.0 of the dates package. Say in two sentences that dates after the twelfth of a month are read correctly again, and that the form now sends its locale. Plain words, no headings, no list.\n\nEnd with one line on how to upgrade.\n```',
+    'The parser now takes the locale from the form. I ran the parser tests and the rest of the suite.',
+  ].join('\n\n') : 'Yes. The parser falls back to en-GB when the form sends no locale, so old forms keep working.'
+  say({ type: 'system', subtype: 'init', session_id: 'code', model: 'claude-sonnet-5-5' })
+  say({ type: 'assistant', message: { content: [{ type: 'text', text: reply }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: 'code', total_cost_usd: 0.01, usage: { input_tokens: 6, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })
+  process.exit(0)
+}
+
 // FAKE_SCRIPT=saving: Claude Code as the saving code meets it. A new session writes its whole
 // start to the cache, for five minutes when asked to and an hour otherwise; a resumed one reads
 // it back. A line starting "Run:" in the request runs that command the way Claude Code does, through the hook
@@ -169,6 +227,32 @@ if (mcp && input.includes('Browse:')) {
     say({ type: 'assistant', message: { content: [{ type: 'text', text }] } })
     say({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: `${name}-session`, total_cost_usd: 0.01, usage: { input_tokens: 100, output_tokens: 20 } })
   }
+  process.exit(0)
+}
+
+// A line starting "Shell:" in the request is a command the agent runs in its own shell. Claude
+// Code asks the room's hook first, as the real one does; the others have no hook and just run it,
+// with the PATH the room gave them.
+const shell = input.match(/^Shell: (.+)$/m)?.[1]
+if (shell && name !== 'codex') {
+  const { spawnSync } = await import('node:child_process')
+  const hook = args.includes('--settings') ? JSON.parse(readFileSync(args[args.indexOf('--settings') + 1], 'utf8')).hooks.PreToolUse[0].hooks[0].url : null
+  const asked = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: shell } }
+  const answer = hook ? await (await fetch(hook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(asked) })).json() : {}
+  const refused = answer.hookSpecificOutput?.permissionDecision === 'deny' ? answer.hookSpecificOutput.permissionDecisionReason : ''
+  say({ type: 'system', subtype: 'init', session_id: `${name}-session`, model: 'fake' })
+  say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'Bash', input: { command: shell } }] } })
+  let out = refused
+  let code = 1
+  if (!refused) {
+    const ran = spawnSync('/bin/sh', ['-c', shell], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FAKE_LOG: '' } })
+    out = `${ran.stdout}${ran.stderr}`
+    code = ran.status ?? 1
+  }
+  say({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 's1', content: code ? `Exit code ${code}\n${out}` : out, is_error: code !== 0 }] } })
+  const text = refused ? 'I could not run that.' : `Ran it, exit ${code}.`
+  say({ type: 'assistant', message: { content: [{ type: 'text', text }] } })
+  say({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: `${name}-session`, total_cost_usd: 0.01, usage: { input_tokens: 100, output_tokens: 20 } })
   process.exit(0)
 }
 

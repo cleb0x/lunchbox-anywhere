@@ -215,7 +215,7 @@ const gb = (n: number) => (n / 2 ** 30).toFixed(n >= 10 * 2 ** 30 ? 0 : 1)
 
 // Text progress, the way a terminal draws it: [#######.......]  48%  2.5 of 5.2 GB
 export function PullBar({ p }: { p: Pull }) {
-  const share = p.total ? p.done / p.total : 0
+  const share = p.total ? Math.max(0, Math.min(1, p.done / p.total)) : 0
   const W = 28
   const lit = Math.round(share * W)
   return (

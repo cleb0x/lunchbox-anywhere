@@ -1,0 +1,48 @@
+[
+ {
+  "role": "user",
+  "parts": [
+   {
+    "text": "Make the photo grid three columns wide."
+   }
+  ]
+ },
+ {
+  "role": "model",
+  "parts": [
+   {
+    "text": "Thinking about the grid.",
+    "thought": true
+   },
+   {
+    "functionCall": {
+     "name": "replace",
+     "args": {
+      "file_path": "src/grid.css"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "role": "user",
+  "parts": [
+   {
+    "functionResponse": {
+     "name": "replace",
+     "response": {
+      "output": "ok"
+     }
+    }
+   }
+  ]
+ },
+ {
+  "role": "model",
+  "parts": [
+   {
+    "text": "The grid is three columns now."
+   }
+  ]
+ }
+]

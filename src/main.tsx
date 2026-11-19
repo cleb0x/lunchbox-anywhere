@@ -4,6 +4,7 @@ import '@fontsource/ibm-plex-mono/500.css'
 import './styles.css'
 import './pages.css'
 import './look-neyra.css'
+import './themes.css'
 import { App } from './App'
 import { desk } from './lib/desk'
 

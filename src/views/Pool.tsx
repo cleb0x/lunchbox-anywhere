@@ -200,8 +200,11 @@ function when(t: number) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+const NO_RATINGS = {}
+
 function Ratings({ agents }: { agents: AgentInfo[] }) {
-  const ratings = useApp((s) => s.ledger?.ratings ?? {})
+  // The same empty object each time: a new one on every read would never settle.
+  const ratings = useApp((s) => s.ledger?.ratings) ?? NO_RATINGS
   const cats = CATEGORIES.filter((c) => c.id !== 'general')
   const best = useMemo(() => Object.fromEntries(cats.map((c) => {
     const top = [...agents].sort((x, y) => rating(ratings, c.id, y.id).r - rating(ratings, c.id, x.id).r)[0]
@@ -224,6 +227,8 @@ function Ratings({ agents }: { agents: AgentInfo[] }) {
   )
 }
 
+const xml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+
 // A 1200 by 675 card for X: who leads what in your own side by sides. Drawn as SVG, saved as PNG.
 async function shareCard(agents: AgentInfo[], say: (t: string) => void) {
   const { ledger } = now()
@@ -237,7 +242,7 @@ async function shareCard(agents: AgentInfo[], say: (t: string) => void) {
     return `<line x1="80" x2="1120" y1="${y + 22}" y2="${y + 22}" stroke="${line}"/><text x="80" y="${y}" fill="${ink}" font-size="24">${c.name}</text>` +
       agents.map((a, k) => `<text x="${300 + k * colW}" y="${y}" fill="${top?.id === a.id ? ink : faint}" font-size="24" font-family="IBM Plex Mono, Menlo, monospace" ${top?.id === a.id ? 'font-weight="600"' : ''}>${rating(ratings, c.id, a.id).r}</text>`).join('')
   }).join('')
-  const heads = agents.map((a, k) => `<text x="${300 + k * colW}" y="200" fill="${faint}" font-size="20">${a.short}</text>`).join('')
+  const heads = agents.map((a, k) => `<text x="${300 + k * colW}" y="200" fill="${faint}" font-size="20">${xml(a.short)}</text>`).join('')
   const games = Object.values(ledger?.arena ?? {}).reduce((x, y) => x + y, 0)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
 <rect width="1200" height="675" fill="#0d0d0c"/>
@@ -246,16 +251,16 @@ async function shareCard(agents: AgentInfo[], say: (t: string) => void) {
 ${heads}${rows}
 <text x="1120" y="630" fill="${faint}" font-size="18" text-anchor="end" font-family="IBM Plex Mono, Menlo, monospace">lunchbox</text>
 </svg>`
-  const img = new Image()
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
-  await img.decode()
-  const canvas = document.createElement('canvas')
-  canvas.width = 2400
-  canvas.height = 1350
-  const g = canvas.getContext('2d')!
-  g.scale(2, 2)
-  g.drawImage(img, 0, 0)
   try {
+    const img = new Image()
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = 2400
+    canvas.height = 1350
+    const g = canvas.getContext('2d')!
+    g.scale(2, 2)
+    g.drawImage(img, 0, 0)
     const file = await desk.call('save:png', canvas.toDataURL('image/png'), 'lunchbox-ratings.png')
     if (file) say('Card saved')
   } catch (e) {

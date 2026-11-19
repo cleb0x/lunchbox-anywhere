@@ -7,15 +7,21 @@ import { agentOf, desk, machine, unavailable, useApp, type Access } from '../lib
 import { follow } from '../lib/fit'
 import { PLAYBOOKS, fillPlaybook } from '../../shared/skills'
 import { addOpenCode, hasOpenCode, openCodeFound } from './Connect'
+import { draftOf, remember, saveDraft, sentIn } from '../lib/drafts'
+
 
 type Suggestion = { key: string; label: string; hint: string; insert: string; mark?: string }
 
-export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder }: {
+export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder, room }: {
   crew: string[]; setCrew: (c: string[]) => void; onSend: (t: string, files?: string[]) => void; access: Access; setAccess: (a: Access) => void
-  busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string
+  busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string; room?: string
 }) {
-  const [text, setText] = useState('')
-  const [files, setFiles] = useState<string[]>([])
+  const [text, setText] = useState(() => (room && draftOf(room)?.text) || '')
+  const [files, setFiles] = useState<string[]>(() => (room && draftOf(room)?.files) || [])
+  useEffect(() => { if (room) saveDraft(room, { text, files }) }, [room, text, files])
+  const sent = sentIn(room)
+  // Where the up arrow stands in the sent messages; -1 is the box as it was typed.
+  const [past, setPast] = useState(-1)
   const [over, setOver] = useState(false)
   const addFiles = (paths: string[]) => setFiles((f) => [...new Set([...f, ...paths.filter(Boolean)])].slice(0, 12))
   const attach = async () => addFiles(await desk.call('attach'))
@@ -27,13 +33,32 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
       const path = desk.pathOf?.(f)
       if (path) { out.push(path); continue }
       if (!f.type.startsWith('image/')) continue
-      const data = await new Promise<string>((done) => { const r = new FileReader(); r.onload = () => done(String(r.result)); r.readAsDataURL(f) })
-      const saved = await desk.call('attach:data', data, f.type.split('/')[1] || 'png', folder)
+      const data = await new Promise<string>((done) => { const r = new FileReader(); r.onload = () => done(String(r.result)); r.onerror = () => done(''); r.readAsDataURL(f) })
+      const saved = data && await desk.call('attach:data', data, f.type.split('/')[1] || 'png', folder).catch(() => null)
       if (saved) out.push(saved)
     }
     addFiles(out)
     return out.length > 0
   }
+  // Words quoted from the room go under whatever is already typed, with the caret after them.
+  useEffect(() => {
+    const quoted = (e: Event) => {
+      const q = (e as CustomEvent<string>).detail
+      setText((now) => (now.trim() ? `${now.replace(/\s+$/, '')}\n\n${q}` : q))
+      // At once, so what is typed next is not lost before the box has grown.
+      area.current?.focus()
+      requestAnimationFrame(() => { const el = area.current; if (!el) return; el.focus(); el.setSelectionRange(el.value.length, el.value.length); el.scrollTop = el.scrollHeight })
+    }
+    addEventListener('lb:quote', quoted)
+    return () => removeEventListener('lb:quote', quoted)
+  }, [])
+  const takeRef = useRef(take)
+  takeRef.current = take
+  useEffect(() => {
+    const dropped = (e: Event) => { takeRef.current((e as CustomEvent<FileList>).detail); area.current?.focus() }
+    addEventListener('lb:files', dropped)
+    return () => removeEventListener('lb:files', dropped)
+  }, [])
   const [at, setAt] = useState(0)
   const [caret, setCaret] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -94,7 +119,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
     const checks = packs.find((p) => p.id === pack)?.checks ?? []
     suggestions = [
       ...checks.map((c) => ({ key: c.command, label: c.label, hint: c.command, insert: `!${c.command}` })),
-      ...skills.map((s) => ({ key: s.id, label: s.name, hint: `Skill, ${s.steps.length} steps`, insert: `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}` })),
+      ...skills.map((s) => ({ key: s.id, label: s.name, hint: `Skill, ${s.steps.length} step${s.steps.length === 1 ? '' : 's'}`, insert: `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}` })),
       ...PLAYBOOKS.map((p) => ({ key: `p-${p.id}`, label: p.name, hint: `${p.field} · ${p.line}`, insert: fillPlaybook(p, '') })),
     ].filter((s) => s.label.toLowerCase().includes(q) || s.hint.toLowerCase().includes(q)).slice(0, 8)
   }
@@ -117,6 +142,8 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   const submit = () => {
     if (!text.trim() && !files.length) return
     onSend(text.trim() || 'Have a look at the attached files.', files.length ? files : undefined)
+    remember(room, text.trim())
+    setPast(-1)
     setText('')
     setFiles([])
     setCaret(0)
@@ -129,7 +156,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
     <div className={`composer${shell ? ' shell' : ''}${arena ? ' arena' : ''}${over ? ' over' : ''}`}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setOver(true) } }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false) }}
-      onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files) }}>
+      onDrop={(e) => { setOver(false); if (e.dataTransfer.files.length) { e.preventDefault(); take(e.dataTransfer.files) } }}>
       {files.length > 0 && (
         <div className="attached">
           {files.map((f) => (
@@ -153,21 +180,28 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
       )}
       <textarea ref={area} value={text} rows={1} autoFocus={autoFocus} spellCheck
         placeholder={placeholder ?? 'Message the room'}
-        onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setAt(0) }}
+        onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); setAt(0); setPast(-1) }}
         onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
-        onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); take(e.clipboardData.files) } }}
+        // Text copied from a document or a sheet often carries a picture of itself; the words win.
+        onPaste={(e) => { if (e.clipboardData.files.length && !e.clipboardData.getData('text/plain')) { e.preventDefault(); take(e.clipboardData.files) } }}
         onKeyDown={(e) => {
           if (suggestions.length) {
             if (e.key === 'ArrowDown') { e.preventDefault(); return setAt(at + 1) }
             if (e.key === 'ArrowUp') { e.preventDefault(); return setAt(at - 1 + suggestions.length) }
             if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing)) { e.preventDefault(); return pickSuggestion(suggestions[at % suggestions.length]) }
           }
+          // Up in an empty box brings back what was sent before; down walks forward again.
+          // Inside a recalled message the arrows still move the caret; only its two ends step on.
+          const el = e.currentTarget
+          const recall = (to: number) => { e.preventDefault(); setPast(to); setText(to < 0 ? '' : sent[to]); setCaret(0); requestAnimationFrame(() => el.setSelectionRange(0, 0)) }
+          if (e.key === 'ArrowUp' && !e.shiftKey && (past >= 0 ? el.selectionStart === 0 : !text) && past + 1 < sent.length) return recall(past + 1)
+          if (e.key === 'ArrowDown' && !e.shiftKey && past >= 0 && el.selectionEnd === text.length) return recall(past - 1)
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
         }} />
       <div className="cbar">
         <Menu label="Agents in this room" button={<><span className="stack">{crew.map((w) => <span key={w}><Mark seed={agentOf(w, agents).mark} size={12} /></span>)}</span><span className="crewpill">{crew.length === 1 ? agentOf(crew[0], agents).short : `${crew.length} agents`}</span></>}>
-          {() => (
-            <CrewMenu listed={listed} crew={crew} toggle={toggle} promote={(id) => setCrew([id, ...crew.filter((w) => w !== id)])} footer={
+          {(close) => (
+            <CrewMenu listed={listed} crew={crew} toggle={toggle} close={close} promote={(id) => setCrew([id, ...crew.filter((w) => w !== id)])} footer={
               <>
                 {!listed.length && <div className="menunote">No agents found yet.</div>}
                 <div className="sep" />
