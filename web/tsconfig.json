@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "noUnusedLocals": true,
     "jsx": "react-jsx",
+    "resolveJsonModule": true,
     "types": ["node", "vite/client"]
   },
   "include": [".", "../src/env.d.ts"],

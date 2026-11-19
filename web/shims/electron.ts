@@ -1,8 +1,10 @@
 // The few Electron calls that run in the browser build. Everything that needs a desktop window
 // lives in web/main.ts instead.
 import { HOME } from './os'
+import { version } from '../../package.json'
 
-export const VERSION = '0.1.6'
+// The version comes from package.json, so it follows each Lunchbox release.
+export const VERSION: string = version
 export const DATA = `${HOME}/.config/Lunchbox`
 
 const paths: Record<string, string> = {
