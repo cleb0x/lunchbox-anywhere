@@ -78,7 +78,7 @@ export function CrewMenu({ listed, crew, toggle, promote, footer, close }: { lis
 }
 
 // Animates its height to whatever it holds, so the menu grows and shrinks instead of jumping.
-function Fit({ children }: { children: ReactNode }) {
+export function Fit({ children }: { children: ReactNode }) {
   const inner = useRef<HTMLDivElement>(null)
   const [h, setH] = useState<number | undefined>(undefined)
   useLayoutEffect(() => {

@@ -32,6 +32,16 @@ const connected = (tools: string[]) => {
   return groups.size ? `Connected tools from: ${[...groups].join(', ')}. Use them when they fit better than guessing.` : ''
 }
 
+// The repository picked in the composer. Read access only reads it; any other mode may change it,
+// on a branch, and pushes when the person asks.
+function repoLine(repo: string, access: Access, tools: string[]) {
+  const gh = tools.some((t) => t.startsWith('github_'))
+  const how = gh ? 'Use the GitHub tools for issues, pull requests and files there, and git for the code.' : 'Use git for the code.'
+  return access === 'plan'
+    ? `GitHub repository for this room: ${repo} (https://github.com/${repo}). Questions are about it unless the person says otherwise. Read it, do not change it. ${how}`
+    : `GitHub repository for this room: ${repo} (https://github.com/${repo}). Work in it unless the person says otherwise: clone it into the folder if it is not there yet, start from its latest default branch, make changes on a new branch, and push or open a pull request when the person asks. ${how}`
+}
+
 // studio is the list of the project's own design files when Studio is on, and null when it is off.
 export function protocol(meta: RoomMeta, me: AgentInfo, crew: AgentInfo[], access: Access, pack?: Pack, tools: string[] = [], habits: string[] = [], main = meta.crew[0], studio: string[] | null = null) {
   const rules = habitRules(habits)
@@ -50,6 +60,7 @@ export function protocol(meta: RoomMeta, me: AgentInfo, crew: AgentInfo[], acces
   return [
     alone ? `You are ${me.short}, working with one person in a Lunchbox room.` : `You are ${me.short}, one of several AI agents working with one person in a shared room in Lunchbox.`,
     `Room: ${meta.name}. Folder: ${meta.workspace}. Access: ${ACCESS[access]}`,
+    meta.repo ? repoLine(meta.repo, access, tools) : '',
     me.tools ? '' : alone ? 'You cannot read files or run commands yourself. When that is needed, say so.' : 'You cannot read files or run commands yourself. When that is needed, ask a crewmate who can.',
     // A model behind an API works through the room's own file tools, and is told to use them:
     // left alone, many ask the person to paste a file they could have opened.

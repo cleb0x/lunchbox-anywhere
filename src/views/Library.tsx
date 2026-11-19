@@ -22,8 +22,9 @@ const TABS: { id: Tab; name: string }[] = [
   { id: 'skills', name: 'Your skills' },
 ]
 
-export function Library({ go, say }: { go: (v: View) => void; say: (t: string) => void }) {
-  const [tab, setTab] = useState<Tab>(() => { const t = sessionStorage.getItem('lb.libtab'); return TABS.find((x) => x.id === t)?.id ?? 'playbooks' })
+export function Library({ go, say, tool }: { go: (v: View) => void; say: (t: string) => void; tool?: string }) {
+  // A deep link to one tool, such as Connect GitHub in the composer, opens Tools with its card open.
+  const [tab, setTab] = useState<Tab>(() => { if (tool) return 'tools'; const t = sessionStorage.getItem('lb.libtab'); return TABS.find((x) => x.id === t)?.id ?? 'playbooks' })
   const [q, setQ] = useState('')
   useEffect(() => { sessionStorage.setItem('lb.libtab', tab) }, [tab])
   const skills = useApp((s) => s.skills)
@@ -47,7 +48,7 @@ export function Library({ go, say }: { go: (v: View) => void; say: (t: string) =
         </div>
         <div key={tab} className="libbody">
           {tab === 'playbooks' && <Playbooks q={q} go={go} />}
-          {tab === 'tools' && <Tools q={q} say={say} />}
+          {tab === 'tools' && <Tools q={q} say={say} first={tool} />}
           {tab === 'packs' && <Packs q={q} go={go} say={say} />}
           {tab === 'habits' && <Habits q={q} />}
           {tab === 'skills' && <Skills q={q} go={go} say={say} />}
@@ -152,9 +153,10 @@ function PlaybookSheet({ p, close, go }: { p: Playbook; close: () => void; go: (
   )
 }
 
-function Tools({ q, say }: { q: string; say: (t: string) => void }) {
+function Tools({ q, say, first }: { q: string; say: (t: string) => void; first?: string }) {
   const [states, setStates] = useState<ToolState[]>([])
-  const [open, setOpen] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(first ?? null)
+  useEffect(() => { if (first) requestAnimationFrame(() => document.querySelector(`[data-tool="${first}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })) }, [first])
   const settings = useApp((s) => s.settings)
   useEffect(() => {
     desk.call('tools').then((s) => s && setStates(s))
@@ -219,7 +221,7 @@ function ToolCard({ t, i, s, open, toggle, say }: { t: CatalogTool; i: number; s
   }
 
   return (
-    <div className={`tool${open ? ' open' : ''} ${state}`} style={{ '--i': i } as CSSProperties}>
+    <div data-tool={t.id} className={`tool${open ? ' open' : ''} ${state}`} style={{ '--i': i } as CSSProperties}>
       <div className="toolhead">
         <button className="grow toolmain" onClick={toggle}>
           <b>{t.name}</b>

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mark, Thumb } from '../ui/bits'
 import { Menu, ModePicker } from '../ui/Access'
 import { CrewMenu } from '../ui/ModelPicker'
+import { RepoPicker } from '../ui/RepoPicker'
 import { IconClip, IconClose, IconSplit, IconStudio, IconStop, IconUp } from '../ui/icons'
 import { agentOf, desk, machine, unavailable, useApp, type Access } from '../lib/desk'
 import { follow } from '../lib/fit'
@@ -12,9 +13,9 @@ import { draftOf, remember, saveDraft, sentIn } from '../lib/drafts'
 
 type Suggestion = { key: string; label: string; hint: string; insert: string; mark?: string }
 
-export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder, room }: {
+export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder, room, repo, setRepo }: {
   crew: string[]; setCrew: (c: string[]) => void; onSend: (t: string, files?: string[]) => void; access: Access; setAccess: (a: Access) => void
-  busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string; room?: string
+  busy?: boolean; onStop?: () => void; arena?: boolean; setArena?: (a: boolean) => void; studio?: boolean; setStudio?: (on: boolean) => void; draft?: { text: string; files?: string[]; n: number; merge?: boolean }; autoFocus?: boolean; placeholder?: string; pack?: string; folder?: string; room?: string; repo?: string; setRepo?: (repo: string | null) => void
 }) {
   const [text, setText] = useState(() => (room && draftOf(room)?.text) || '')
   const [files, setFiles] = useState<string[]>(() => (room && draftOf(room)?.files) || [])
@@ -229,6 +230,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
             } />
           )}
         </Menu>
+        {setRepo && !shell && <RepoPicker value={repo} onChange={setRepo} />}
         {setArena && crew.length > 1 && !shell && (
           <button className={`pill split${arena ? ' open' : ''}`} onClick={() => setArena(!arena)} aria-pressed={arena} title="Everyone answers on their own, you keep the best">
             <IconSplit />Side by side

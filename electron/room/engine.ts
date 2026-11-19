@@ -8,6 +8,7 @@ import type { Access, Act, AgentInfo, Block, DecideAction, Event, Flow, Hit, Liv
 import { asks, plan } from '../../shared/plan'
 import { classify } from '../../shared/route'
 import { clean, tidy } from '../../shared/clean'
+import { isRepo } from '../../shared/github'
 import { DESIGN_SOURCES, DIRECTION, directionGist, spark, studioChecks } from '../../shared/studio'
 import { describe as schedule } from '../../shared/flow'
 import { detect, run, type Result } from '../agents'
@@ -322,9 +323,9 @@ export class Engine {
     return this.queues.get(room) ?? Promise.resolve()
   }
 
-  create(opts: { crew: string[]; workspace: string; pack?: string; name?: string; flow?: string; studio?: boolean }): RoomMeta {
+  create(opts: { crew: string[]; workspace: string; pack?: string; name?: string; flow?: string; studio?: boolean; repo?: string }): RoomMeta {
     const meta: RoomMeta = {
-      id: uid(), name: opts.name || 'New room', created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace, pack: opts.pack, flow: opts.flow, studio: opts.studio || undefined, design: opts.studio ? designFiles(opts.workspace) : undefined,
+      id: uid(), name: opts.name || 'New room', created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace, pack: opts.pack, flow: opts.flow, studio: opts.studio || undefined, repo: isRepo(opts.repo) ? opts.repo : undefined, design: opts.studio ? designFiles(opts.workspace) : undefined,
       sessions: {}, seen: {}, heard: {}, blocks: [], saved: { full: 0, sent: 0 },
     }
     if (opts.studio) Object.assign(meta, this.inspire(meta.id))
@@ -369,6 +370,14 @@ export class Engine {
       m.design = on ? designFiles(m.workspace) : undefined
       if (on && !m.sparks) Object.assign(m, this.inspire(room))
     })
+    this.hooks.emit('room:meta', this.store.room(room))
+  }
+
+  // The GitHub repository the room works on. Agents hear it with the rest of the room's setup.
+  setRepo(room: string, repo: string | null) {
+    const next = isRepo(repo) ? repo : undefined
+    if (this.store.room(room)?.repo === next) return
+    this.store.update(room, (m) => { m.repo = next })
     this.hooks.emit('room:meta', this.store.room(room))
   }
 

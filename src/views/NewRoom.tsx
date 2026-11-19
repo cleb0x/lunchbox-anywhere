@@ -82,6 +82,9 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
   // Studio carries over from the last room started, so someone who works that way keeps it on.
   const [studio, setStudio] = useState(() => { try { return localStorage.getItem('lb.studio') === '1' } catch { return false } })
   const pickStudio = (on: boolean) => { setStudio(on); try { localStorage.setItem('lb.studio', on ? '1' : '0') } catch {} }
+  // The repository picked last starts the next room too, until it is set back to none.
+  const [repo, setRepo] = useState<string | undefined>(() => { try { return localStorage.getItem('lb.repo') || undefined } catch { return undefined } })
+  const pickRepo = (r: string | null) => { setRepo(r ?? undefined); try { r ? localStorage.setItem('lb.repo', r) : localStorage.removeItem('lb.repo') } catch {} }
   const [starting, setStarting] = useState(false)
   const made = useRef<{ id: string } | null>(null)
   const current = packs.find((p) => p.id === pack)
@@ -93,7 +96,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
     // If the room can't be made, the person keeps what they wrote and hears why.
     try {
       // A room made by an earlier try whose message failed is used again, not left empty beside a new one.
-      const meta = made.current ?? await desk.call('room:create', { crew, workspace, pack, about: text, studio })
+      const meta = made.current ?? await desk.call('room:create', { crew, workspace, pack, about: text, studio, repo })
       if (!meta) throw new Error('The room could not be created. Check that the folder can be written to.')
       made.current = meta
       if (workspace) remember(workspace)
@@ -126,7 +129,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
         <h1 className="rise" style={{ '--i': 1 } as CSSProperties}>What are we working on?</h1>
         <div className="rise" style={{ '--i': 2 } as CSSProperties}>
           {crew.length ? (
-            <Composer crew={crew} setCrew={setChosen} onSend={start} access={access} setAccess={setAccess} draft={draft} arena={arena} setArena={setArena} studio={studio} setStudio={pickStudio} pack={pack} folder={workspace}
+            <Composer crew={crew} setCrew={setChosen} onSend={start} access={access} setAccess={setAccess} draft={draft} arena={arena} setArena={setArena} studio={studio} setStudio={pickStudio} repo={repo} setRepo={pickRepo} pack={pack} folder={workspace}
               placeholder="Describe the goal in your own words. The crew plans it, splits it up and checks each other’s work." />
           ) : (
             <div className="noagents">

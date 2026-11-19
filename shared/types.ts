@@ -115,6 +115,8 @@ export type RoomMeta = {
   pack?: string
   // Studio: agents decide a direction, look at what they make and refine it before handing over.
   studio?: boolean
+  // A GitHub repository the room reads and changes, as owner/name.
+  repo?: string
   // The project's own design files, found once when Studio is switched on, so the instructions stay
   // the same turn to turn and files an agent creates later are never taken for the person's taste.
   design?: string[]
@@ -254,6 +256,8 @@ export type Settings = {
   route?: 'best' | 'order'
   snapshots?: boolean
   tools?: Record<string, { on: boolean; input?: string }>
+  // GitHub repositories added to the repo picker, as owner/name, most recently added first.
+  repos?: string[]
   browser?: boolean
   remote?: { on: boolean; chat?: number; name?: string; access?: Access }
   planLimits?: boolean

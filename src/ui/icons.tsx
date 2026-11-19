@@ -22,6 +22,8 @@ export const IconCopy = () => <svg {...P}><rect x="5.5" y="5.5" width="8" height
 // Printer's crop marks around the work: Studio.
 export const IconStudio = () => <svg {...P}><path d="M2.5 5.5v-3h3M10.5 2.5h3v3M13.5 10.5v3h-3M5.5 13.5h-3v-3" /><rect x="6" y="6" width="4" height="4" rx=".75" /></svg>
 export const IconSplit = () => <svg {...P}><rect x="2.5" y="3" width="4.75" height="10" rx="1.25" /><rect x="8.75" y="3" width="4.75" height="10" rx="1.25" /></svg>
+// A bound book with a bookmark: a repository.
+export const IconRepo = () => <svg {...P}><path d="M4 12.5V3.75c0-.7.55-1.25 1.25-1.25h7.25v8.5H5.25C4.55 11 4 11.55 4 12.25s.55 1.25 1.25 1.25H7" /><path d="M9 11.5v3l1.25-.9 1.25.9v-3" /></svg>
 export const IconCheck = () => <svg {...P} strokeWidth={1.5}><path d="M3.5 8.5l3 3 6-7" /></svg>
 export const IconClose = () => <svg {...P}><path d="M4 4l8 8M12 4l-8 8" /></svg>
 export const IconPlay = () => <svg {...P}><path d="M5 3.5v9l7-4.5z" /></svg>

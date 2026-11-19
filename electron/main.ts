@@ -13,6 +13,7 @@ import { fetchPack, importPack, loadPacks, packJson, removePack } from './packs'
 import { Hands } from './hands'
 import { Remote } from './remote'
 import { Engine } from './room/engine'
+import { GITHUB_TOKEN, listRepos } from '../shared/github'
 import { answer, kill, type Answer } from './shell'
 import { finishStops, resetPath } from './system'
 import { Updates } from './updates'
@@ -266,7 +267,7 @@ function wire() {
   h('agents:models', (id: string) => modelsFor(id, store.keys()).catch((e: Error) => ({ error: e.message })))
   h('rooms', () => engine.summaries())
   h('room', (id: string) => ({ meta: store.room(id), events: store.events(id), live: engine.live(id) }))
-  h('room:create', (opts: { crew: string[]; workspace: string; pack?: string; name?: string; about?: string; studio?: boolean }) => {
+  h('room:create', (opts: { crew: string[]; workspace: string; pack?: string; name?: string; about?: string; studio?: boolean; repo?: string }) => {
     const folder = opts.workspace || roomFolder(opts.about ?? opts.name ?? '')
     mkdirSync(folder, { recursive: true })
     return engine.create({ ...opts, workspace: folder })
@@ -398,6 +399,8 @@ function wire() {
   h('image:copy', async (data: string) => { await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(png(data).toPNG())], { type: 'image/png' }) })]); return true })
   h('image:save', (data: string, name: string) => saveAs('Save the image', `${String(name || 'lunchbox').replace(/[^\w.-]+/g, '-')}.png`, 'png', png(data).toPNG()))
   h('room:studio', (id: string, on: boolean) => engine.setStudio(id, on))
+  h('room:repo', (id: string, repo: string | null) => engine.setRepo(id, repo))
+  h('github:repos', () => listRepos(store.keys()[GITHUB_TOKEN]))
   h('room:takeback', (id: string, queued: string) => engine.takeBack(id, queued))
   h('room:decide', (id: string, ref: string, index: number, access: Access) => { engine.decide(id, ref, index, access) })
   h('room:pick', (id: string, arena: string, who: string) => engine.pick(id, arena, who))
