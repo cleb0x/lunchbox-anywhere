@@ -38,7 +38,62 @@ export function offer(known = false) {
   go.rel = 'noopener'
   go.title = 'Opens your free Google Cloud Shell. Lunchbox starts there and prints a link that connects this site to it.'
   const no = button('Not now', false)
-  no.onclick = () => { if (!known) store.set(HIDE, '1'); bar.remove() }
+  let stop = () => {}
+  no.onclick = () => { stop(); if (!known) store.set(HIDE, '1'); bar.remove() }
+  // Clicking it keeps this page waiting: once Lunchbox answers in Cloud Shell, the page connects.
+  go.addEventListener('click', () => {
+    stop()
+    go.remove()
+    no.textContent = 'Cancel'
+    stop = wait(text, () => { go.textContent = 'Open Cloud Shell again'; bar.insertBefore(go, no) })
+  })
   bar.append(text, go, no)
   document.body.appendChild(bar)
+}
+
+const EVERY = 4000
+const PATIENCE = 6 * 60e3
+
+// Looks for this person's Lunchbox every few seconds, and as soon as the Cloud Shell tab is left,
+// until it answers. Then the page reloads connected to it. A first-time device has no key yet; it
+// gets one when the link Cloud Shell prints is opened, in any tab, and is found from then on.
+function wait(text: HTMLElement, gaveUp: () => void) {
+  const started = Date.now()
+  let live = true
+  let busy = false
+  let timer = 0
+  const say = () => {
+    const s = Math.round((Date.now() - started) / 1000)
+    text.textContent = s < 25 ? 'Starting Lunchbox in Cloud Shell…' : `Waiting for Lunchbox in Cloud Shell, ${s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`}. It connects by itself.`
+  }
+  const look = async () => {
+    if (!live || busy) return
+    busy = true
+    say()
+    const { find } = await import('./finder')
+    const f = await find().catch(() => null)
+    busy = false
+    if (!live) return
+    if (f) {
+      live = false
+      text.textContent = 'Found it. Connecting…'
+      sessionStorage.setItem('lb-connect', JSON.stringify({ base: f.url, key: f.key }))
+      location.reload()
+      return
+    }
+    if (Date.now() - started > PATIENCE) {
+      end()
+      text.textContent = 'Lunchbox has not answered yet. Check the Cloud Shell tab: it prints a link when it is ready.'
+      gaveUp()
+      return
+    }
+    timer = window.setTimeout(look, EVERY)
+  }
+  const back = () => { if (document.visibilityState === 'visible') { clearTimeout(timer); look() } }
+  const end = () => { live = false; clearTimeout(timer); removeEventListener('focus', back); document.removeEventListener('visibilitychange', back) }
+  addEventListener('focus', back)
+  document.addEventListener('visibilitychange', back)
+  say()
+  timer = window.setTimeout(look, 1500)
+  return end
 }
