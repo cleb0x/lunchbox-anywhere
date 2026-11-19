@@ -13,7 +13,7 @@ APP="$HOME/.lunchbox-app"
 PORT="${PORT:-8080}"
 export PATH="$HOME/.local/bin:$PATH"
 
-VERSION="7"
+VERSION="8"
 bold() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\n\033[31m%s\033[0m\n' "$1"; exit 1; }
 
@@ -119,6 +119,8 @@ if [ ! -f "$APP/main.cjs" ] || [ "${1:-}" = "--update" ] || [ -z "$(find "$APP/m
   tmp="$(mktemp -d)"
   if curl -fsSL "https://github.com/$REPO/releases/download/server-latest/lunchbox-server.tar.gz" -o "$tmp/app.tgz"; then
     rm -rf "$APP.new" && mkdir -p "$APP.new" && tar -xzf "$tmp/app.tgz" -C "$APP.new"
+    # The tunnel program is kept in the same folder; a new build must not throw it away.
+    [ -x "$APP/cloudflared" ] && [ ! -e "$APP.new/cloudflared" ] && mv "$APP/cloudflared" "$APP.new/cloudflared"
     rm -rf "$APP" && mv "$APP.new" "$APP"
   elif [ ! -f "$APP/main.cjs" ]; then
     fail "Could not download Lunchbox. Check the connection and try again."
