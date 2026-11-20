@@ -248,7 +248,7 @@ function wire() {
   })
   const h = (channel: string, fn: (...args: any[]) => unknown) => hw(channel, (_from, ...args) => fn(...args))
 
-  hw('env', (from) => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, window: from.webContents.id }))
+  hw('env', (from) => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, window: from.webContents.id, workshop: !!process.env.LUNCHBOX_WORKSHOP }))
   hw('window:new', (_from, room?: string) => { newWindow(typeof room === 'string' && store.room(room) ? room : undefined) })
   hw('window:view', (from, room: string | null) => { if (typeof room === 'string') showing.set(from, room); else showing.delete(from) })
   h('agents', () => engine.agents)
@@ -463,19 +463,26 @@ function wire() {
   h('packs', () => packs().filter((p) => !p.hidden))
   h('workshop', () => workshop.state())
   h('workshop:setup', () => workshop.setup())
-  h('workshop:open', () => workshop.open())
+  // Opening another build quits this one, which would stop agents mid turn.
+  h('workshop:open', () => {
+    if (engine.summaries().some((r) => r.busy)) throw new Error('Agents are still working. Open your version when they finish')
+    return workshop.open()
+  })
   h('workshop:back', () => workshop.back())
   h('workshop:stop-using', () => workshop.stopUsing())
   h('workshop:dismiss', () => workshop.dismiss())
   h('workshop:reset', () => workshop.reset())
   h('workshop:update', () => workshop.update())
   h('workshop:folder', () => shell.openPath(workshop.dir))
-  // A suggestion is the person's note with the change attached, sent the way reports go.
-  h('workshop:suggest', async (note: string, contact?: string) => {
+  // A suggestion is the person's note, or what they asked their agents for, with the whole change
+  // attached. It goes the way reports go: to the maintainers' Telegram and the reports repo.
+  h('workshop:suggest', async (note?: string, contact?: string) => {
     const { stat, diff } = await workshop.patch()
     if (!stat) throw new Error('There are no changes to send yet')
-    const text = `Workshop suggestion\n\n${String(note ?? '').trim() || '(no note)'}\n\nFiles:\n${stat}`
-    return send({ kind: 'idea', text, contact: contact || undefined, context: diff.slice(0, 4000), diagnostics: diagnostics(engine.agents) }, store.dir, Object.values(store.keys()))
+    const asked = engine.summaries().filter((r) => r.pack === 'workshop' && r.workspace === workshop.dir).map((r) => `- ${r.name}`)
+    const said = String(note ?? '').trim() || (asked.length ? `What they asked for:\n${asked.join('\n')}` : '(no note)')
+    const text = `Workshop suggestion\n\n${said}\n\nFiles:\n${stat}`
+    return send({ kind: 'idea', text, contact: contact || undefined, context: diff.slice(0, 4000), patch: diff, diagnostics: diagnostics(engine.agents) }, store.dir, Object.values(store.keys()))
   })
   hw('packs:import', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Import a pack', filters: [{ name: 'Lunchbox pack', extensions: ['json'] }], properties: ['openFile'] })

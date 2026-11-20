@@ -58,6 +58,8 @@ export async function send(r: Report, dir: string, keys: string[] = []): Promise
     contact: r.contact ? clean(String(r.contact), 200, keys) : undefined,
     context: r.context ? clean(String(r.context), 4000, keys) : undefined,
     diagnostics: r.diagnostics ? clean(String(r.diagnostics), 6000, keys) : undefined,
+    // A Workshop change goes whole, with paths and anything shaped like a key cleaned as above.
+    patch: r.kind === 'idea' && r.patch ? clean(String(r.patch), 400000, keys) : undefined,
   }
   try {
     const { number } = await post(report)

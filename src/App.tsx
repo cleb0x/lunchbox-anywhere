@@ -358,7 +358,7 @@ export function App() {
           ))}
         </div>
         <div className="sbfoot">
-          <button className={`sbitem${on('workshop') ? ' on' : ''}`} onClick={() => go({ name: 'workshop' })} title="Ask an agent to add what Lunchbox is missing">{on('workshop') && sel}<IconWorkshop />Workshop</button>
+          <button className={`sbitem${on('workshop') ? ' on' : ''}`} onClick={() => go({ name: 'workshop' })} title="Ask an agent to add what Lunchbox is missing">{on('workshop') && sel}<IconWorkshop />Workshop{env.workshop && <i className="ws-dot" title="You are using your version" />}</button>
           <button className={`sbitem${on('agents') ? ' on' : ''}`} onClick={() => go({ name: 'agents' })}>{on('agents') && sel}<IconAgents />Agents<small>{ready_}</small></button>
           <button className={`sbitem${on('settings') ? ' on' : ''}`} onClick={() => go({ name: 'settings' })}>{on('settings') && sel}<IconSettings />Settings</button>
           {look === 'neyra' && <div className="sbversion">lunchbox {env.version}</div>}

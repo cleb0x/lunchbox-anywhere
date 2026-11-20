@@ -147,6 +147,35 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
   )
 }
 
+// In a Workshop room's header: the two things to do once the agents are done.
+export function WorkshopBar({ busy, say }: { busy: boolean; say: (t: string) => void }) {
+  const [sending, setSending] = useState(false)
+  const [opening, setOpening] = useState(false)
+  const mine = useApp((s) => !!s.env.workshop)
+  const openIt = async () => {
+    setOpening(true)
+    try {
+      const s = (await desk.call('workshop:open')) as WorkshopState
+      if (s?.busy?.error) say(s.busy.error)
+    } catch (e) { say(reason(e)) } finally { setOpening(false) }
+  }
+  const send = async () => {
+    setSending(true)
+    try {
+      const r = await desk.call('workshop:suggest', '', '')
+      say(r?.ok ? 'Sent to the Lunchbox maintainers. Thank you' : r?.queued ? 'Saved, it goes out when you are back online' : 'It could not be sent')
+    } catch (e) { say(reason(e)) } finally { setSending(false) }
+  }
+  const wait = busy ? 'Waits until the agents are done' : undefined
+  return (
+    <span className="ws-bar">
+      <span className="tag ws-tag">Workshop</span>
+      <button className="ghostbtn" disabled={busy || opening} onClick={openIt} title={wait ?? 'Build this copy and open it in place of the standard Lunchbox'}>{opening ? <Loader size={10} /> : <IconPlay />}<span>{mine ? 'Restart with changes' : 'Open your version'}</span></button>
+      <button className="ghostbtn" disabled={busy || sending} onClick={send} title={wait ?? 'Send the change to the Lunchbox maintainers'}>{sending ? <Loader size={10} /> : <IconShare />}<span>Send as a suggestion</span></button>
+    </span>
+  )
+}
+
 function Setup({ state, version, setup }: { state: WorkshopState; version: string; setup: () => void }) {
   const missing = !state.needs.git || !state.needs.npm
   return (
@@ -235,24 +264,35 @@ function Changes({ state }: { state: WorkshopState }) {
   )
 }
 
+// One click sends it, with what was asked of the agents as the note. A note of their own is optional.
 function Suggest({ disabled, say }: { disabled: boolean; say: (t: string) => void }) {
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   const [contact, setContact] = useState('')
   const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
   const send = async () => {
     setSending(true)
     try {
       const r = await desk.call('workshop:suggest', note, contact)
-      say(r?.ok ? 'Sent. Thank you, we read every suggestion' : r?.queued ? 'Saved, it goes out when you are back online' : 'It could not be sent')
-      if (r?.ok || r?.queued) { setOpen(false); setNote('') }
+      say(r?.ok ? 'Sent to the Lunchbox maintainers. Thank you' : r?.queued ? 'Saved, it goes out when you are back online' : 'It could not be sent')
+      if (r?.ok || r?.queued) { setOpen(false); setNote(''); setSent(true) }
     } catch (e) {
       say(reason(e))
     } finally {
       setSending(false)
     }
   }
-  if (!open) return <button className="btn quiet" disabled={disabled} onClick={() => setOpen(true)}><IconShare />Send as a suggestion</button>
+  if (!open) {
+    return (
+      <span className="ws-send">
+        <button className="btn quiet" disabled={disabled || sending} onClick={send} title="Sends your change and what you asked for to the Lunchbox maintainers">
+          {sending ? <Loader size={10} /> : <IconShare />}{sent ? 'Sent, send again' : 'Send as a suggestion'}
+        </button>
+        <button className="linkish ws-note-link" disabled={disabled} onClick={() => setOpen(true)}>Add a note</button>
+      </span>
+    )
+  }
   return (
     <div className="ws-suggest">
       <textarea autoFocus rows={3} value={note} placeholder="What it does and why you wanted it" onChange={(e) => setNote(e.target.value)}

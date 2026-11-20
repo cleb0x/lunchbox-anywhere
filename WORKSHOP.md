@@ -19,6 +19,21 @@ Read this file, then `docs/architecture.md`, then the files around the place you
 - **Agents** are defined in `electron/agents/index.ts` (`CATALOG`), with one parser per output format in `electron/agents/parse.ts`.
 - **Room behaviour** lives in `electron/room/engine.ts`; what agents are told is built in `electron/room/context.ts`.
 
+## Recipes for common requests
+
+Almost anything can be built here, because this is the whole app. These are the places the usual requests go. Read the neighbours of each before adding to it, and copy how they are written.
+
+- **A model provider with an API key** (a new company, a self-hosted server, a gateway): add it to `PROVIDERS` in `electron/agents/http.ts` with its base address and wire style (`openai`, `anthropic`, `google` or `ollama`; most providers speak the OpenAI style). Then add an agent to `CATALOG` in `electron/agents/index.ts` with `via: 'api'` and `key` naming the provider, and a row in `PROVIDER` in `src/views/Agents.tsx` so the person can paste the key. Keys are sealed by the main process; never store one anywhere else. For one-off setups the person can also add a connector on the Agents page without code.
+- **A new command line agent**: an entry in `CATALOG` with `via: 'cli'`, its `bin`, and a `spawn` that maps the room's access modes to the tool's own flags. If it prints JSON lines, add a parser in `electron/agents/parse.ts` next to the others and a unit test fed with real lines from the tool; if it prints plain text, use `textOut()`. List its models in `modelsFor` and its effort levels in `effortsFor` if it has them.
+- **A page**: see "Pages" above. Give it a sidebar button and a palette command, and keep it to one job.
+- **A setting**: add an optional field to `Settings` in `shared/types.ts`, read it where it matters, and add a `setting` row in `src/views/Settings.tsx` in the section it belongs to. Save it with `reload.settings({ ... })`.
+- **Something agents can do in every room** (a tool): `electron/room/kit.ts` builds the tools one agent can use during its turn. An outside service is usually better as an MCP server in the catalog (`shared/catalog.ts`), which Lunchbox installs and hands to every agent.
+- **A flow template, a pack or a playbook**: `shared/flow.ts` (`TEMPLATES`), `electron/packs.ts` (`BUILTIN`) and `shared/skills.ts`.
+- **A theme**: `src/lib/themes.ts` is the only source of colours; a theme is a hue, a chroma and an ASCII ramp, and the guards in `src/lib/custom.ts` keep text readable.
+- **A keyboard shortcut**: the `key` handler in `src/App.tsx`, plus the hint on the palette command.
+- **Something in the room itself** (a button on a message, a new kind of block): `src/views/Room.tsx` draws the transcript and `electron/room/engine.ts` produces the events. Add a new event kind to the `Event` type rather than changing an existing one, since old rooms are read by the same code.
+- **An integration with another app** (GitHub, Slack, a calendar): prefer its official CLI or MCP server over writing a client; when there is neither, call its API from the main process, never from the renderer, and keep its token with the other keys.
+
 ## How it must look
 
 Lunchbox has one design language, and a new part must use it.
