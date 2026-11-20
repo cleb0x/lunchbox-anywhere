@@ -5,7 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, shell, type Rectangle } from 'electron'
 import type { Access, ChatSource, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from './count'
-import { installed, modelsFor, testConnector, useConnectors } from './agents'
+import { effortsFor, installed, modelsFor, testConnector, useConnectors } from './agents'
 import { setBase } from './agents/http'
 import { markdown, replay } from './export'
 import { Flows } from './flows'
@@ -264,6 +264,7 @@ function wire() {
   })
   h('local:cancel', (model: string) => cancelPull(model))
   h('agents:models', (id: string) => modelsFor(id, store.keys()).catch((e: Error) => ({ error: e.message })))
+  h('agents:efforts', (id: string, model?: string) => effortsFor(id, typeof model === 'string' && model ? model : undefined).catch(() => []))
   h('rooms', () => engine.summaries())
   h('room', (id: string) => ({ meta: store.room(id), events: store.events(id), live: engine.live(id) }))
   h('room:create', (opts: { crew: string[]; workspace: string; pack?: string; name?: string; about?: string; studio?: boolean }) => {

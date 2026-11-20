@@ -80,8 +80,8 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
   }
   const [arena, setArena] = useState(false)
   // Studio carries over from the last room started, so someone who works that way keeps it on.
-  const [studio, setStudio] = useState(() => { try { return localStorage.getItem('lb.studio') === '1' } catch { return false } })
-  const pickStudio = (on: boolean) => { setStudio(on); try { localStorage.setItem('lb.studio', on ? '1' : '0') } catch {} }
+  // Expert costs more turns, so every new room starts without it and it is switched on per room.
+  const [studio, setStudio] = useState(false)
   const [starting, setStarting] = useState(false)
   const made = useRef<{ id: string } | null>(null)
   const current = packs.find((p) => p.id === pack)
@@ -126,7 +126,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
         <h1 className="rise" style={{ '--i': 1 } as CSSProperties}>What are we working on?</h1>
         <div className="rise" style={{ '--i': 2 } as CSSProperties}>
           {crew.length ? (
-            <Composer crew={crew} setCrew={setChosen} onSend={start} access={access} setAccess={setAccess} draft={draft} arena={arena} setArena={setArena} studio={studio} setStudio={pickStudio} pack={pack} folder={workspace}
+            <Composer crew={crew} setCrew={setChosen} onSend={start} access={access} setAccess={setAccess} draft={draft} arena={arena} setArena={setArena} studio={studio} setStudio={setStudio} pack={pack} folder={workspace}
               placeholder="Describe the goal in your own words. The crew plans it, splits it up and checks each other’s work." />
           ) : (
             <div className="noagents">
