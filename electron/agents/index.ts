@@ -322,6 +322,10 @@ export async function detect(keys: Record<string, string>, models: Record<string
           return { ...base, found: false, ready: false, note: `There is a ${d.bin} at ${path}, but it does not start. Install ${d.name} again, then check again.` }
         }
         paths.set(d.id, path)
+        if (d.id === 'antigravity') {
+          lastKey = agyKey(keys)
+          if (!agyKeyMode() || !lastKey) return { ...base, found: true, ready: false, version: started.version || undefined, note: AGY_NEEDS_KEY }
+        }
         return { ...base, found: true, ready: true, version: started.version || undefined }
       }
       if (d.via === 'local') {
@@ -346,15 +350,28 @@ const CLAUDE_MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'claude-fable-5-2', '
 // Gemini CLI has no command that lists models; these are the ones it accepts by name, newest first.
 const GEMINI_MODELS = ['auto-gemini-3', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.1-flash-lite']
 
+// Google lets other apps run Antigravity only on a Gemini API key, never on a person's Google
+// account: an app driving agy under a consumer login can get that account suspended. agy uses a
+// key when its own settings name the gemini provider and GEMINI_API_KEY is set; Lunchbox checks
+// both before every run and never starts agy any other way.
+export const agySettings = () => join(homedir(), '.gemini', 'antigravity-cli', 'settings.json')
+export function agyKeyMode() {
+  try { return JSON.parse(readFileSync(agySettings(), 'utf8')).modelProvider === 'gemini' } catch { return false }
+}
+const agyKey = (keys: Record<string, string>) => keys.google || process.env.GEMINI_API_KEY || ''
+export const AGY_NEEDS_KEY = 'Google allows apps to run Antigravity only with a Gemini API key, not your Google account. Set it up here in one step.'
+
 // `agy models` prints one model a line: its id, a tab, then the name it shows. A model offered
 // at several efforts comes as one id per effort (gemini-3.8-flash-high); agy also takes the bare
 // id with --effort, so the list shows each model once and effort is picked beside it.
 const LEVEL = /-(minimal|low|medium|high|xhigh|max)$/
 const agyEfforts = new Map<string, string[]>()
+// The key the last agent check saw, so the model list can be read with it.
+let lastKey = ''
 async function antigravityModels() {
   const path = paths.get('antigravity') ?? (await locate('agy'))
-  if (!path) return []
-  return learnAgyModels(await capture(path, ['models'], 15000, await env()))
+  if (!path || !agyKeyMode()) return []
+  return learnAgyModels(await capture(path, ['models'], 15000, await env(lastKey ? { GEMINI_API_KEY: lastKey } : {})))
 }
 
 export function learnAgyModels(out: string) {
@@ -473,8 +490,13 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     const path = paths.get(id) || (await locate(d.bin!))
     if (!path) return failed(`${d.name} is not installed on this computer`)
     const file = join(tmpdir(), `lunchbox-${process.pid}-${t0}-${Math.random().toString(36).slice(2, 8)}.txt`)
-    if (id === 'antigravity' && input.model && !agyEfforts.size) await antigravityModels()
+    if (id === 'antigravity') {
+      if (!agyKeyMode() || !agyKey(keys)) return failed(AGY_NEEDS_KEY)
+      lastKey = agyKey(keys)
+      if (input.model && !agyEfforts.size) await antigravityModels()
+    }
     const spec = d.spawn!(input, file)
+    if (id === 'antigravity') spec.env = { ...spec.env, GEMINI_API_KEY: agyKey(keys) }
     // The prompt and the hands token are in these files, so they go however the turn ends.
     try {
       if (spec.file) writeFileSync(file, spec.file, { mode: 0o600 })

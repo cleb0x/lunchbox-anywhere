@@ -95,6 +95,7 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
           {a.note && <p className="anote">{a.note}</p>}
           {a.setup && <LocalSetupBox a={a} say={say} />}
           {a.via === 'api' && PROVIDER[a.id] && <KeyField a={a} say={say} />}
+          {a.id === 'antigravity' && a.found && <AgyKey a={a} say={say} />}
           {extra}
           {a.found && (!a.setup || a.ready) && <ModelField a={a} />}
           {a.via === 'local' && <AddressField a={a} />}
@@ -133,6 +134,7 @@ const PROVIDER: Record<string, { key: string; url: string; hint: string }> = {
   'openai-api': { key: 'openai', url: 'https://platform.openai.com/api-keys', hint: 'sk-…' },
   'grok-api': { key: 'xai', url: 'https://console.x.ai', hint: 'xai-…' },
   'gemini-api': { key: 'google', url: 'https://aistudio.google.com/apikey', hint: 'AIza…' },
+  antigravity: { key: 'google', url: 'https://aistudio.google.com/apikey', hint: 'AIza…' },
   openrouter: { key: 'openrouter', url: 'https://openrouter.ai/keys', hint: 'sk-or-…' },
 }
 
@@ -161,6 +163,35 @@ function KeyField({ a, say }: { a: AgentInfo; say: (t: string) => void }) {
       </div>
       <small>Get one at <a href={p.url} target="_blank" rel="noreferrer">{p.url.replace('https://', '')}</a></small>
     </label>
+  )
+}
+
+// Antigravity runs here only on a Gemini API key: Google suspends accounts whose Google login is
+// driven by another app. The key is the one Gemini API uses, and agy has to be told to use it.
+function AgyKey({ a, say }: { a: AgentInfo; say: (t: string) => void }) {
+  const [mode, setMode] = useState<{ keyMode: boolean; hasKey: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { desk.call('agents:agy-mode').then(setMode, () => {}) }, [a.ready, a.note])
+  if (!mode) return null
+  const switchOver = async () => {
+    setBusy(true)
+    try {
+      setMode(await desk.call('agents:agy-key'))
+      say('Antigravity now runs on your Gemini API key')
+      await reload.agents()
+    } catch (e) { say(reason(e)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="agykey">
+      <KeyField a={a} say={say} />
+      {!mode.keyMode && (
+        <div className="row">
+          <span className="hint grow">Switching tells Antigravity to use this key instead of your Google account, in your terminal as well. Usage goes to the key, which has a free tier. Your previous settings are kept in a backup file.</span>
+          <button className="btn small" disabled={!mode.hasKey || busy} onClick={switchOver} title={mode.hasKey ? undefined : 'Save a key first'}>{busy ? <Loader size={10} /> : 'Use the key'}</button>
+        </div>
+      )}
+      {mode.keyMode && <span className="hint">Antigravity runs on a Gemini API key. To go back to your Google account in the terminal, remove modelProvider from {'~/.gemini/antigravity-cli/settings.json'}.</span>}
+    </div>
   )
 }
 

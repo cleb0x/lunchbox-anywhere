@@ -584,6 +584,26 @@ test('antigravity: models are listed once, with effort picked beside them', asyn
   assert.deepEqual(agyChoice(undefined, 'high'), [])
 })
 
+test('antigravity: never starts on a Google login, only on a Gemini API key', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { run, agyKeyMode, AGY_NEEDS_KEY } = await import('../electron/agents/index')
+  const home = process.env.HOME
+  process.env.HOME = mkdtempSync(join(tmpdir(), 'lb-agy-'))
+  try {
+    assert.equal(agyKeyMode(), false)
+    const r = await run('antigravity', { prompt: 'hi', system: '', cwd: process.env.HOME, access: 'plan' }, { google: 'AIza-test' }, () => {}).done
+    if (!/not installed/.test(r.error ?? '')) assert.equal(r.error, AGY_NEEDS_KEY, 'signed in with a Google account, agy is not started')
+    mkdirSync(join(process.env.HOME, '.gemini', 'antigravity-cli'), { recursive: true })
+    writeFileSync(join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json'), JSON.stringify({ modelProvider: 'gemini' }))
+    assert.equal(agyKeyMode(), true)
+    const keyless = await run('antigravity', { prompt: 'hi', system: '', cwd: process.env.HOME, access: 'plan' }, {}, () => {}).done
+    if (!/not installed/.test(keyless.error ?? '') && !process.env.GEMINI_API_KEY) assert.equal(keyless.error, AGY_NEEDS_KEY, 'key mode without a key does not start either')
+  } finally {
+    process.env.HOME = home
+  }
+})
+
 test('antigravity: a failed run says why', () => {
   const p = antigravity()
   p.line({ event: 'result', result: { conversation_id: 'c2', status: 'ERROR', response: '', error: 'not signed in' } })

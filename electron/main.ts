@@ -5,7 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, shell, type Rectangle } from 'electron'
 import type { Access, ChatSource, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from './count'
-import { effortsFor, installed, modelsFor, testConnector, useConnectors } from './agents'
+import { agyKeyMode, agySettings, effortsFor, installed, modelsFor, testConnector, useConnectors } from './agents'
 import { setBase } from './agents/http'
 import { markdown, replay } from './export'
 import { Flows } from './flows'
@@ -268,6 +268,22 @@ function wire() {
   })
   h('local:cancel', (model: string) => cancelPull(model))
   h('agents:models', (id: string) => modelsFor(id, store.keys()).catch((e: Error) => ({ error: e.message })))
+  h('agents:agy-mode', () => ({ keyMode: agyKeyMode(), hasKey: !!store.keys().google }))
+  // Only on the person's click: their agy settings get the gemini provider, the rest is kept,
+  // and the file as it was is saved beside it.
+  h('agents:agy-key', async () => {
+    if (!store.keys().google) throw new Error('Save a Gemini API key first')
+    const file = agySettings()
+    let current: Record<string, unknown> = {}
+    if (existsSync(file)) {
+      const text = readFileSync(file, 'utf8')
+      writeFileSync(file + '.before-lunchbox', text, { mode: 0o600 })
+      try { current = JSON.parse(text) } catch { throw new Error(`${file} is not valid JSON, so Lunchbox left it alone`) }
+    } else mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ ...current, modelProvider: 'gemini' }, null, 2), { mode: 0o600 })
+    await engine.refresh()
+    return { keyMode: agyKeyMode(), hasKey: true }
+  })
   h('agents:efforts', (id: string, model?: string) => effortsFor(id, typeof model === 'string' && model ? model : undefined).catch(() => []))
   h('rooms', () => engine.summaries())
   h('room', (id: string) => ({ meta: store.room(id), events: store.events(id), live: engine.live(id) }))
