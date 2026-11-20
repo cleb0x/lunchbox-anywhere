@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { ThemeCards } from '../ui/ThemeCards'
-import { ASCII, THEMES, themeOf, type AsciiId, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { ASCII, REACH, THEMES, themeOf, type AsciiId, type Mode, type Reach, type Theme, type ThemeId } from '../lib/themes'
 import { draftOf, type Draft } from '../lib/custom'
 import { ThemeEditor } from '../ui/ThemeEditor'
 import { TuneSheet } from '../ui/TuneSheet'
@@ -80,9 +80,9 @@ function Phone({ say }: { say: (t: string) => void }) {
 // The agents that take an effort level on the command line. Which levels depends on the model.
 const EFFORT = ['claude', 'codex', 'antigravity']
 
-export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
+export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, reach, setReach, look, setLook, restart, say }: {
   edit?: string; theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
-  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
+  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; reach: Reach; setReach: (r: Reach, e?: MouseEvent) => void; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
   const agents = useApp((s) => s.agents)
@@ -101,6 +101,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
     if (t) setEditing({ draft: draftOf(t), id: t.id })
   }, [edit])
   const tunedCount = Object.keys(tune.dark).length + Object.keys(tune.light).length
+  const themeName = themeOf(theme, custom).name
 
   return (
     <div className="page">
@@ -114,7 +115,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             <div className="seg">{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
           </div>
           <div className="setting col">
-            <div className="grow"><b>ASCII colour</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own.</span></div>
+            <div className="grow"><b className="withreset">ASCII colour{ascii !== 'theme' && <button className="linkbtn" onClick={() => setAscii('theme')}>Reset to {themeName}</button>}</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own. Each theme remembers its own choice.</span></div>
             <div className="asciis" role="radiogroup" aria-label="ASCII colour">
               {ASCII.map((a) => {
                 const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme, custom)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!
@@ -150,9 +151,14 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
           </div>
           <div className="setting">
-            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand, on top of the theme.` : 'Change single colours, like the text or the sheet, on top of any theme.'}</span></div>
+            <div className="grow"><b>Theme colour</b><span>{theme === 'lunchbox' ? 'How far a theme carries its colour. Lunchbox is ink alone, so this shows on the other themes.' : `How far ${themeName} carries its colour. ${REACH.find((r) => r.id === reach)!.line}`}</span></div>
+            <div className="seg" role="radiogroup" aria-label="Theme colour">{REACH.map((r) => <button key={r.id} role="radio" aria-checked={r.id === reach} className={r.id === reach ? 'on' : ''} onClick={(e) => setReach(r.id, e)} title={r.line}>{r.name}</button>)}</div>
+          </div>
+          <div className="setting">
+            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand on ${themeName}. Other themes keep their own.` : `Change single colours of ${themeName}, like the text or the sheet. Other themes keep their own.`}</span></div>
+            {tunedCount > 0 && <button className="btn small quiet" onClick={() => setTune({ dark: {}, light: {} })}>Reset to {themeName}</button>}
             <button className="btn small quiet" onClick={() => setTuning(true)}>Customise</button>
-            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} />}
+            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} name={themeName} />}
           </div>
           <div className="setting">
             <div className="grow"><b>Look</b><span>Lunchbox floats the work on a soft sheet. Square is flat panes, hairlines and square corners.</span></div>

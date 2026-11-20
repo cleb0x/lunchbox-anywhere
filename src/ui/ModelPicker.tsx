@@ -9,10 +9,16 @@ export function modelName(id: string) {
   const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
   // A date on the end, claude-sonnet-4-20250514, is a snapshot and not part of the version.
   const claude = id.match(/^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?=-|$)/)
-  if (claude) return `${cap(claude[1])} ${claude[2]}${claude[3] ? '.' + claude[3] : ''}`
+  if (claude) {
+    // What follows the version, as in claude-opus-4-6-thinking, tells two entries in one list apart.
+    const rest = id.slice(claude[0].length).split('-').filter((w) => w && !/^\d{6,}$/.test(w))
+    return [`${cap(claude[1])} ${claude[2]}${claude[3] ? '.' + claude[3] : ''}`, ...rest.map(cap)].join(' ')
+  }
   if (/^(fable|opus|sonnet|haiku)$/.test(id)) return `${cap(id)}, newest`
   const gpt = id.match(/^gpt-([\d.]+)(?:-(.+))?$/)
   if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ' ' + gpt[2].split('-').map(cap).join(' ') : ''}`
+  const oss = id.match(/^gpt-oss-(.+)$/)
+  if (oss) return `GPT-OSS ${oss[1].split('-').map((w) => (/^\d+[a-z]$/.test(w) ? w.toUpperCase() : cap(w))).join(' ')}`
   if (/^auto-gemini-/.test(id)) return `Gemini ${id.slice(12)}, auto`
   if (/^(gemini|grok|gemma)-/.test(id)) return id.split('-').map((w, i) => (i === 0 || /^[a-z]/.test(w) ? cap(w) : w)).join(' ')
   return id

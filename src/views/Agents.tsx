@@ -4,6 +4,7 @@ import { Loader, Mark, Meter } from '../ui/bits'
 import { clock, desk, money, reason, reload, tokens, unavailable, useApp } from '../lib/desk'
 import { addOpenCode, ConnectorSheet, hasOpenCode, OPENCODE_INSTALL, openCodeFound, removeConnector } from './Connect'
 import type { Connector } from '../../shared/types'
+import { INSTALL } from '../lib/install'
 
 const GROUPS: { via: AgentInfo['via'][]; title: string; line: string }[] = [
   { via: ['cli'], title: 'On this computer', line: 'Command line agents with their own login and plan. Lunchbox runs the real tool.' },
@@ -78,6 +79,13 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
   const budget = settings.budgets[a.id] ?? 0
   const spent = ledger?.spent[a.id]
   const s = a.setup
+  // The row stays for as long as it takes to fold shut.
+  const [shown, setShown] = useState(open)
+  useEffect(() => {
+    if (open) { setShown(true); return }
+    const t = setTimeout(() => setShown(false), 200)
+    return () => clearTimeout(t)
+  }, [open])
   const state = !a.found ? (a.via === 'api' ? 'No key' : a.note ? 'Does not start' : 'Not installed') : s && !s.running ? 'Not running' : s && !a.ready ? 'No chat model' : why ? 'Unavailable' : 'Ready'
   return (
     <div className={`agent${open ? ' open' : ''}${a.found ? '' : ' missing'}`} style={{ '--i': i } as CSSProperties}>
@@ -90,10 +98,11 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
           <span>{today ? `${tokens(today.input + today.output + today.cached)} today${today.cost ? `, ${money(today.cost)}` : ''}` : state}</span>
         </span>
       </button>
-      {open && (
-        <div className="agentbody">
+      {(open || shown) && (
+        <div className={`agentfold${open ? '' : ' closing'}`}><div><div className="agentbody">
           {a.note && <p className="anote">{a.note}</p>}
           {a.setup && <LocalSetupBox a={a} say={say} />}
+          {!a.found && a.via === 'cli' && !a.note && <InstallBox a={a} />}
           {a.via === 'api' && PROVIDER[a.id] && <KeyField a={a} say={say} />}
           {a.id === 'antigravity' && a.found && <AgyKey a={a} say={say} />}
           {extra}
@@ -107,24 +116,40 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
               <small>US dollars. Over it, the room moves work to the next agent.</small>
             </label>
           )}
-          <div className="astats">
+          {a.found && <div className="astats">
             <span><b>{week ? tokens(week.input + week.output + week.cached) : 0}</b> tokens this week</span>
             {week && week.cached > 0 && <span><b>{Math.round((week.cached / (week.input + week.cached)) * 100)}%</b> read from cache</span>}
             {week && week.cost > 0 && <span><b>{money(week.cost)}</b> this week</span>}
             <span><b>{wins}</b> side by side {wins === 1 ? 'win' : 'wins'}</span>
-          </div>
-          <div className="row">
-            {a.found && (
-              <button className="btn small quiet" onClick={() => reload.settings({ disabled: settings.disabled.includes(a.id) ? settings.disabled.filter((d) => d !== a.id) : [...settings.disabled, a.id] })}>
-                {settings.disabled.includes(a.id) ? 'Turn on' : 'Turn off'}
-              </button>
-            )}
+          </div>}
+          {a.found && <div className="row">
+            <button className="btn small quiet" onClick={() => reload.settings({ disabled: settings.disabled.includes(a.id) ? settings.disabled.filter((d) => d !== a.id) : [...settings.disabled, a.id] })}>
+              {settings.disabled.includes(a.id) ? 'Turn on' : 'Turn off'}
+            </button>
             {spent && spent.until > Date.now() && (
               <button className="btn small quiet" onClick={() => { desk.call('spent:clear', a.id); say(`${a.short} is back in rotation`) }}>Back already? Clear the limit ({clock(spent.until)})</button>
             )}
-          </div>
-        </div>
+          </div>}
+        </div></div></div>
       )}
+    </div>
+  )
+}
+
+// How to get a command line agent that is not on this computer: its install line, copied on a click.
+function InstallBox({ a }: { a: AgentInfo }) {
+  const how = INSTALL[a.id]
+  const [copied, setCopied] = useState(false)
+  if (!how) return null
+  const site = how.url.replace('https://', '')
+  const copy = () => { navigator.clipboard.writeText(how.cmd!); setCopied(true); setTimeout(() => setCopied(false), 1400) }
+  return (
+    <div className="localbox">
+      <p>{a.name} is not on this computer yet. {a.id === 'antigravity' ? 'Run this in a terminal and press Check again. Lunchbox then sets it up with a Gemini API key.' : how.cmd ? 'Run this in a terminal, sign in there once, and press Check again.' : 'Install it, sign in once, and press Check again.'}</p>
+      <div className="row">
+        {how.cmd && <button className="installcmd" onClick={copy} title="Copy">{copied ? 'copied' : `$ ${how.cmd}`}</button>}
+        <a className="hint" href={how.url} target="_blank" rel="noreferrer">{site}</a>
+      </div>
     </div>
   )
 }

@@ -1699,6 +1699,64 @@ test('rich: tables, rules and emphasis are read as what they are', async () => {
   assert.equal(blocks('###### Deep')[0].t, 'h')
 })
 
+test('theme colour: what a theme reaches keeps its contrast, and waiting and failure stay apart', async () => {
+  const { THEMES, tokens, withTune } = await import('../src/lib/themes')
+  const { contrast, grounds, oklch } = await import('../src/lib/custom')
+  const apart = (a: string, b: string) => Math.abs(((oklch(a).h - oklch(b).h + 540) % 360) - 180)
+  assert.deepEqual(tokens(THEMES[0], 'dark', 'rich'), {})
+  for (const t of THEMES.slice(1)) for (const mode of ['dark', 'light'] as const) {
+    const at = `${t.id} ${mode}`
+    const quiet = tokens(t, mode, 'quiet')
+    assert.equal(quiet['--focus'], undefined, at)
+    assert.deepEqual(quiet, tokens(t, mode), at)
+    const { sheet } = grounds(t.hue, t.chroma, mode)
+    for (const reach of ['balanced', 'rich'] as const) {
+      const k = tokens(t, mode, reach)
+      assert.ok(contrast(k['--focus'], sheet) >= 3, `${at} ${reach} focus`)
+      assert.ok(contrast(k['--link'], sheet) >= 4.5, `${at} ${reach} link`)
+      assert.ok(contrast(k['--on-lit'], k['--lit']) >= 3, `${at} ${reach} switch`)
+      if (!t[mode].warn) assert.ok(contrast(k['--warn'], sheet) >= 4.5, `${at} ${reach} waiting`)
+      if (!t[mode].bad) assert.ok(contrast(k['--bad'], sheet) >= 4.5, `${at} ${reach} failure`)
+      assert.ok(apart(k['--warn'], k['--bad']) >= 26, `${at} ${reach} waiting beside failure`)
+      // Plan, Ask and Auto are never drawn in a colour that could be taken for Full access.
+      if (k['--mode-auto']) assert.ok(apart(k['--mode-auto'], k['--bad']) >= 40, `${at} ${reach} modes`)
+    }
+    const rich = tokens(t, mode, 'rich')
+    assert.ok(contrast(rich['--on-btn'], rich['--btn']) >= 4.5, `${at} button`)
+    assert.equal(tokens(t, mode, 'balanced')['--btn'], undefined, at)
+  }
+  // A colour changed by hand carries into what follows from it.
+  const lagoon = THEMES.find((t) => t.id === 'lagoon')!
+  assert.equal(tokens(withTune(lagoon, 'dark', { '--accent': '#ff66cc' }), 'dark', 'balanced')['--focus'], '#ff66cc')
+  assert.equal(tokens(withTune(lagoon, 'dark', { '--bad': '#ff0000' }), 'dark', 'balanced')['--bad'], '#ff0000')
+})
+
+test('tweaks: each theme keeps its own, and the old global ones go to the theme that was on', async () => {
+  const { loadTweaks, withTweak } = await import('../src/lib/tweaks')
+  const jar = (start: Record<string, unknown>) => {
+    const m = new Map(Object.entries(start).map(([k, v]) => [k, JSON.stringify(v)]))
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) }, m }
+  }
+  const old = jar({ 'lb.palette': 'cobalt', 'lb.ascii': 'riso', 'lb.tune': { dark: { '--ink': '#ffffff' }, light: {} } })
+  const moved = loadTweaks(old)
+  assert.deepEqual(moved, { cobalt: { ascii: 'riso', tune: { dark: { '--ink': '#ffffff' }, light: {} } } })
+  assert.deepEqual(JSON.parse(old.m.get('lb.tweaks')!), moved)
+  // The move happens once: a later change to the old keys is not read again.
+  old.m.set('lb.ascii', JSON.stringify('koi'))
+  assert.deepEqual(loadTweaks(old), moved)
+  assert.deepEqual(loadTweaks(jar({ 'lb.palette': 'meadow', 'lb.ascii': 'theme' })), {})
+  assert.deepEqual(loadTweaks(jar({ 'lb.ascii': 'brass' })), { lunchbox: { ascii: 'brass' } })
+
+  const two = withTweak(moved, 'meadow', { ascii: 'sakura' })
+  assert.equal(two.meadow.ascii, 'sakura')
+  assert.equal(two.cobalt.ascii, 'riso')
+  assert.equal(two.dusk, undefined)
+  // Back to the theme's own in every part, and nothing is left to store.
+  assert.deepEqual(withTweak(two, 'meadow', { ascii: 'theme' }), moved)
+  assert.deepEqual(withTweak(moved, 'cobalt', { ascii: 'theme', tune: { dark: {}, light: {} } }), {})
+  assert.deepEqual(loadTweaks(jar({ 'lb.tweaks': { koi: { ascii: 'nope', tune: { dark: { '--evil': '#000000' } } }, dusk: { ascii: 'ember' } } })), { dusk: { ascii: 'ember' } })
+})
+
 test('model names: a snapshot date is not a version', async () => {
   ;(globalThis as any).window ??= globalThis
   const { modelName } = await import('../src/ui/ModelPicker')
@@ -1706,6 +1764,11 @@ test('model names: a snapshot date is not a version', async () => {
   assert.equal(modelName('claude-sonnet-4-20250514'), 'Sonnet 4')
   assert.equal(modelName('claude-opus-4-1-20250805'), 'Opus 4.1')
   assert.equal(modelName('gpt-6-sol'), 'GPT-6 Sol')
+  // The ids `agy models` lists.
+  assert.equal(modelName('gemini-3.8-flash-high'), 'Gemini 3.8 Flash High')
+  assert.equal(modelName('claude-sonnet-4-6'), 'Sonnet 4.6')
+  assert.equal(modelName('claude-opus-4-6-thinking'), 'Opus 4.6 Thinking')
+  assert.equal(modelName('gpt-oss-120b-medium'), 'GPT-OSS 120B Medium')
 })
 
 test('hands: a guard stands in front of every command the agent runs by itself', async () => {
