@@ -25,7 +25,7 @@ const check = (ok, what) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`); if
 async function open(profile, extra = {}, exe = electronBin, dir = '.') {
   const app = await electron.launch({
     executablePath: exe, args: [dir, `--user-data-dir=${profile}`], cwd: root,
-    env: { ...process.env, LB_FOLDER: 'shared', LB_PLAN_LIMITS: 'off', LB_WORKSPACE: temp('work'), LUNCHBOX_PATH: PATH, LUNCHBOX_PATH_ONLY: '1', FAKE_DELAY: '20', LB_WORKSHOP_REPO: root, LB_WORKSHOP_REF: head, ...extra },
+    env: { ...process.env, LB_FOLDER: 'shared', LB_PLAN_LIMITS: 'off', LB_WORKSPACE: temp('work'), LUNCHBOX_PATH: PATH, LUNCHBOX_PATH_ONLY: '1', FAKE_DELAY: '20', LB_WORKSHOP_REPO: root, LB_WORKSHOP_REF: head, LB_REPORT_ENDPOINT: 'http://127.0.0.1:9/report', ...extra },
     timeout: 30000,
   })
   const page = await app.firstWindow()
@@ -69,10 +69,16 @@ writeFileSync(join(ws, 'README.md'), readFileSync(join(ws, 'README.md'), 'utf8')
   await page.click('.ws-chip >> nth=0')
   await shot(page, '03-idea', 300)
   await page.fill('.ws-field textarea', '')
-  await page.click('button:has-text("Send as a suggestion")')
+  await page.click('button:has-text("Add a note")')
   await page.fill('.ws-suggest textarea', 'A greeting on the home page')
   await shot(page, '04-suggest', 500)
   await page.click('.ws-suggest button:has-text("Cancel")')
+  // One click sends; the report service here answers nothing, so it waits in the outbox.
+  await page.click('button:has-text("Send as a suggestion")')
+  await page.waitForTimeout(2500)
+  const outbox = join(profile, 'data', 'outbox.jsonl')
+  const queued = existsSync(outbox) ? readFileSync(outbox, 'utf8') : ''
+  check(/Workshop suggestion/.test(queued) && /Hello\.tsx/.test(queued) && /"patch":"diff --git/.test(queued), 'one click sends the note and the whole change')
 
   // Open your version: build, hand over, and this app quits once the new one shows a window.
   const closed = new Promise((done) => app.process().once('exit', done))
