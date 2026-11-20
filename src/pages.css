@@ -512,16 +512,27 @@ input[type=number].select{width:64px}
 .ws-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .ws-actions .grow{flex:1}
 .ws-ask{display:flex;flex-direction:column;gap:12px}
-.ws-field{display:flex;align-items:flex-end;gap:10px;padding:10px 10px 10px 14px;border-radius:12px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line2);transition:box-shadow 160ms var(--out)}
-.ws-field:focus-within{box-shadow:inset 0 0 0 1px var(--accent,var(--ink))}
-.ws-field textarea{flex:1;min-height:44px;resize:none;font-size:14px;line-height:1.55;padding:4px 0}
+/* The same box as the one a room is started from: words on top, who builds it and the button under. */
+.ws-field{display:flex;flex-direction:column;border-radius:14px;background:var(--well);box-shadow:inset 0 0 0 1px var(--edge),0 8px 24px -12px rgb(0 0 0/calc(.5*var(--shade)));transition:box-shadow 200ms var(--out)}
+.ws-field:focus-within{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--focus) 60%,var(--line2)),0 8px 24px -12px rgb(0 0 0/calc(.5*var(--shade)))}
+.ws-field textarea{min-height:56px;resize:none;font-size:14px;line-height:1.5;padding:14px 16px 4px}
+.ws-fieldfoot{display:flex;align-items:center;gap:12px;padding:8px 10px 10px 16px}
+.ws-by{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-by .stack{display:inline-flex;flex:none;color:var(--dim)}
+.ws-by .stack>span{background:var(--well)}
 .ws-field textarea::placeholder{color:var(--faint)}
-.ws-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ws-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ws-chips small{font:11px var(--mono);color:var(--faint);margin-right:6px}
 .ws-chip{height:26px;padding:0 10px;border-radius:13px;font-size:12px;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line);transition:color 140ms var(--out),box-shadow 140ms var(--out),background-color 140ms var(--out)}
 @media (hover:hover){.ws-chip:hover{color:var(--ink);background:var(--hover);box-shadow:inset 0 0 0 1px var(--line2)}}
 .ws-empty{display:flex;align-items:center;gap:10px;padding:18px 20px;border-radius:12px;font-size:13px;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
 .ws-files{display:flex;flex-direction:column;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);padding:6px}
 .ws-file{display:flex;align-items:center;gap:12px;padding:6px 10px;border-radius:7px}
+.ws-letter{width:18px;height:18px;flex:none;display:grid;place-items:center;border-radius:4px;font:500 10px var(--mono);font-style:normal;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line2)}
+.ws-file.added .ws-letter{color:var(--on-lit);background:var(--lit);box-shadow:none}
+.ws-tools{margin-left:auto;display:inline-flex;gap:2px}
+.ws-tools .ghostbtn{font-size:12px;font-weight:400}
+.setting.ws-sendrow{flex-wrap:wrap}
 .ws-file code{font:12px var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-files>.linkish{align-self:flex-start;margin:6px 10px;font-size:12px}
 .ws-count{display:flex;gap:8px;font:11px var(--mono)}
@@ -539,9 +550,9 @@ input[type=number].select{width:64px}
 .settings>.setting.ws-idea:only-child{border-radius:12px}
 @media (hover:hover){.setting.ws-idea:hover{background:var(--hover)}}
 .setting.ws-idea small{font:11px var(--mono);color:var(--faint)}
-.ws-undo.sure{color:var(--bad);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--bad) 45%,transparent)}
+.ws-undo.sure,.ws-undo.sure span{color:var(--bad)}
 @media (prefers-reduced-motion:reduce){.ws-suggest,.ws-dot{animation:none}}
-.ws-send{display:inline-flex;align-items:center;gap:12px}
+.ws-send{display:inline-flex;align-items:center;gap:14px}
 .ws-note-link{font-size:12px;color:var(--dim)}
 .ws-note-link:disabled{opacity:.4}
 .ws-bar{display:inline-flex;align-items:center;gap:2px;margin-left:8px;min-width:0}

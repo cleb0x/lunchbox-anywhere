@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { WorkshopState } from '../../shared/types'
-import { Loader, Sure } from '../ui/bits'
+import { Loader, Mark, Sure } from '../ui/bits'
 import { IconFolder, IconPlay, IconShare } from '../ui/icons'
-import { ago, desk, isDesktop, mod, reason, unavailable, useApp } from '../lib/desk'
+import { agentOf, ago, desk, isDesktop, mod, reason, unavailable, useApp } from '../lib/desk'
 import type { View } from '../App'
 
 // A release reads as its version; anything else, such as a commit in tests, by its short id.
@@ -95,7 +95,7 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
 
         {state?.ready && (
           <>
-            <Ask disabled={!!busy} onStart={start} />
+            <Ask disabled={!!busy} onStart={start} crew={crew} />
 
             {behind && (
               <section className="group rise" style={{ '--i': 2 } as CSSProperties}>
@@ -109,18 +109,28 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
             )}
 
             <section className="group rise" style={{ '--i': 3 } as CSSProperties}>
-              <h2>Your changes<span className="quiet">{state.changes.length ? `${state.changes.length} file${state.changes.length === 1 ? '' : 's'} differ from Lunchbox ${label(state.base)}` : 'nothing yet'}</span></h2>
+              <h2>Your changes<span className="quiet">{state.changes.length ? `${state.changes.length} file${state.changes.length === 1 ? '' : 's'} differ from Lunchbox ${label(state.base)}` : 'nothing yet'}</span>
+                <span className="ws-tools">
+                  <button className="ghostbtn" onClick={() => desk.call('workshop:folder')}><IconFolder /><span>Show folder</span></button>
+                  {state.changes.length > 0 && (
+                    <Sure act={() => act('workshop:reset', 'Back to Lunchbox as it shipped')} className="ghostbtn ws-undo" label="Undo every change in your copy">
+                      {(sure) => <span>{sure ? 'Undo everything?' : 'Undo all changes'}</span>}
+                    </Sure>
+                  )}
+                </span>
+              </h2>
               {state.changes.length > 0 ? <Changes state={state} /> : <div className="ws-empty">What your agents change shows up here, file by file.</div>}
-              <div className="ws-actions">
-                <button className="btn" disabled={!!busy || behind || (!state.mine && !state.changes.length)} onClick={() => act('workshop:open')} title={behind ? 'Bring your changes to this version first' : undefined}>
-                  <IconPlay />{state.mine ? 'Restart with the latest changes' : 'Open your version'}
-                </button>
-                <Suggest disabled={!!busy || !state.changes.length} say={say} />
-                <span className="grow" />
-                <button className="btn small quiet" onClick={() => desk.call('workshop:folder')}><IconFolder />Show folder</button>
-                <Sure act={() => act('workshop:reset', 'Back to Lunchbox as it shipped')} className="btn small quiet ws-undo" label="Undo every change in your copy">
-                  {(sure) => (sure ? 'Undo everything?' : 'Undo all changes')}
-                </Sure>
+              <div className="settings">
+                <div className="setting">
+                  <div className="grow"><b>{state.mine ? 'You are using your version' : 'Use your version'}</b><span>{state.mine ? 'Restart to pick up what changed since it was built.' : 'Builds your copy and opens it in place of the standard Lunchbox. One click brings the standard one back.'}</span></div>
+                  <button className="btn small" disabled={!!busy || behind || (!state.mine && !state.changes.length)} onClick={() => act('workshop:open')} title={behind ? 'Bring your changes to this version first' : undefined}>
+                    <IconPlay />{state.mine ? 'Restart with the latest changes' : 'Open your version'}
+                  </button>
+                </div>
+                <div className="setting ws-sendrow">
+                  <div className="grow"><b>Send it to us</b><span>Your change and what you asked for go to the Lunchbox maintainers, who may build it in for everyone.</span></div>
+                  <Suggest disabled={!!busy || !state.changes.length} say={say} />
+                </div>
               </div>
               {state.use && !state.mine && <div className="hint">Your version opens when Lunchbox starts. <button className="linkish" onClick={() => act('workshop:stop-using')}>Open the standard one instead</button></div>}
             </section>
@@ -230,7 +240,9 @@ function Progress({ state, retry, clear, agent }: { state: WorkshopState; retry:
   )
 }
 
-function Ask({ disabled, onStart }: { disabled: boolean; onStart: (text: string) => void }) {
+function Ask({ disabled, onStart, crew }: { disabled: boolean; onStart: (text: string) => void; crew: string[] }) {
+  const agents = useApp((s) => s.agents)
+  const names = crew.map((id) => agentOf(id, agents).short)
   const [text, setText] = useState('')
   const field = useRef<HTMLTextAreaElement>(null)
   const go = () => { if (text.trim() && !disabled) { onStart(text.trim()); setText('') } }
@@ -239,9 +251,15 @@ function Ask({ disabled, onStart }: { disabled: boolean; onStart: (text: string)
       <div className="ws-field">
         <textarea ref={field} rows={2} value={text} disabled={disabled} placeholder="What should Lunchbox do that it does not do yet?"
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go() } }} />
-        <button className="btn" disabled={!text.trim() || disabled} onClick={go}>Build it<kbd>↵</kbd></button>
+        <div className="ws-fieldfoot">
+          {crew.length > 0
+            ? <span className="ws-by"><span className="stack">{crew.map((id) => <span key={id}><Mark seed={agentOf(id, agents).mark} size={12} /></span>)}</span>{names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} build it` : `${names[0]} builds it`}, in a room of its own</span>
+            : <span className="ws-by">Connect an agent on the Agents page to build it</span>}
+          <button className="btn small" disabled={!text.trim() || disabled} onClick={go}>Build it<kbd>↵</kbd></button>
+        </div>
       </div>
       <div className="ws-chips">
+        <small>For example</small>
         {IDEAS.map((i) => <button key={i} className="ws-chip" onClick={() => { setText(i); field.current?.focus() }}>{i}</button>)}
       </div>
     </section>
@@ -254,7 +272,8 @@ function Changes({ state }: { state: WorkshopState }) {
   return (
     <div className="ws-files">
       {list.map((c) => (
-        <div key={c.file} className="ws-file">
+        <div key={c.file} className={`ws-file${c.fresh ? ' added' : ''}`}>
+          <i className="ws-letter" title={c.fresh ? 'New file' : 'Changed'}>{c.fresh ? 'A' : 'M'}</i>
           <code className="grow">{c.file}</code>
           {c.fresh ? <span className="ws-new">new</span> : <span className="ws-count"><i>+{c.added}</i><em>−{c.removed}</em></span>}
         </div>
@@ -286,10 +305,10 @@ function Suggest({ disabled, say }: { disabled: boolean; say: (t: string) => voi
   if (!open) {
     return (
       <span className="ws-send">
-        <button className="btn quiet" disabled={disabled || sending} onClick={send} title="Sends your change and what you asked for to the Lunchbox maintainers">
+        <button className="linkish ws-note-link" disabled={disabled} onClick={() => setOpen(true)}>Add a note</button>
+        <button className="btn small quiet" disabled={disabled || sending} onClick={send} title="Sends your change and what you asked for to the Lunchbox maintainers">
           {sending ? <Loader size={10} /> : <IconShare />}{sent ? 'Sent, send again' : 'Send as a suggestion'}
         </button>
-        <button className="linkish ws-note-link" disabled={disabled} onClick={() => setOpen(true)}>Add a note</button>
       </span>
     )
   }
