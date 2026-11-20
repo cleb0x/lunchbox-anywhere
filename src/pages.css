@@ -147,7 +147,7 @@ input[type=number].select{width:64px}
 .search:focus-within{box-shadow:inset 0 0 0 1px var(--ink)}
 .search input{flex:1;height:100%;font-size:12.5px;color:var(--ink)}
 .search input::placeholder{color:var(--faint)}
-.search.grow{margin:0}
+.search.grow{margin:0;flex:1 1 240px;max-width:440px}
 .libbody{display:flex;flex-direction:column;gap:24px;animation:fadein 260ms var(--out) both}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
 .card{min-height:132px}

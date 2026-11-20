@@ -49,7 +49,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .quiet{color:var(--faint)}
 
 /* Controls */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:28px;padding:0 12px;border-radius:6px;background:var(--ink);color:var(--ground);font-weight:500;transition:transform 120ms var(--out),opacity 160ms var(--out),background-color 160ms var(--out)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:none;white-space:nowrap;height:28px;padding:0 12px;border-radius:6px;background:var(--ink);color:var(--ground);font-weight:500;transition:transform 120ms var(--out),opacity 160ms var(--out),background-color 160ms var(--out)}
 .btn kbd{margin-left:4px}
 .btn:active:not(:disabled){transform:scale(.97)}
 .btn:disabled{opacity:.3}
@@ -418,7 +418,9 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 @media (hover:hover){.ideas button:hover{color:var(--ink);background:var(--hover)}}
 
 /* Pages */
-.page{height:100%;overflow:auto;padding:72px 24px 48px;display:flex;flex-direction:column;align-items:center;gap:24px}
+/* Room for the scrollbar is kept on both sides, so a page that grows past the window, or a tab
+   that is shorter than the last, does not step sideways. */
+.page{height:100%;overflow:auto;scrollbar-gutter:stable both-edges;padding:72px 24px 48px;display:flex;flex-direction:column;align-items:center;gap:24px}
 .page>*{width:100%;max-width:var(--col)}
 .sheetdrag{position:absolute;top:0;left:0;right:14px;height:40px;z-index:5;-webkit-app-region:drag}
 .page>.btn{width:auto;align-self:center}
@@ -434,7 +436,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .aname{display:flex;flex-direction:column;width:168px;flex:none}
 .aname b{font-weight:500}
 .aname span{font-size:12px;color:var(--faint)}
-.agood{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agood{font-size:12.5px;line-height:1.35;color:var(--dim);text-align:left;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .aleft{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
 .aleft span{font:11px var(--mono);color:var(--faint)}
 .agentbody{display:flex;flex-direction:column;gap:16px;padding:16px 20px 20px 58px;border-top:1px solid var(--line);animation:land 260ms var(--out) both}
@@ -719,6 +721,8 @@ label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
 /* Local model setup */
 .localbox{display:flex;flex-direction:column;gap:10px}
 .localbox p{margin:0;font-size:12.5px;line-height:1.55;color:var(--dim);max-width:60ch}
+.installcmd{font:11.5px var(--mono);color:var(--dim);text-align:left;padding:5px 10px;border-radius:6px;background:var(--well);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;transition:color 140ms var(--out)}
+@media (hover:hover){.installcmd:hover{color:var(--ink)}}
 .localbox .btn .quiet{margin-left:10px;font:11px var(--mono);color:inherit;opacity:.55}
 .pullrow{display:flex;align-items:center;gap:14px;min-height:30px}
 .pullrow>.mono{font-size:12px;width:120px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -736,7 +740,7 @@ label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}
 .unfold>div>*{animation:land 420ms var(--out) both;animation-delay:260ms}
 .unfold.late>div>*{animation-delay:400ms}
 @keyframes unfold{from{grid-template-rows:0fr}}
-.obfixbox{padding:12px 14px;margin-bottom:8px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line)}
+.obfixbox{padding:12px 14px;margin:8px 0;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line)}
 .obmissing{display:flex;flex-direction:column;gap:2px;padding-top:16px}
 .obmissing>small{font:11px var(--mono);color:var(--faint);padding-bottom:6px}
 .obmissing .row{margin-top:10px;gap:12px;font-size:12px}

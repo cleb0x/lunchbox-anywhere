@@ -267,6 +267,8 @@ export function App() {
       if (k === ',') { e.preventDefault(); go({ name: 'settings' }) }
       if (e.shiftKey && k === 'f') { e.preventDefault(); go({ name: 'flows' }) }
       if (e.shiftKey && k === 'p') { e.preventDefault(); go({ name: 'pool' }) }
+      if (e.shiftKey && k === 's') { e.preventDefault(); go({ name: 'savings' }) }
+      if (e.shiftKey && k === 'a') { e.preventDefault(); go({ name: 'agents' }) }
       if (e.shiftKey && k === 'l') { e.preventDefault(); go({ name: 'library' }) }
       if (e.shiftKey && k === 'b') { e.preventDefault(); go({ name: 'browser' }) }
       if (/^[1-9]$/.test(k) && rooms[Number(k) - 1]) { e.preventDefault(); go({ name: 'room', id: rooms[Number(k) - 1].id }) }
@@ -294,12 +296,12 @@ export function App() {
     ...flows.map((f) => ({ group: 'Flows' as const, label: `Run ${f.name}`, hint: steps(f.steps.length), run: async () => { const room = await desk.call('flows:run', f.id); if (room) go({ name: 'room', id: room }) } })),
     { group: 'Go to', label: 'Flows', hint: `${mod}⇧F`, run: () => go({ name: 'flows' }) },
     { group: 'Go to', label: 'Pool', hint: `${mod}⇧P`, run: () => go({ name: 'pool' }) },
-    { group: 'Go to', label: 'Savings', hint: 'Prompt cache', run: () => go({ name: 'savings' }) },
+    { group: 'Go to', label: 'Savings', hint: `${mod}⇧S`, run: () => go({ name: 'savings' }) },
     { group: 'Go to', label: 'Library', hint: `${mod}⇧L`, run: () => go({ name: 'library' }) },
     { group: 'Go to', label: 'Browser', hint: `${mod}⇧B`, run: () => go({ name: 'browser' }) },
     { group: 'Actions', label: 'New flow', hint: 'Flows', run: () => go({ name: 'flows', edit: 'new' }) },
     { group: 'Actions', label: 'Import a chat', hint: 'From Claude Code, Codex, Gemini CLI or Grok', run: () => setImporting(true) },
-    { group: 'Go to', label: 'Agents', hint: 'Connected agents, models and budgets', run: () => go({ name: 'agents' }) },
+    { group: 'Go to', label: 'Agents', hint: `${mod}⇧A`, run: () => go({ name: 'agents' }) },
     { group: 'Go to', label: 'Settings', hint: `${mod},`, run: () => go({ name: 'settings' }) },
     { group: 'Actions', label: mode === 'dark' ? 'Switch to day' : 'Switch to night', hint: 'Appearance', run: () => setMode(mode === 'dark' ? 'light' : 'dark') },
     ...[...THEMES, ...custom].filter((t) => t.id !== theme).map((t) => ({ group: 'Actions' as const, label: `Theme: ${t.name}`, hint: t.note, run: () => setTheme(t.id) })),
