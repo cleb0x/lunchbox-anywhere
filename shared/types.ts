@@ -374,3 +374,7 @@ export type WorkshopState = {
   failed?: string
   conflict?: boolean
 }
+
+// A slash command the person set up in one of their agents. kind prompt is a template of text,
+// skill a Claude Code skill. The body stays in the main process; the box gets the rest.
+export type AgentCommand = { name: string; agent: string; from: string; description: string; body: string; kind: 'prompt' | 'skill' }

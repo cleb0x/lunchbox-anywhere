@@ -2179,3 +2179,39 @@ test('import: a room made from a chat hands the agent its session and nothing it
   store.flush()
   require('node:fs').rmSync(root, { recursive: true, force: true })
 })
+
+test('slash commands: found in each agent, filled with arguments, and the folder wins', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const home = mkdtempSync(join(tmpdir(), 'lb-cmd-home-'))
+  const folder = mkdtempSync(join(tmpdir(), 'lb-cmd-room-'))
+  const put = (path: string, text: string) => { mkdirSync(join(path, '..'), { recursive: true }); writeFileSync(path, text) }
+  put(join(home, '.claude', 'commands', 'review.md'), '---\ndescription: Review the diff\n---\nReview $ARGUMENTS for bugs.\n')
+  put(join(home, '.claude', 'commands', 'git', 'ship.md'), 'Commit, then push branch $1 to $2.\n')
+  put(join(home, '.claude', 'skills', 'loop', 'SKILL.md'), '---\nname: loop\ndescription: Run a prompt again and again\n---\nRepeat the task on an interval.\n')
+  put(join(home, '.claude', 'skills', 'hidden', 'SKILL.md'), '---\nname: hidden\nuser-invocable: false\n---\nInternal.\n')
+  put(join(home, '.codex', 'prompts', 'tests.md'), 'Write tests for the code that has none.\n')
+  put(join(home, '.gemini', 'commands', 'git', 'commit.toml'), 'description = "Write a commit message"\nprompt = """Write a commit message for {{args}}."""\n')
+  put(join(folder, '.claude', 'commands', 'review.md'), 'This folder reviews $ARGUMENTS its own way.\n')
+  process.env.LB_COMMANDS_HOME = home
+  const prevCodex = process.env.CODEX_HOME
+  delete process.env.CODEX_HOME
+  try {
+    const { commands, expand } = await import('../electron/commands')
+    const list = commands(folder)
+    const names = list.map((c) => `${c.agent}:${c.name}`).sort()
+    assert.deepEqual(names, ['claude:loop', 'claude:review', 'claude:ship', 'codex:tests', 'gemini:git:commit'])
+    const review = list.find((c) => c.name === 'review')!
+    assert.match(review.body, /This folder reviews/, "the folder's own command wins")
+    assert.equal(expand(review, 'src/app.ts', 'codex'), '/review src/app.ts\n\nThis folder reviews src/app.ts its own way.')
+    assert.equal(expand(list.find((c) => c.name === 'ship')!, 'main origin', 'claude'), '/ship main origin\n\nCommit, then push branch main to origin.')
+    assert.equal(expand(list.find((c) => c.name === 'tests')!, 'in utils', 'codex'), '/tests in utils\n\nWrite tests for the code that has none.\n\nin utils', 'a command without placeholders gets the arguments after it')
+    assert.equal(expand(list.find((c) => c.name === 'git:commit')!, 'the login fix', 'gemini'), '/git:commit the login fix\n\nWrite a commit message for the login fix.')
+    const loop = list.find((c) => c.name === 'loop')!
+    assert.equal(expand(loop, '5m check the build', 'claude'), '/loop 5m check the build\n\nUse your loop skill for this. 5m check the build')
+    assert.match(expand(loop, '5m check the build', 'grok'), /Follow the loop skill below[\s\S]*Task: 5m check the build[\s\S]*Repeat the task on an interval\./, 'other agents get the skill itself')
+  } finally {
+    delete process.env.LB_COMMANDS_HOME
+    if (prevCodex !== undefined) process.env.CODEX_HOME = prevCodex
+  }
+})

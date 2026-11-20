@@ -25,6 +25,7 @@ import { cancelPull, pull, start } from './local'
 import { Limits } from './limits'
 import { allowed, claudeDir, found, read, resumes, room as roomFrom } from './import'
 import { Workshop } from './workshop'
+import { commands, expand } from './commands'
 
 app.setName('Lunchbox')
 // The person's own build from the Workshop shares the standard app's profile: same rooms, same keys.
@@ -462,6 +463,11 @@ function wire() {
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
   h('packs', () => packs().filter((p) => !p.hidden))
   h('workshop', () => workshop.state())
+  h('commands', (folder?: string) => commands(typeof folder === 'string' ? folder : undefined).map(({ body: _body, ...c }) => c))
+  h('commands:expand', (folder: string | undefined, agent: string, name: string, args: string, to: string) => {
+    const c = commands(typeof folder === 'string' ? folder : undefined).find((x) => x.agent === agent && x.name === name)
+    return c ? expand(c, String(args ?? ''), String(to ?? '')) : null
+  })
   h('workshop:setup', () => workshop.setup())
   // Opening another build quits this one, which would stop agents mid turn.
   h('workshop:open', () => {
