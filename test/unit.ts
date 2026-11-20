@@ -2293,3 +2293,34 @@ test('browsers: agents are pointed at the Lunchbox browser, and Claude Code is k
   assert.ok(!claude.spawn!(base, '/tmp/x.txt').args.includes('--disallowedTools'), 'without the Lunchbox browser nothing is taken away')
 })
 
+
+test('library: playbooks, flow templates and packs point at things that exist', async () => {
+  const { PLAYBOOKS, FIELDS, fillPlaybook } = await import('../shared/skills')
+  const { TEMPLATES, GROUPS } = await import('../shared/flow')
+  const { BUILTIN } = await import('../electron/packs')
+  const { CATALOG: AGENTS } = await import('../electron/agents/index')
+  const { CATALOG: TOOLS } = await import('../shared/catalog')
+  const agents = new Set(AGENTS.map((a) => a.id)), tools = new Set(TOOLS.map((t) => t.id)), packs = new Set(BUILTIN.map((p) => p.id))
+  const once = (ids: string[], what: string) => assert.equal(new Set(ids).size, ids.length, `${what} ids are unique`)
+  once(PLAYBOOKS.map((p) => p.id), 'playbook')
+  once(TEMPLATES.map((t) => t.id), 'template')
+  once(BUILTIN.map((p) => p.id), 'pack')
+  for (const p of PLAYBOOKS) {
+    assert.ok(FIELDS.includes(p.field), p.id)
+    assert.ok(!p.pack || packs.has(p.pack), `${p.id} names a pack that exists`)
+    for (const c of p.crew ?? []) assert.ok(agents.has(c), `${p.id} crew ${c}`)
+    for (const t of p.tools ?? []) assert.ok(tools.has(t), `${p.id} tool ${t}`)
+    assert.equal(!!p.ask, p.prompt.includes('{{input}}'), `${p.id} asks for input exactly when its prompt uses it`)
+    assert.ok(p.name.length <= 40 && p.line.length <= 100, `${p.id} fits its card`)
+    assert.ok(!fillPlaybook(p, 'x').includes('{{'), p.id)
+  }
+  for (const f of FIELDS) assert.ok(PLAYBOOKS.some((p) => p.field === f), `${f} has playbooks`)
+  for (const t of TEMPLATES) {
+    assert.ok(GROUPS.some((g) => g.id === t.group), t.id)
+    assert.ok(!t.pack || packs.has(t.pack), `${t.id} names a pack that exists`)
+    assert.ok(t.crew.length && t.crew.every((c) => agents.has(c)), `${t.id} crew`)
+    assert.ok(t.steps.length && t.steps.every((s) => s.text.trim() && (!s.to || t.crew.includes(s.to))), `${t.id} sends each step to someone in its crew`)
+    assert.ok(t.name.length <= 40 && t.line.length <= 100, `${t.id} fits its card`)
+  }
+  for (const id of ['feature', 'deep', 'qa', 'launch']) assert.ok(PLAYBOOKS.some((p) => p.id === id), `${id} is featured on the new room page`)
+})
