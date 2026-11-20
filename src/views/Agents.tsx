@@ -100,7 +100,7 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
       </button>
       {(open || shown) && (
         <div className={`agentfold${open ? '' : ' closing'}`}><div><div className="agentbody">
-          {a.note && <p className="anote">{a.note}</p>}
+          {a.note && !(a.id === 'antigravity' && a.found) && <p className="anote">{a.note}</p>}
           {a.setup && <LocalSetupBox a={a} say={say} />}
           {!a.found && a.via === 'cli' && !a.note && <InstallBox a={a} />}
           {a.via === 'api' && PROVIDER[a.id] && <KeyField a={a} say={say} />}
