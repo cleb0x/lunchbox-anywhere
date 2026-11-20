@@ -88,6 +88,21 @@ export const providerOf = (d: Def) => d.provider ?? d.key!
 // A resumed session already has the protocol; it is sent again only when it changed.
 const prompt = (i: Input) => (i.fresh === false ? i.prompt : `${i.system}\n\n${i.prompt}`)
 
+// The MCP servers the person set up in Claude Code, for this folder and everywhere, as the names
+// its permission rules use. Browsers are left out when the room lends its own.
+export function claudeServers(cwd: string, ownBrowser = false): string[] {
+  const names = new Set<string>()
+  const add = (o: unknown) => { if (o && typeof o === 'object') for (const k of Object.keys(o)) if (/^[\w.-]+$/.test(k)) names.add(k) }
+  try {
+    const config = JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json'), 'utf8'))
+    add(config.mcpServers)
+    add(config.projects?.[cwd]?.mcpServers)
+  } catch {}
+  try { add(JSON.parse(readFileSync(join(cwd, '.mcp.json'), 'utf8')).mcpServers) } catch {}
+  names.delete('lunchbox')
+  return [...names].map((n) => `mcp__${n}`).filter((n) => !(ownBrowser && OTHER_BROWSERS.includes(n)))
+}
+
 // Browser MCP servers people often have set up in Claude Code. Inside a room the Lunchbox browser
 // does their job where the person can see it, so a turn that has it gets none of these.
 const OTHER_BROWSERS = ['mcp__playwright', 'mcp__puppeteer', 'mcp__chrome-devtools', 'mcp__claude-in-chrome', 'mcp__browsermcp', 'mcp__browser-use', 'mcp__browserbase']
@@ -141,7 +156,11 @@ export const CATALOG: Def[] = [
     id: 'claude', name: 'Claude Code', short: 'Claude', maker: 'Anthropic', via: 'cli', bin: 'claude', tools: true, mark: 'claude',
     good: 'Design, careful edits, long reasoning', alphabet: '.:-=+*#%@',
     spawn: (i, file) => {
-      const allowed = ['Task', 'Agent', ...(i.access === 'workspace' ? ['Bash'] : []), ...(i.hands ? ['mcp__lunchbox'] : []), ...(i.allow ?? [])]
+      // Auto lets Claude Code work as it would in a terminal: commands (checked by the room's mode
+      // first), the web, its skills and the MCP servers the person set up for it. A tool missing
+      // here is refused without a word, since a run without a terminal cannot ask.
+      const auto = i.access === 'workspace' ? ['Bash', 'WebSearch', 'WebFetch', 'Skill', 'TodoWrite', 'NotebookEdit', ...claudeServers(i.cwd, i.ownBrowser)] : []
+      const allowed = ['Task', 'Agent', ...auto, ...(i.hands ? ['mcp__lunchbox'] : []), ...(i.allow ?? [])]
       const hands = claudeHands(i, file)
       const hook = claudeHook(i, file)
       return {

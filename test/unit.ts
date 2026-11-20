@@ -2327,3 +2327,33 @@ test('library: playbooks, flow templates and packs point at things that exist', 
   }
   for (const id of ['feature', 'deep', 'qa', 'launch']) assert.ok(PLAYBOOKS.some((p) => p.id === id), `${id} is featured on the new room page`)
 })
+
+test('claude: Auto keeps the web, skills and the person\'s own MCP servers, other modes ask', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const config = mkdtempSync(join(tmpdir(), 'lb-claude-config-'))
+  const work = mkdtempSync(join(tmpdir(), 'lb-claude-work-'))
+  writeFileSync(join(config, '.claude.json'), JSON.stringify({ mcpServers: { github: {}, playwright: {} }, projects: { [work]: { mcpServers: { linear: {} } } } }))
+  writeFileSync(join(work, '.mcp.json'), JSON.stringify({ mcpServers: { postgres: {}, lunchbox: {} } }))
+  const before = process.env.CLAUDE_CONFIG_DIR
+  process.env.CLAUDE_CONFIG_DIR = config
+  try {
+    const { CATALOG, claudeServers } = await import('../electron/agents/index')
+    assert.deepEqual(claudeServers(work).sort(), ['mcp__github', 'mcp__linear', 'mcp__playwright', 'mcp__postgres'])
+    assert.deepEqual(claudeServers(work, true).sort(), ['mcp__github', 'mcp__linear', 'mcp__postgres'], 'a room that lends its browser leaves the others out')
+    const claude = CATALOG.find((d) => d.id === 'claude')!
+    const allowedIn = (access: 'plan' | 'ask' | 'workspace') => {
+      const args = claude.spawn!({ prompt: 'hi', system: '', cwd: work, access }, '/tmp/x.txt').args
+      const at = args.indexOf('--allowedTools')
+      return at < 0 ? [] : args[at + 1].split(',')
+    }
+    const auto = allowedIn('workspace')
+    for (const t of ['Bash', 'WebSearch', 'WebFetch', 'Skill', 'mcp__github', 'mcp__postgres']) assert.ok(auto.includes(t), `${t} in Auto`)
+    const ask = allowedIn('ask')
+    assert.ok(!ask.includes('WebFetch') && !ask.includes('Bash') && !ask.includes('mcp__github'), 'Ask still asks')
+  } finally {
+    if (before === undefined) delete process.env.CLAUDE_CONFIG_DIR
+    else process.env.CLAUDE_CONFIG_DIR = before
+  }
+})
+
