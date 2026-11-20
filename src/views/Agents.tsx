@@ -145,7 +145,7 @@ function InstallBox({ a }: { a: AgentInfo }) {
   const copy = () => { navigator.clipboard.writeText(how.cmd!); setCopied(true); setTimeout(() => setCopied(false), 1400) }
   return (
     <div className="localbox">
-      <p>{a.name} is not on this computer yet. {how.cmd ? 'Run this in a terminal, sign in there once, and press Check again.' : 'Install it, sign in once, and press Check again.'}</p>
+      <p>{a.name} is not on this computer yet. {a.id === 'antigravity' ? 'Run this in a terminal and press Check again. Lunchbox then sets it up with a Gemini API key.' : how.cmd ? 'Run this in a terminal, sign in there once, and press Check again.' : 'Install it, sign in once, and press Check again.'}</p>
       <div className="row">
         {how.cmd && <button className="installcmd" onClick={copy} title="Copy">{copied ? 'copied' : `$ ${how.cmd}`}</button>}
         <a className="hint" href={how.url} target="_blank" rel="noreferrer">{site}</a>
