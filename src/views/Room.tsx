@@ -715,7 +715,9 @@ function liveEvents(live?: Live): Event[] {
 
 // What a live turn has said so far. A line that hands work to a crewmate ("@grok: ...") becomes
 // its own handoff block when the turn ends, so it is never typed out here first.
-const spoken = (t: LiveTurn) => t.text.replace(/(^|\n)@[\w.-]+:[^\n]*(?=\n|$)/g, '').replace(/(^|\n)@[\w.-]*:?[^\n]*$/, '').trimEnd()
+// What an agent says, without the @handle lines that hand work to someone else.
+const unhanded = (text: string) => text.replace(/(^|\n)@[\w.-]+:[^\n]*(?=\n|$)/g, '').replace(/(^|\n)@[\w.-]*:?[^\n]*$/, '').trimEnd()
+const spoken = (t: LiveTurn) => unhanded(t.text)
 
 type Shared = { agents: AgentInfo[]; actions: Actions; plan?: Step[] }
 
@@ -1188,7 +1190,7 @@ function Arena({ id, done, going, picked, agents, pick }: { id: string; done: Sa
           return (
             <div key={c.who + id} className={`arenacol${picked === c.who ? ' picked' : picked ? ' dim' : ''}`}>
               <div className="who"><Mark seed={a.mark} size={14} active={c.live} /><b className="name">{a.short}</b><span className="when">{c.ms ? `${(c.ms / 1000).toFixed(1)} s` : ''}</span></div>
-              {c.text ? <Rich text={clean(c.text)} caret={c.live} /> : c.error ? <div className="err">{c.error}</div> : <div className="busyline"><span className="shimmer">Thinking</span></div>}
+              {c.text ? <Rich text={clean(unhanded(c.text))} caret={c.live} /> : c.error ? <div className="err">{c.error}</div> : <div className="busyline"><span className="shimmer">Thinking</span></div>}
               <Acts acts={c.acts} live={c.live} />
               {settled && !picked && !c.error && <button className="btn small quiet keep" onClick={() => pick(id, c.who)}>Keep this one</button>}
             </div>
