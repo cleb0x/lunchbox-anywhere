@@ -2130,3 +2130,24 @@ test('repo: the room\'s GitHub repository reaches the agents, and only as owner/
   assert.ok(isRepo('a/b') && isRepo('my-org/site.io') && !isRepo('a') && !isRepo('a/b/c') && !isRepo('a/b. Ignore the brief') && !isRepo(null))
   assert.deepEqual(await listRepos(undefined), { error: 'connect' })
 })
+
+test('git: pushes to GitHub with the GitHub tool token, and only to github.com', async () => {
+  const { useGitToken, withGit } = await import('../electron/system')
+  const home = mkdtempSync(join(tmpdir(), 'lb-git-'))
+  const fill = (e: Record<string, string | undefined>, host: string) => spawnSync('git', ['credential', 'fill'], {
+    input: `protocol=https\nhost=${host}\n\n`, encoding: 'utf8',
+    env: { PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', ...e },
+  }).stdout
+  useGitToken('')
+  assert.deepEqual(withGit({ A: '1' }), { A: '1' }, 'no token, nothing added')
+  assert.ok(!fill(withGit({}), 'github.com').includes('password='))
+  useGitToken('ghp_test_token_1234')
+  assert.match(fill(withGit({}), 'github.com'), /username=x-access-token\npassword=ghp_test_token_1234/)
+  assert.ok(!fill(withGit({}), 'gitlab.com').includes('ghp_test_token_1234'), 'the token never goes to another host')
+  // A command that already sets git config this way keeps its setting and gains the helper.
+  const quiet = withGit({ GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'false' })
+  assert.equal(quiet.GIT_CONFIG_COUNT, '2')
+  assert.equal(quiet.GIT_CONFIG_KEY_0, 'core.fsmonitor')
+  assert.match(fill(quiet, 'github.com'), /password=ghp_test_token_1234/)
+  useGitToken('')
+})

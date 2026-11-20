@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 import { CATALOG, type CatalogTool } from '../shared/catalog'
 import type { Store } from './store'
-import { env, launch, stop, which } from './system'
+import { env, launch, stop, useGitToken, which } from './system'
 import type { Tool } from './hands'
 
 export type ToolState = { id: string; state: 'off' | 'starting' | 'ready' | 'error'; tools: { name: string; description: string }[]; error?: string; missing?: string[] }
@@ -48,7 +48,13 @@ export class Toolbox {
     return need
   }
 
+  // git pushes with the GitHub tool's token while that tool is switched on.
+  private shareGit() {
+    useGitToken(this.conf.github?.on ? this.store.keys()[keyOf('github', 'token')] : '')
+  }
+
   async startAll() {
+    this.shareGit()
     await Promise.all(CATALOG.filter((t) => this.conf[t.id]?.on).map((t) => this.start(t.id).catch(() => {})))
   }
 
@@ -59,6 +65,7 @@ export class Toolbox {
     const cur = this.conf[id] ?? { on: false }
     this.store.saveSettings({ tools: { ...this.conf, [id]: { ...cur, ...(patch.on !== undefined ? { on: patch.on } : {}), ...(patch.input !== undefined ? { input: patch.input.trim() } : {}) } } })
     this.stop(id)
+    this.shareGit()
     if (this.conf[id]?.on) await this.start(id)
     else this.set({ id, state: 'off', tools: [] })
     return this.states.get(id)

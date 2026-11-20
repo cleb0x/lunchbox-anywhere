@@ -56,7 +56,20 @@ async function findPath() {
 const unique = (dirs: (string | undefined | '')[]) => [...new Set(dirs.filter(Boolean))].join(delimiter)
 
 export async function env(extra: Record<string, string> = {}) {
-  return { ...process.env, PATH: await loginPath(), NO_COLOR: '1', FORCE_COLOR: '0', ...extra }
+  return withGit({ ...process.env, PATH: await loginPath(), NO_COLOR: '1', FORCE_COLOR: '0', ...extra })
+}
+
+// The token saved for the GitHub tool also lets git push to GitHub, so a server needs no login of
+// its own. It is passed to every command as a credential helper for github.com only, through the
+// environment, so it is never written into a config file.
+let gitToken = ''
+export const useGitToken = (token: string | undefined) => { gitToken = token?.trim() ?? '' }
+const HELPER = '!f() { test "$1" = get && echo username=x-access-token && echo "password=$LUNCHBOX_GITHUB_TOKEN"; }; f'
+export function withGit<T extends Record<string, string | undefined>>(e: T): T {
+  if (!gitToken) return e
+  // Settings already given this way, such as the ones that keep a read-only git quiet, are kept.
+  const n = Number(e.GIT_CONFIG_COUNT) || 0
+  return { ...e, LUNCHBOX_GITHUB_TOKEN: gitToken, GIT_CONFIG_COUNT: String(n + 1), [`GIT_CONFIG_KEY_${n}`]: 'credential.https://github.com.helper', [`GIT_CONFIG_VALUE_${n}`]: HELPER } as T
 }
 
 // The first line of `command -v` or where.exe output that is a real path. Both print other things
