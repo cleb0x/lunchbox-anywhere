@@ -19,7 +19,7 @@ const total = (r: Record<string, Usage> | undefined) => Object.values(r ?? {}).r
 type Counts = { input: number; cached: number; kept?: number; cut?: number }
 // What Lunchbox never sent: memory and conversation an agent did not need again, and command
 // output it shortened on the way in.
-const unsent = (u: { kept?: number; cut?: number }) => (u.kept ?? 0) + (u.cut ?? 0)
+const unsent = (u: { kept?: number; cut?: number }) => Math.max(0, (u.kept ?? 0) + (u.cut ?? 0))
 // Everything an agent would have read: billed in full, read from the provider's cache, or never sent.
 const read = (u: Counts) => u.input + u.cached + unsent(u)
 const reused = (u: Counts) => u.cached + unsent(u)

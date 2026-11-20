@@ -1068,7 +1068,7 @@ export class Engine {
     if (r.usage.input + r.usage.output + r.usage.cached > 0) {
       // What Lunchbox kept out of this turn, in tokens at about four characters each: memory the
       // agent already had, conversation a briefing stood in for, and command output it shortened.
-      const lean: Partial<Usage> = { kept: Math.round((p.full - p.sent + spared) / 4), cut: Math.round(cut / 4) }
+      const lean: Partial<Usage> = { kept: Math.max(0, Math.round((p.full - p.sent + spared) / 4)), cut: Math.round(cut / 4) }
       // A session the room kept cached past its lifetime: what it read beyond the part every
       // session shares would have been written again.
       // The shared part is taken at the most any new session has read of it, so this counts low.
