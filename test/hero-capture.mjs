@@ -32,8 +32,6 @@ try {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 900))
   await page.waitForSelector('.onboard', { timeout: 30000 })
   for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); await page.waitForTimeout(i ? 900 : 2600) }
-  await page.click('.sbitem >> text=Settings')
-  await page.click('.seg button:has-text("Crew order")')
   await page.click('.sbitem >> text=New room')
   await page.waitForSelector('.newroom')
   await page.waitForTimeout(800)

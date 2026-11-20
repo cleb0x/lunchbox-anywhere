@@ -28,8 +28,6 @@ try {
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 1000))
   await page.waitForSelector('.onboard')
   for (let i = 0; i < 4; i++) { await page.keyboard.press('Enter'); await page.waitForTimeout(i ? 900 : 2600) }
-  await page.click('.sbitem >> text=Settings')
-  await page.click('.seg button:has-text("Crew order")')
   await page.click('.sbitem >> text=New room')
   await page.waitForSelector('.newroom')
   await page.click('.composer textarea')
@@ -71,7 +69,6 @@ try {
   await bottom()
   await page.waitForTimeout(400)
   await page.screenshot({ path: out + 'room-dark.png' })
-  await page.click('.sbitem >> text=Settings')
   await page.click('.seg button:has-text("Light")')
   await page.click('.sbroom >> nth=0')
   await page.waitForTimeout(1500)

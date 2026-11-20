@@ -122,15 +122,17 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
 
   const turning = data?.live.turns.length ?? 0
   useEffect(() => { if (!turning) setStopping(false) }, [turning])
+  const stopped = useRef(0)
   function stop() {
+    stopped.current = performance.now()
     setStopping(true)
     desk.call('room:stop', id)
   }
 
   // A new plan lifts out of the chat into the panel, so the panel opens for it. Only for now: the
-  // choice to keep it closed stays saved.
+  // choice to keep it closed stays saved. Pressing Stop is no moment for a panel to slide in.
   useEffect(() => {
-    const open = () => { if (!panelOn.current) { glideFrom.current = columnLeft(); reflow(); setPanel(true) } }
+    const open = () => { if (!panelOn.current && performance.now() - stopped.current > 4000) { glideFrom.current = columnLeft(); reflow(); setPanel(true) } }
     addEventListener('lunchbox:plan', open)
     return () => removeEventListener('lunchbox:plan', open)
   }, [])
@@ -538,7 +540,9 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         if (Math.abs(top - ours.current) < 1) return
         const gap = el.scrollHeight - el.clientHeight - top
         stick.current = gap < 2 || (!up && gap < 80)
-        if (gap > 600 !== away) setAway(gap > 600)
+        // While an agent writes, the way back is offered as soon as the view lets go of the work.
+        const far = gap > (live_.current ? 120 : 600)
+        if (far !== away) setAway(far)
       }}>
       <div className="column" ref={column}>
         {empty && !live?.turns.length && <div className="roomempty">Nothing here yet. Say what you need and the crew takes it from there.</div>}
@@ -546,12 +550,26 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         <div className="tail" />
       </div>
     </div>
-    {away && (
-      <button type="button" className="tolatest" onClick={() => { const el = box.current!; stick.current = true; setAway(false); el.scrollTo({ top: el.scrollHeight, behavior: still() ? 'auto' : 'smooth' }) }}>
-        <IconDown />{working ? 'Follow the work' : 'Latest'}
-      </button>
-    )}
+    <ToLatest on={away} who={working && live?.active ? agentOf(live.active, agents) : undefined} doing={working ? live?.doing || 'Follow the work' : 'Latest'}
+      go={() => { const el = box.current!; stick.current = true; setAway(false); el.scrollTo({ top: el.scrollHeight, behavior: still() ? 'auto' : 'smooth' }) }} />
     </div>
+  )
+}
+
+// The way back to the newest line, offered once the reader has scrolled away from it. While an
+// agent works it says who and on what, so the work can be followed from anywhere in the room.
+function ToLatest({ on, who, doing, go }: { on: boolean; who?: AgentInfo; doing: string; go: () => void }) {
+  const [here, setHere] = useState(on)
+  useEffect(() => {
+    if (on) { setHere(true); return }
+    const t = setTimeout(() => setHere(false), 180)
+    return () => clearTimeout(t)
+  }, [on])
+  if (!on && !here) return null
+  return (
+    <button type="button" className={`tolatest${on ? '' : ' leaving'}`} tabIndex={on ? 0 : -1} onClick={go}>
+      {who && <Mark seed={who.mark} size={12} active />}<span>{doing}</span><IconDown />
+    </button>
   )
 }
 
@@ -755,13 +773,30 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
       </div>
       <div className="exchange">
         <p className="asked">{t ? t.ask : e!.ask}</p>
-        {raw.trim() ? <div className="got"><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></div>
+        {raw.trim() ? <Got long={!flowing && lengthy(raw)}><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></Got>
           : e && <div className="got"><span className={cli && !e.error ? 'err soft' : 'err'}>{e.error ?? (cli ? 'What it printed went somewhere else, so there is nothing to show here.' : 'No answer')}</span></div>}
         <Acts acts={(t ?? e)?.acts ?? []} live={!!t} />
-        {work && <Working t={work} a={to} fallback={doing} leaving={!t} />}
+        {/* The heading already says who is answering whom. */}
+        {work && <Working t={work} a={to} fallback={/ is answering /.test(doing) ? '' : doing} leaving={!t} />}
       </div>
       {!work && e && <Tools e={e} actions={actions} />}
     </Ev>
+  )
+}
+
+const lengthy = (text: string) => text.length > 900 || text.split('\n').length > 16
+
+// A long answer between agents, read back later, shows its opening and keeps the rest one click
+// away: the main agent's own answer is what the person came for. The row that watched it being
+// written stays open, so nothing closes under the reader.
+function Got({ long, children }: { long: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  if (!long) return <div className="got">{children}</div>
+  return (
+    <>
+      <div className={`got folded${open ? ' open' : ''}`}>{children}</div>
+      <button type="button" className="unfoldbtn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Show the whole answer'}</button>
+    </>
   )
 }
 
@@ -857,7 +892,7 @@ function Now({ t, a, fallback, elapsed }: { t: LiveTurn; a: AgentInfo; fallback:
   return (
     <div className="workline">
       <Loader size={10} />
-      {step ? <><span className="shimmer" key={step.verb}>{step.verb}</span>{step.text && <code key={step.text}>{step.text}</code>}</> : <span className="shimmer" key="idle">{fallback.startsWith(a.short + ' ') ? fallback : `${a.short} is thinking`}</span>}
+      {step ? <><span className="shimmer" key={step.verb}>{step.verb}</span>{step.text && <code key={step.text}>{step.text}</code>}</> : <span className="shimmer" key="idle">{fallback.startsWith(a.short + ' ') ? fallback : fallback ? `${a.short} is thinking` : 'Thinking'}</span>}
       <time>{elapsed}</time>
       {!!t.tokens && <time className="tok">{tokensOf(t.tokens)}</time>}
     </div>
@@ -1234,13 +1269,16 @@ function Panel({ meta, events, live, agents }: { meta: RoomMeta; events: Event[]
   const out = (a: AgentInfo) => !!unavailable(a)
   scene.current.sources = crew.map((a, i) => ({ alphabet: a.alphabet, x: (i + 0.5) / crew.length, y: i % 2 ? 0.66 : 0.34, energy: out(a) ? -0.3 : 0.22 }))
   scene.current.active = live.active ? meta.crew.indexOf(live.active) : -1
-  scene.current.hold = live.waiting
+  // A command held for a yes stops the work. A decision left open does not: an agent answering
+  // the next message is working, and the panel says so.
+  const waiting = live.waiting && (!live.turns.length || live.runs.some((r) => r.state === 'asking'))
+  scene.current.hold = waiting
   scene.current.cables = cables.current.filter((c) => meta.crew.includes(c.from) && meta.crew.includes(c.to)).map((c) => ({ from: meta.crew.indexOf(c.from), to: meta.crew.indexOf(c.to), at: c.at }))
   const prev = useRef(events.length)
   if (prev.current !== events.length) { prev.current = events.length; scene.current.bump = (scene.current.bump ?? 0) + 1 }
 
-  const state = live.waiting ? 'waiting' : live.active ? 'working' : 'idle'
-  const caption = live.waiting ? 'Waiting for you' : live.doing || (events.length ? 'Quiet' : 'Ready when you are')
+  const state = waiting ? 'waiting' : live.active ? 'working' : 'idle'
+  const caption = waiting ? 'Waiting for you' : live.doing || (events.length ? 'Quiet' : 'Ready when you are')
   const settledSteps = useMemo(() => plan(events, crew), [events, meta.crew.join(), agents])
   const steps = useMemo(() => planOn(settledSteps, liveEvents(live), crew), [settledSteps, live])
 
@@ -1261,10 +1299,10 @@ function Panel({ meta, events, live, agents }: { meta: RoomMeta; events: Event[]
           const working = live.turns.some((t) => t.who === a.id)
           const used = today ? `${tokens(today.input + today.output + today.cached)} tokens today${today.cost ? `, ${money(today.cost)}` : ''}` : ''
           const role = i === 0 ? 'Main' : 'On call'
-          const status = working ? (live.waiting && live.active === a.id ? 'Waiting for your OK' : i === 0 ? 'Main, working' : 'Working') : why ?? [role, used].filter(Boolean).join(', ')
+          const status = working ? (waiting && live.active === a.id ? 'Waiting for your OK' : i === 0 ? 'Main, working' : 'Working') : why ?? [role, used].filter(Boolean).join(', ')
           return (
             <div key={a.id} className={`crew${working ? ' on' : ''}${why ? ' spent' : ''}`} title={a.name}>
-              <Mark seed={a.mark} size={16} active={working && !live.waiting} />
+              <Mark seed={a.mark} size={16} active={working && !waiting} />
               <span className="grow">{a.short}<small>{status}</small></span>
               {budget > 0 && <Meter value={Math.max(0, 1 - (today?.cost ?? 0) / budget)} cells={10} tone={(today?.cost ?? 0) > budget * 0.75 ? 'warn' : undefined} />}
             </div>
