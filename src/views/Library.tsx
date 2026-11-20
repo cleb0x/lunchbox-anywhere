@@ -239,6 +239,7 @@ function ToolCard({ t, i, s, open, toggle, say }: { t: CatalogTool; i: number; s
             <label key={x.id} className="field">
               <span>{x.label}{x.optional ? ' (optional)' : ''}{x.url && <> · <a href={x.url} target="_blank" rel="noreferrer">get one</a></>}</span>
               <input type="password" value={secrets[x.id] ?? ''} placeholder={have[x.id] ? 'Saved. Type to replace' : x.hint ?? ''} onChange={(e) => setSecrets({ ...secrets, [x.id]: e.target.value })} />
+              {x.note && <small>{x.note}</small>}
             </label>
           ))}
           {t.input && (

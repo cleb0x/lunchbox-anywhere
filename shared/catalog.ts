@@ -1,7 +1,8 @@
 // Open source MCP servers worth having one switch away. Lunchbox runs each one itself and hands
 // its tools to every agent in a room, so they work the same in Claude Code, Codex, Grok and Gemini.
 
-export type Secret = { id: string; label: string; env?: string; arg?: string; hint?: string; url?: string; optional?: boolean }
+// note: a line under the field, for what the key needs that its page will not ask for by itself.
+export type Secret = { id: string; label: string; env?: string; arg?: string; hint?: string; url?: string; optional?: boolean; note?: string }
 
 export type CatalogTool = {
   id: string
@@ -37,7 +38,12 @@ export const CATALOG: CatalogTool[] = [
     id: 'github', name: 'GitHub', group: 'Work', repo: 'modelcontextprotocol/servers-archived', run: 'npx',
     line: 'Issues, pull requests, reviews and code search across your repositories.',
     args: ['-y', '@modelcontextprotocol/server-github'],
-    secrets: [{ id: 'token', label: 'Personal access token', env: 'GITHUB_PERSONAL_ACCESS_TOKEN', hint: 'ghp_… or github_pat_…', url: 'https://github.com/settings/personal-access-tokens/new' }],
+    secrets: [{
+      id: 'token', label: 'Personal access token', env: 'GITHUB_PERSONAL_ACCESS_TOKEN', hint: 'ghp_… or github_pat_…',
+      // GitHub fills these permissions in from the link; which repositories it reaches is chosen there.
+      url: 'https://github.com/settings/personal-access-tokens/new?name=Lunchbox&description=Lunchbox+agents%3A+code%2C+pull+requests+and+issues&contents=write&pull_requests=write&issues=write',
+      note: 'On GitHub, under Repository access, choose All repositories, or the ones agents may change. Contents, Pull requests and Issues must be Read and write: the link sets them. With Read-only, Lunchbox lists your repositories but cannot push.',
+    }],
   },
   {
     id: 'shadcn', name: 'shadcn/ui', group: 'Design', repo: 'shadcn-ui/ui', run: 'npx',
