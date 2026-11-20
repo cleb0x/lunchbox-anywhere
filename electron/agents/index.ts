@@ -333,6 +333,8 @@ async function locate(bin: string) {
 const paths = new Map<string, string>()
 
 export async function detect(keys: Record<string, string>, models: Record<string, string>, health: Record<string, string>): Promise<AgentInfo[]> {
+  // Google moved everyone but paid API key and Enterprise users to Antigravity, so Gemini CLI is
+  // only listed where it is already installed.
   return Promise.all(
     all().map(async (d): Promise<AgentInfo> => {
       const base = { ...d, spawn: undefined, key: undefined, model: models[d.id], note: health[d.id] }
@@ -366,7 +368,7 @@ export async function detect(keys: Record<string, string>, models: Record<string
       // The model typed into the connector is the one used, unless another was picked since.
       return { ...base, model: base.model || connModels.get(d.id) || undefined, found: mine || !!key, ready: mine || !!key }
     }),
-  )
+  ).then((list) => list.filter((a) => a.id !== 'gemini' || a.found))
 }
 
 // What Claude Code's --model takes: its short names follow the newest of each line, the full ids
