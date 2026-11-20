@@ -1,6 +1,6 @@
 # Working in the Workshop
 
-This folder is one person's own copy of Lunchbox's source. They opened the Workshop in Lunchbox and asked for something the app does not have yet. You build it here, and it runs only on their computer. When it works, they press **Open your version** on the Workshop page and Lunchbox restarts as this build, with the same rooms, settings and keys.
+This folder is one person's own copy of Lunchbox's source. They opened the Workshop in Lunchbox and asked for something the app does not have yet. You build it here, and it runs only on their computer. When it works, they press **Try it**, in the room's header or on the Workshop page, and Lunchbox restarts as this build, with the same rooms, settings and keys.
 
 Read this file, then `docs/architecture.md`, then the files around the place you will change. Build what they asked for so that nobody could tell it was added later.
 
@@ -53,4 +53,4 @@ Lunchbox has one design language, and a new part must use it.
 3. `npm run build` passes.
 4. You looked at it: run `npm run build`, then a screenshot script such as `node test/pages.mjs` (it writes to `test/shots/`), and check the result in dark and light.
 
-Then tell the person, in two or three sentences, what you added and where to find it, and to press **Open your version** on the Workshop page. If they want everyone to have it, the **Send as a suggestion** button there sends it to the Lunchbox maintainers.
+Then tell the person, in two or three sentences, what you added and where to find it, and to press **Try it** in the room's header. If they want everyone to have it, **Send to Lunchbox** sends it to the maintainers.

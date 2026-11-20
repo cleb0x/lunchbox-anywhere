@@ -46,7 +46,7 @@ const shot = async (page, name, wait = 700) => { await page.waitForTimeout(wait)
 {
   const { app, page } = await open(temp('profile'), { LB_WORKSHOP_DIR: join(temp('ws'), 'copy') })
   await page.waitForSelector('.ws-steps')
-  check(await page.isEnabled('button:has-text("Set up the Workshop")'), 'setup is offered when git and npm are found')
+  check(await page.isVisible('.ws-field textarea'), 'the first thing on the page is where to say what you want')
   await shot(page, '01-setup')
   await app.close()
 }
@@ -62,6 +62,9 @@ writeFileSync(join(ws, 'src', 'views', 'Hello.tsx'), 'export const Hello = () =>
 writeFileSync(join(ws, 'README.md'), readFileSync(join(ws, 'README.md'), 'utf8') + '\nA line from the Workshop.\n')
 {
   const { app, page } = await open(profile, { LB_WORKSHOP_DIR: ws })
+  await page.waitForSelector('.ws-built')
+  check(await page.isVisible('.ws-built button:has-text("Try it")') && !(await page.isVisible('.ws-file')), 'a built change offers Try it, with the files behind Details')
+  await page.click('.ws-built button:has-text("Details")')
   await page.waitForSelector('.ws-file')
   const files = await page.$$eval('.ws-file code', (els) => els.map((e) => e.textContent))
   check(files.includes('README.md') && files.includes('src/views/Hello.tsx'), `changes list shows edited and new files (${files.join(', ')})`)
@@ -74,15 +77,27 @@ writeFileSync(join(ws, 'README.md'), readFileSync(join(ws, 'README.md'), 'utf8')
   await shot(page, '04-suggest', 500)
   await page.click('.ws-suggest button:has-text("Cancel")')
   // One click sends; the report service here answers nothing, so it waits in the outbox.
-  await page.click('button:has-text("Send as a suggestion")')
+  await page.click('button:has-text("Send to Lunchbox")')
   await page.waitForTimeout(2500)
   const outbox = join(profile, 'data', 'outbox.jsonl')
   const queued = existsSync(outbox) ? readFileSync(outbox, 'utf8') : ''
   check(/Workshop suggestion/.test(queued) && /Hello\.tsx/.test(queued) && /"patch":"diff --git/.test(queued), 'one click sends the note and the whole change')
 
-  // Open your version: build, hand over, and this app quits once the new one shows a window.
+  // An idea starts its own room straight away when the copy is ready, with Try it in its header.
+  await page.fill('.ws-field textarea', 'A sound when an agent finishes')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.room .ws-bar', { timeout: 15000 })
+  check(await page.isVisible('.ws-bar button:has-text("Try it")'), 'an idea opens its room, with Try it in the header')
+  await shot(page, '04b-room', 1200)
+  await page.waitForFunction(() => !document.querySelector('.room .composer .stop, .room [aria-label="Stop"]'), null, { timeout: 30000 }).catch(() => {})
+  await page.click('.sbitem:has-text("Workshop")')
+  await page.waitForSelector('.ws-built')
+  check(await page.isVisible('.ws-idea:has-text("A sound when an agent finishes")'), 'the idea is listed on the Workshop page')
+
+  // Try it: build, hand over, and this app quits once the new one shows a window.
   const closed = new Promise((done) => app.process().once('exit', done))
-  await page.click('button:has-text("Open your version")')
+  await page.waitForFunction(() => !document.querySelector('.ws-idea .loader'), null, { timeout: 60000 }).catch(() => {})
+  await page.click('.ws-built button:has-text("Try it")')
   await page.waitForSelector('.ws-progress', { timeout: 10000 }).catch(() => {})
   await shot(page, '05-building', 300).catch(() => {})
   const ended = await Promise.race([closed.then(() => true), new Promise((r) => setTimeout(() => r(false), 180000))])
@@ -103,7 +118,7 @@ writeFileSync(join(ws, 'README.md'), readFileSync(join(ws, 'README.md'), 'utf8')
   writeFileSync(join(profile, 'workshop.json'), JSON.stringify({ base: head, use: false }))
   const { app, page } = await open(profile, { LB_WORKSHOP_DIR: ws, LUNCHBOX_WORKSHOP: '1', LUNCHBOX_STANDARD: '/nonexistent' }, electronBin, ws)
   await page.waitForSelector('.ws-mine')
-  check(await page.isVisible('button:has-text("Back to standard Lunchbox")'), 'the own build offers the way back')
+  check(await page.isVisible('button:has-text("Switch back")'), 'the own build offers the way back')
   await shot(page, '06-mine')
   await app.close()
 }

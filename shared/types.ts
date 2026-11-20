@@ -373,6 +373,8 @@ export type WorkshopState = {
   busy?: { step: string; log: string[]; at: number; error?: string }
   failed?: string
   conflict?: boolean
+  waiting?: string
+  launched?: { room: string; at: number }
 }
 
 // A slash command the person set up in one of their agents. kind prompt is a template of text,

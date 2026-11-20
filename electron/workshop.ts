@@ -25,6 +25,9 @@ export class Workshop {
   private file: string
   private saved: Saved
   private busy: WorkshopState['busy']
+  // The idea waiting for the first setup to finish, and the room it then started in.
+  waiting?: string
+  launched?: { room: string; at: number }
   private child: ReturnType<typeof launch> | null = null
 
   constructor(private data: string, private emit: (state: WorkshopState) => void) {
@@ -36,6 +39,10 @@ export class Workshop {
   private save(patch: Partial<Saved>) {
     this.saved = { ...this.saved, ...patch }
     writeFileSync(this.file, JSON.stringify(this.saved, null, 2))
+  }
+
+  isReady() {
+    return this.ready()
   }
 
   private ready() {
@@ -61,6 +68,8 @@ export class Workshop {
       needs: { git, node, npm },
       busy: this.busy,
       failed: this.saved.failed,
+      waiting: this.waiting,
+      launched: this.launched,
     }
   }
 

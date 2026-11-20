@@ -469,9 +469,31 @@ function wire() {
     return c ? expand(c, String(args ?? ''), String(to ?? '')) : null
   })
   h('workshop:setup', () => workshop.setup())
+  // An idea starts a Workshop room straight away, or, the first time, once the copy is set up.
+  h('workshop:idea', async (text: string) => {
+    const idea = String(text ?? '').trim()
+    if (!idea) throw new Error('Say what Lunchbox should do')
+    const { crew } = defaults()
+    if (!crew.length) throw new Error('Connect an agent first, on the Agents page')
+    const start = () => {
+      const meta = engine.create({ crew, workspace: workshop.dir, pack: 'workshop', name: idea.split('\n')[0].slice(0, 60) })
+      engine.send(meta.id, idea, 'workspace')
+      workshop.launched = { room: meta.id, at: Date.now() }
+      workshop.waiting = undefined
+      return meta.id
+    }
+    if (workshop.isReady()) return { room: start() }
+    workshop.waiting = idea
+    void workshop.setup().then(async (s) => {
+      if (s.busy?.error) { workshop.waiting = undefined; emit('workshop', await workshop.state()); return }
+      start()
+      emit('workshop', await workshop.state())
+    })
+    return { waiting: true }
+  })
   // Opening another build quits this one, which would stop agents mid turn.
   h('workshop:open', () => {
-    if (engine.summaries().some((r) => r.busy)) throw new Error('Agents are still working. Open your version when they finish')
+    if (engine.summaries().some((r) => r.busy)) throw new Error('Agents are still working. Try it when they finish')
     return workshop.open()
   })
   h('workshop:back', () => workshop.back())
