@@ -521,16 +521,18 @@ input[type=number].select{width:64px}
 .ws-by .stack{display:inline-flex;flex:none;color:var(--dim)}
 .ws-by .stack>span{background:var(--well)}
 .ws-field textarea::placeholder{color:var(--faint)}
-.ws-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ws-chips small{font:11px var(--mono);color:var(--faint);margin-right:6px}
-.ws-chip{height:26px;padding:0 10px;border-radius:13px;font-size:12px;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line);transition:color 140ms var(--out),box-shadow 140ms var(--out),background-color 140ms var(--out)}
+/* Examples sit two to a row under their label, so a long one never leaves the last alone on a line. */
+.ws-chips{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ws-chips small{grid-column:1 / -1;font:11px var(--mono);color:var(--faint);padding:2px 2px 0}
+.ws-chip{height:32px;padding:0 12px;border-radius:8px;font-size:12.5px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line);transition:color 140ms var(--out),box-shadow 140ms var(--out),background-color 140ms var(--out)}
 @media (hover:hover){.ws-chip:hover{color:var(--ink);background:var(--hover);box-shadow:inset 0 0 0 1px var(--line2)}}
 .ws-empty{display:flex;align-items:center;gap:10px;padding:18px 20px;border-radius:12px;font-size:13px;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
 .ws-files{display:flex;flex-direction:column;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);padding:6px}
 .ws-file{display:flex;align-items:center;gap:12px;padding:6px 10px;border-radius:7px}
 .ws-letter{width:18px;height:18px;flex:none;display:grid;place-items:center;border-radius:4px;font:500 10px var(--mono);font-style:normal;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line2)}
 .ws-file.added .ws-letter{color:var(--on-lit);background:var(--lit);box-shadow:none}
-.ws-tools{margin-left:auto;display:inline-flex;gap:2px}
+.ws-tools{margin:-4px -8px -4px auto;align-self:center;display:inline-flex;gap:2px}
+.ws-head p{max-width:78ch}
 .ws-tools .ghostbtn{font-size:12px;font-weight:400}
 .setting.ws-sendrow{flex-wrap:wrap}
 .ws-file code{font:12px var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

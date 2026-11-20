@@ -67,7 +67,7 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
   return (
     <div className="page">
       <div className="pagebody wide">
-        <header className="pagehead rise">
+        <header className="pagehead ws-head rise">
           <h1>Workshop</h1>
           <p>Ask an agent for anything Lunchbox does not do yet. It builds it into your own copy of Lunchbox, which runs only on this computer, and you can send it to us as a suggestion.</p>
         </header>
