@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import { flushSync } from 'react-dom'
-import type { Hit, RoomSummary, Skill } from '../shared/types'
+import type { Group, Hit, RoomSummary, Skill } from '../shared/types'
 import { Loader, Sure } from './ui/bits'
 import { Logo } from './ui/Logo'
-import { IconAgents, IconBrowser, IconClock, IconFlows, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings, IconWorkshop } from './ui/icons'
+import { IconAgents, IconBrowser, IconClock, IconFlows, IconFolder, IconFolderOpen, IconFolderPlus, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings, IconWorkshop } from './ui/icons'
 import { Onboarding } from './views/Onboarding'
 import { RoomView } from './views/Room'
 import { NewRoom } from './views/NewRoom'
@@ -30,11 +30,11 @@ import { codeColours, wellOf } from './lib/codecolors'
 import { NO_TUNE, tuned, type Tune } from './lib/tune'
 import { loadTweaks, saveTweaks, withTweak, type Tweak } from './lib/tweaks'
 import { shift } from './lib/fit'
-import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
+import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access, now as appNow } from './lib/desk'
 
 export type View =
   | { name: 'room'; id: string; focus?: string }
-  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean; crew?: string[] }
+  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean; crew?: string[]; group?: string }
   | { name: 'agents' } | { name: 'free' } | { name: 'settings'; edit?: string } | { name: 'pool' } | { name: 'savings' } | { name: 'library'; tool?: string } | { name: 'browser' } | { name: 'waiting' }
   | { name: 'flows'; edit?: string; template?: string }
   | { name: 'workshop' }
@@ -135,6 +135,83 @@ export function App() {
   const archived = all.filter((r) => r.archived)
   const [showArchived, setShowArchived] = useState(false)
   const [ctx, setCtx] = useState<{ room: RoomSummary; x: number; y: number; from: HTMLElement } | null>(null)
+  // Folders in the sidebar: rooms filed together. Which ones are open is kept on this device.
+  const groups = useApp((s) => s.settings.groups) ?? []
+  const known = new Set(groups.map((g) => g.id))
+  const [open, setOpen] = useState<string[]>(() => { const o = saved<unknown>('openGroups', []); return Array.isArray(o) ? o.filter((x) => typeof x === 'string') : [] })
+  useEffect(() => keep('openGroups', open), [open])
+  const [naming, setNaming] = useState<string | null>(null)
+  const [over, setOver] = useState<string | null>(null)
+  const [fctx, setFctx] = useState<{ group: Group; x: number; y: number; from: HTMLElement } | null>(null)
+  const liveGroups = groups.filter((g) => !g.archived)
+  const oldGroups = groups.filter((g) => g.archived)
+  const shelvedIds = new Set(oldGroups.map((g) => g.id))
+  // A room in an archived folder leaves the list with it.
+  const loose = rooms.filter((r) => !r.group || !known.has(r.group))
+  const archivedLoose = archived.filter((r) => !r.group || !shelvedIds.has(r.group))
+  const shelved = archivedLoose.length + oldGroups.length
+  const toggle = (id: string) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))
+  const fileRoom = (room: string, group: string | null) => {
+    desk.call('room:group', room, group)
+    if (group) setOpen((o) => (o.includes(group) ? o : [...o, group]))
+  }
+  // A new folder starts as a row with its name field ready; leaving it empty takes it away again.
+  const newGroup = (room?: string) => {
+    const id = Math.random().toString(36).slice(2, 10)
+    reload.settings({ groups: [...groups, { id, name: '' }] })
+    setOpen((o) => [...o, id])
+    setNaming(id)
+    if (room) desk.call('room:group', room, id)
+  }
+  const nameGroup = (id: string, name: string) => {
+    setNaming(null)
+    const now = appNow().settings.groups ?? []
+    const was = now.find((g) => g.id === id)
+    if (!was) return
+    if (name.trim()) return reload.settings({ groups: now.map((g) => (g.id === id ? { ...g, name: name.trim().slice(0, 60) } : g)) })
+    if (!was.name) removeGroup(id)
+  }
+  const patchGroup = (id: string, patch: Partial<Group>) => reload.settings({ groups: (appNow().settings.groups ?? []).map((g) => (g.id === id ? { ...g, ...patch } : g)) })
+  // Folders keep the order they are put in: dragged onto another folder, or moved a step from the menu.
+  const moveGroup = (id: string, to: string | number) => {
+    const list = [...(appNow().settings.groups ?? [])]
+    const from = list.findIndex((g) => g.id === id)
+    if (from < 0) return
+    const [g] = list.splice(from, 1)
+    const at = typeof to === 'number' ? Math.max(0, Math.min(list.length, from + to)) : list.findIndex((x) => x.id === to)
+    list.splice(at < 0 ? list.length : at, 0, g)
+    reload.settings({ groups: list })
+  }
+  // Rooms in a folder that goes are moved out, never deleted.
+  const removeGroup = (id: string) => {
+    for (const r of all.filter((x) => x.group === id)) desk.call('room:group', r.id, null)
+    reload.settings({ groups: (appNow().settings.groups ?? []).filter((g) => g.id !== id) })
+    setOpen((o) => o.filter((x) => x !== id))
+  }
+  // Rooms are dragged by id onto a folder, or onto the Rooms label to take them out.
+  const dropOn = (group: string | null) => ({
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      const room = e.dataTransfer.types.includes('text/lb-room'), folder = group && e.dataTransfer.types.includes('text/lb-group')
+      if (!room && !folder) return
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOver(folder ? `before:${group}` : group ?? '')
+    },
+    onDragLeave: (e: DragEvent<HTMLElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(null) },
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      setOver(null)
+      const room = e.dataTransfer.getData('text/lb-room'), folder = e.dataTransfer.getData('text/lb-group')
+      if (room) { e.preventDefault(); fileRoom(room, group) }
+      else if (folder && group && folder !== group) { e.preventDefault(); moveGroup(folder, group) }
+    },
+  })
+  // The room on screen is always in view: its folder opens when the room does.
+  const shownGroup = view.name === 'room' ? all.find((r) => r.id === view.id)?.group : undefined
+  useEffect(() => { if (shownGroup && known.has(shownGroup)) setOpen((o) => (o.includes(shownGroup) ? o : [...o, shownGroup])) }, [shownGroup, groups.length])
+  const menuForGroup = (group: Group) => (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    const r = e.currentTarget.getBoundingClientRect()
+    const atPointer = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+    setFctx({ group, x: atPointer ? e.clientX : r.left + 16, y: atPointer ? e.clientY : r.bottom, from: e.currentTarget })
+  }
   const menuFor = (room: RoomSummary) => (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault()
     // The menu key and Shift F10 fire this too, with no pointer to open at.
@@ -330,6 +407,51 @@ export function App() {
   const on = (name: View['name'], id?: string) => view.name === name && (!id || (view.name === 'room' && view.id === id))
   const ready_ = agents.filter((a) => !unavailable(a)).length
   const sel = <i className="sbsel" />
+  // A folder row and, when open, its rooms. An archived folder shows every room filed in it.
+  const folder = (g: Group, shelf = false) => {
+    const list = shelf ? all.filter((r) => r.group === g.id) : rooms.filter((r) => r.group === g.id)
+    const isOpen = open.includes(g.id)
+    const icon = <span className="sbficon">{isOpen ? <IconFolderOpen /> : <IconFolder />}</span>
+    return (
+      <div key={g.id} className={`sbgroup${shelf ? ' archived' : ''}`}>
+        {naming === g.id ? (
+          <div className="sbroom sbfolder naming">
+            {icon}
+            <input className="sbname" autoFocus defaultValue={g.name} placeholder="Folder name" aria-label="Folder name" maxLength={60}
+              onKeyDown={(e) => { if (e.key === 'Enter') nameGroup(g.id, e.currentTarget.value); if (e.key === 'Escape') { e.stopPropagation(); nameGroup(g.id, g.name) } }}
+              onBlur={(e) => nameGroup(g.id, e.currentTarget.value)} />
+          </div>
+        ) : (
+          <button className={`sbroom sbfolder${over === g.id ? ' drop' : ''}${over === `before:${g.id}` ? ' dropbefore' : ''}`} onClick={() => toggle(g.id)} onContextMenu={menuForGroup(g)} aria-expanded={isOpen} title={g.name}
+            draggable={!shelf} onDragStart={(e) => { e.dataTransfer.setData('text/lb-group', g.id); e.dataTransfer.effectAllowed = 'move' }} onDragEnd={() => setOver(null)}
+            {...(shelf ? {} : dropOn(g.id))}>
+            {icon}
+            <span className="grow">{g.name}</span>
+            {/* On the right, so every folder's name starts on the same line. */}
+            {g.pinned && <span className="sbpin" title="Pinned"><IconPin /></span>}
+            {/* Folded, the folder speaks for its rooms: one waiting or working shows here. */}
+            {!isOpen && list.some((r) => r.waiting) ? <i className="waitdot" title="A room here needs you" /> : !isOpen && list.some((r) => r.busy) ? <Loader size={10} /> : <small>{list.length || ''}</small>}
+          </button>
+        )}
+        {isOpen && (
+          <div className="sbgroupbody">
+            {list.map(roomRow)}
+            {!list.length && <div className="sbempty">Drag rooms here</div>}
+          </div>
+        )}
+      </div>
+    )
+  }
+  const roomRow = (r: RoomSummary) => (
+    <button key={r.id} className={`sbroom${on('room', r.id) ? ' on' : ''}`} onClick={() => go({ name: 'room', id: r.id })} onContextMenu={menuFor(r)} title={r.name}
+      draggable onDragStart={(e) => { e.dataTransfer.setData('text/lb-room', r.id); e.dataTransfer.effectAllowed = 'move' }} onDragEnd={() => setOver(null)}>
+      {on('room', r.id) && sel}
+      {r.flow && <span className="sbflow" title="Started by a flow"><IconClock /></span>}
+      {r.pinned && <span className="sbpin" title="Pinned"><IconPin /></span>}
+      <span className="grow">{r.name}</span>
+      {r.waiting ? <i className="waitdot" title="Needs you" /> : r.busy ? <Loader size={10} /> : <small>{ago(r.updated)}</small>}
+    </button>
+  )
 
   return (
     <div className={`app${arriving ? ' arriving' : ''}`}>
@@ -348,20 +470,20 @@ export function App() {
         <button className={`sbitem${on('library') ? ' on' : ''}`} onClick={() => go({ name: 'library' })}>{on('library') && sel}<IconLibrary />Library</button>
         <button className={`sbitem${on('browser') ? ' on' : ''}`} onClick={() => go({ name: 'browser' })}>{on('browser') && sel}<IconBrowser />Browser{web.tabs.some((t) => t.busy) && <i className="livedot" title="An agent is using the browser" />}</button>
         {needs > 0 && <button className={`sbitem needsyou${on('waiting') ? ' on' : ''}`} onClick={() => go({ name: 'waiting' })}>{on('waiting') && sel}<IconInbox />Needs you<small>{needs}</small></button>}
-        <div className="sblabel">Rooms<button className="sbimport" onClick={() => setImporting(true)} title="Import a chat from Claude Code, Codex, Gemini CLI or Grok" aria-label="Import a chat"><IconImport /></button></div>
+        <div className={`sblabel${over === '' ? ' drop' : ''}`} {...dropOn(null)}>
+          <span className="grow">Rooms</span>
+          <button className="sbimport" onClick={() => newGroup()} title="New folder for rooms" aria-label="New folder"><IconFolderPlus /></button>
+          <button className="sbimport" onClick={() => setImporting(true)} title="Import a chat from Claude Code, Codex, Gemini CLI or Grok" aria-label="Import a chat"><IconImport /></button>
+        </div>
         <div className="sbrooms">
-          {rooms.map((r) => (
-            <button key={r.id} className={`sbroom${on('room', r.id) ? ' on' : ''}`} onClick={() => go({ name: 'room', id: r.id })} onContextMenu={menuFor(r)} title={r.name}>
-              {on('room', r.id) && sel}
-              {r.flow && <span className="sbflow" title="Started by a flow"><IconClock /></span>}
-              {r.pinned && <span className="sbpin" title="Pinned"><IconPin /></span>}
-              <span className="grow">{r.name}</span>
-              {r.waiting ? <i className="waitdot" title="Needs you" /> : r.busy ? <Loader size={10} /> : <small>{ago(r.updated)}</small>}
-            </button>
-          ))}
-          {!rooms.length && <div className="sbempty">Rooms you start show up here.</div>}
-          {archived.length > 0 && <button className="sbarchived" onClick={() => setShowArchived(!showArchived)} aria-expanded={showArchived}>{showArchived ? 'Hide archived' : `Archived, ${archived.length}`}</button>}
-          {showArchived && archived.map((r) => (
+          {liveGroups.filter((g) => g.pinned).map((g) => folder(g))}
+          {loose.filter((r) => r.pinned).map(roomRow)}
+          {liveGroups.filter((g) => !g.pinned).map((g) => folder(g))}
+          {loose.filter((r) => !r.pinned).map(roomRow)}
+          {!rooms.length && !liveGroups.length && <div className="sbempty">Rooms you start show up here.</div>}
+          {shelved > 0 && <button className="sbarchived" onClick={() => setShowArchived(!showArchived)} aria-expanded={showArchived}>{showArchived ? 'Hide archived' : `Archived, ${shelved}`}</button>}
+          {showArchived && oldGroups.map((g) => folder(g, true))}
+          {showArchived && archivedLoose.map((r) => (
             <button key={r.id} className={`sbroom archived${on('room', r.id) ? ' on' : ''}`} onClick={() => go({ name: 'room', id: r.id })} onContextMenu={menuFor(r)} title={r.name}>
               {on('room', r.id) && sel}
               <span className="grow">{r.name}</span><small>{ago(r.updated)}</small>
@@ -383,7 +505,7 @@ export function App() {
             also a drag region swallows the wheel on macOS. */}
         {!['room', 'browser', 'new'].includes(view.name) && <div className="sheetdrag" aria-hidden="true" />}
         {view.name === 'room' && <RoomView key={view.id} id={view.id} focus={view.focus} access={access} setAccess={setAccess} open={(id) => go({ name: 'room', id })} say={say} />}
-        {view.name === 'new' && <NewRoom key={view.skill?.id ?? (view.pack ? `${view.pack}:${view.crew?.join(',') ?? ''}` : undefined) ?? (view.send ? 'send' : 'new')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} suggested={view.crew} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
+        {view.name === 'new' && <NewRoom key={(view.skill?.id ?? (view.pack ? `${view.pack}:${view.crew?.join(',') ?? ''}` : undefined) ?? (view.send ? 'send' : 'new')) + (view.group ?? '')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} suggested={view.crew} group={view.group} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
         {view.name === 'agents' && <Agents say={say} />}
         {view.name === 'free' && <FreeModels go={go} say={say} />}
         {view.name === 'flows' && <Flows key={view.edit ?? view.template ?? 'list'} edit={view.edit} template={view.template} go={go} say={say} workspace={workspace || env.cwd} />}
@@ -398,7 +520,12 @@ export function App() {
       </main>
 
       <Notices />
-      {ctx && <RoomContext key={ctx.room.id + ctx.x + ctx.y} {...ctx} close={() => setCtx(null)} say={say} />}
+      {ctx && <RoomContext key={ctx.room.id + ctx.x + ctx.y} {...ctx} close={() => setCtx(null)} say={say} groups={liveGroups} file={fileRoom} newGroup={newGroup} />}
+      {fctx && <FolderContext key={fctx.group.id + fctx.x + fctx.y} {...fctx} close={() => setFctx(null)}
+        newRoom={() => go({ name: 'new', group: fctx.group.id })} rename={() => setNaming(fctx.group.id)} remove={() => removeGroup(fctx.group.id)}
+        pin={() => patchGroup(fctx.group.id, { pinned: !fctx.group.pinned || undefined })}
+        archive={() => { patchGroup(fctx.group.id, { archived: !fctx.group.archived || undefined, pinned: undefined }); say(fctx.group.archived ? 'Back in your rooms' : 'Archived with its rooms. Find it under Archived in the sidebar.') }}
+        move={(step) => moveGroup(fctx.group.id, step)} first={groups[0]?.id === fctx.group.id} last={groups.at(-1)?.id === fctx.group.id} />}
       {importing && <ImportSheet close={() => setImporting(false)} open={(id) => go({ name: 'room', id })} say={say} />}
       {report && <ReportSheet open={report} close={() => setReport(null)} say={say} />}
       {palette && <Palette commands={commands} close={() => openPalette(false)} openHit={openHit} anchor={searchButton} />}
@@ -414,7 +541,56 @@ export function App() {
 
 // Right click on a room in the sidebar, for the few things people look for there. Delete asks twice,
 // the same way the room's own menu does.
-function RoomContext({ room, x, y, from, close, say }: { room: RoomSummary; x: number; y: number; from: HTMLElement; close: () => void; say: (t: string) => void }) {
+// Right click on a folder: a room started in it, its name, and taking it away. Its rooms stay.
+function FolderContext({ group, x, y, from, close, newRoom, rename, remove, pin, archive, move, first, last }: { group: Group; x: number; y: number; from: HTMLElement; close: () => void; newRoom: () => void; rename: () => void; remove: () => void; pin: () => void; archive: () => void; move: (step: number) => void; first: boolean; last: boolean }) {
+  const box = useRef<HTMLDivElement>(null)
+  const done = (refocus: boolean) => { if (refocus) from.focus(); close() }
+  useLayoutEffect(() => {
+    const el = box.current!
+    const r = el.getBoundingClientRect()
+    el.style.left = `${x + shift(x, r.width, 8, innerWidth - 8)}px`
+    el.style.top = `${y + shift(y, r.height, 8, innerHeight - 8)}px`
+    el.querySelector('button')?.focus()
+  }, [])
+  useEffect(() => {
+    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) done(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(true) } }
+    addEventListener('pointerdown', away)
+    addEventListener('keydown', esc, true)
+    return () => { removeEventListener('pointerdown', away); removeEventListener('keydown', esc, true) }
+  }, [])
+  return (
+    <div ref={box} className="menu ctx" role="menu" aria-label={group.name} style={{ left: x, top: y }}
+      onKeyDown={(e) => rove(e, box.current)}
+      onBlur={(e) => { if (e.relatedTarget && !box.current?.contains(e.relatedTarget as Node)) done(false) }}>
+      {!group.archived && (
+        <button className="item" onClick={() => { newRoom(); done(false) }}>
+          <span className="grow"><b>New room in this folder</b><span>It starts here, filed in {group.name}</span></span>
+        </button>
+      )}
+      <button className="item" onClick={() => { rename(); done(false) }}>
+        <span className="grow"><b>Rename</b></span>
+      </button>
+      {!group.archived && (
+        <button className="item" onClick={() => { pin(); done(true) }}>
+          <span className="grow"><b>{group.pinned ? 'Unpin' : 'Pin to top'}</b>{!group.pinned && <span>Above your other rooms and folders</span>}</span>
+        </button>
+      )}
+      {/* Dragging a folder onto another moves it there; these are the same for the keyboard. */}
+      {!group.archived && !first && <button className="item" onClick={() => { move(-1); done(true) }}><span className="grow"><b>Move up</b></span></button>}
+      {!group.archived && !last && <button className="item" onClick={() => { move(1); done(true) }}><span className="grow"><b>Move down</b></span></button>}
+      <div className="sep" />
+      <button className="item" onClick={() => { archive(); done(false) }}>
+        <span className="grow"><b>{group.archived ? 'Unarchive' : 'Archive'}</b><span>{group.archived ? 'Back in your rooms, with its rooms' : 'Out of the list with its rooms, nothing deleted'}</span></span>
+      </button>
+      <Sure className="item danger" act={() => { remove(); done(false) }}>
+        {(sure) => <span className="grow"><b>{sure ? 'Click again to remove' : 'Remove folder'}</b><span>Its rooms move out, nothing is deleted</span></span>}
+      </Sure>
+    </div>
+  )
+}
+
+function RoomContext({ room, x, y, from, close, say, groups, file, newGroup }: { room: RoomSummary; x: number; y: number; from: HTMLElement; close: () => void; say: (t: string) => void; groups: Group[]; file: (room: string, group: string | null) => void; newGroup: (room?: string) => void }) {
   const box = useRef<HTMLDivElement>(null)
   const done = (refocus: boolean) => { if (refocus) from.focus(); close() }
   useLayoutEffect(() => {
@@ -444,6 +620,22 @@ function RoomContext({ room, x, y, from, close, say }: { room: RoomSummary; x: n
       onBlur={(e) => { if (e.relatedTarget && !box.current?.contains(e.relatedTarget as Node)) done(false) }}>
       <button className="item" onClick={() => { desk.call('window:new', room.id); done(false) }}>
         <span className="grow"><b>Open in new window</b><span>Beside this one, and the two stay in step</span></span>
+      </button>
+      <div className="sep" />
+      {/* Filing: every folder by name, the one it is in marked, and a new one made around it. */}
+      {groups.filter((g) => g.name).map((g) => (
+        <button key={g.id} role="menuitemradio" aria-checked={room.group === g.id} className={`item fileto${room.group === g.id ? ' on' : ''}`} onClick={() => { if (room.group !== g.id) file(room.id, g.id); done(true) }}>
+          {room.group === g.id ? <IconFolderOpen /> : <IconFolder />}
+          <span className="grow"><b>{g.name}</b></span>
+        </button>
+      ))}
+      {room.group && groups.some((g) => g.id === room.group) && (
+        <button className="item fileto" onClick={() => { file(room.id, null); done(true) }}>
+          <IconFolder /><span className="grow"><b>Out of folder</b></span>
+        </button>
+      )}
+      <button className="item fileto" onClick={() => { newGroup(room.id); done(false) }}>
+        <IconFolderPlus /><span className="grow"><b>New folder with this room</b></span>
       </button>
       <div className="sep" />
       <button className="item" onClick={archive}>

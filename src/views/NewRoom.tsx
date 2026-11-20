@@ -3,7 +3,7 @@ import { PLAYBOOKS } from '../../shared/skills'
 import type { Skill } from '../../shared/types'
 import { Band } from '../ui/Band'
 import { Loader, Mark } from '../ui/bits'
-import { IconFolder, IconFolderPlus } from '../ui/icons'
+import { IconClose, IconFolder, IconFolderOpen, IconFolderPlus } from '../ui/icons'
 import { Menu } from '../ui/Access'
 import { agentOf, ago, desk, machine, short, unavailable, upcoming, useApp, type Access, reason } from '../lib/desk'
 import type { View } from '../App'
@@ -59,10 +59,15 @@ function defaultCrew(ids: string[], preferred: string[]) {
 
 const skillText = (s: Skill) => `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}`
 
-export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send, suggested }: {
+export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send, suggested, group: startGroup }: {
   say: (t: string) => void
-  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean; suggested?: string[]
+  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean; suggested?: string[]; group?: string
 }) {
+  // Started from a sidebar folder: the room is filed there unless that is taken off here.
+  const groups = useApp((s) => s.settings.groups) ?? []
+  const [group, setGroup] = useState(startGroup)
+  const filed = groups.find((g) => g.id === group && g.name)
+
   const agents = useApp((s) => s.agents)
   const packs = useApp((s) => s.packs)
   const skills = useApp((s) => s.skills)
@@ -101,7 +106,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
     // If the room can't be made, the person keeps what they wrote and hears why.
     try {
       // A room made by an earlier try whose message failed is used again, not left empty beside a new one.
-      const meta = made.current ?? await desk.call('room:create', { crew, workspace, pack, about: text, studio, repo })
+      const meta = made.current ?? await desk.call('room:create', { crew, workspace, pack, about: text, studio, repo, group: filed?.id })
       if (!meta) throw new Error('The room could not be created. Check that the folder can be written to.')
       made.current = meta
       if (workspace) remember(workspace)
@@ -145,6 +150,11 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
           )}
         </div>
         <div className="newmeta rise" style={{ '--i': 3 } as CSSProperties}>
+          {filed && (
+            <button className="pill filedin" onClick={() => setGroup(undefined)} title="Started from this folder in the sidebar. Click to file the room nowhere.">
+              <IconFolderOpen /><span>Filed in {filed.name}</span><IconClose />
+            </button>
+          )}
           <Menu label="Where the room works" className="foldermenu" button={<><IconFolder />{workspace ? <span className="mono">{short(workspace)}</span> : 'New folder for this room'}</>}>
             {(close) => (
               <>

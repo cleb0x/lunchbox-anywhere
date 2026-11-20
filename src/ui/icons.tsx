@@ -6,6 +6,8 @@ export const IconX = () => <svg {...P} strokeWidth={1.4}><path d="M3.5 3h3l6 10h
 export const IconGlobe = () => <svg {...P}><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c1.6 1.6 2.4 3.4 2.4 5.5S9.6 11.9 8 13.5M8 2.5C6.4 4.1 5.6 5.9 5.6 8s.8 3.9 2.4 5.5" /></svg>
 export const IconSearch = () => <svg {...P}><circle cx="7" cy="7" r="4.25" /><path d="M10.2 10.2 13 13" /></svg>
 export const IconFolderPlus = () => <svg {...P}><path d="M2.5 4.5h4l1.2 1.3h5.8v6.7h-11z" /><path d="M8 7.6v3.2M6.4 9.2h3.2" /></svg>
+// The same folder with its front lowered, for one that is open in the sidebar.
+export const IconFolderOpen = () => <svg {...P}><path d="M2.5 12.5V4.5h4l1.2 1.3h5.8v1.7" /><path d="M2.5 12.5l1.6-5h10.4l-1.6 5z" /></svg>
 export const IconFolder = () => <svg {...P}><path d="M2.5 4.5h4l1.2 1.3h5.8v6.7h-11z" /></svg>
 export const IconPanel = () => <svg {...P}><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M10 3v10" /></svg>
 export const IconUp = () => <svg {...P} strokeWidth={1.5}><path d="M8 13V3.5M4 7.5l4-4 4 4" /></svg>

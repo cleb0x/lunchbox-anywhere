@@ -21,6 +21,10 @@
 [data-look=neyra] .sbitem.on,[data-look=neyra] .sbroom.on{font-weight:500}
 [data-look=neyra] .sbroom{padding:0 8px 0 24px}
 [data-look=neyra] .sbroom.on{background:none}
+[data-look=neyra] .sbfolder{padding-left:5px;gap:5px}
+[data-look=neyra] .sbgroupbody::before{left:12px}
+[data-look=neyra] .sbgroupbody .sbroom,[data-look=neyra] .sbgroupbody .sbempty{padding-left:40px}
+[data-look=neyra] .sbgroupbody .sbroom.on::before{left:26px}
 [data-look=neyra] .sbroom.on::before{content:"";position:absolute;left:10px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:1.2px;background:var(--ink)}
 [data-look=neyra] .sblabel{padding:18px 8px 4px 8px;font:11.5px var(--sans);color:var(--faint)}
 [data-look=neyra] .sbversion{padding:10px 8px 0;font-size:11.5px;color:var(--faint)}

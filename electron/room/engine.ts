@@ -210,7 +210,7 @@ export class Engine {
   summaries(): RoomSummary[] {
     return this.store.list().map((m) => {
       const l = this.live(m.id)
-      return { id: m.id, name: m.name, created: m.created, updated: m.updated, crew: m.crew, workspace: m.workspace, pack: m.pack, flow: m.flow, pinned: m.pinned, archived: m.archived, busy: l.turns.length + l.runs.length > 0, waiting: this.waiting(m.id) }
+      return { id: m.id, name: m.name, created: m.created, updated: m.updated, crew: m.crew, workspace: m.workspace, pack: m.pack, flow: m.flow, pinned: m.pinned, archived: m.archived, group: m.group, busy: l.turns.length + l.runs.length > 0, waiting: this.waiting(m.id) }
     })
   }
 
@@ -327,9 +327,9 @@ export class Engine {
     return this.queues.get(room) ?? Promise.resolve()
   }
 
-  create(opts: { crew: string[]; workspace: string; pack?: string; name?: string; flow?: string; studio?: boolean; repo?: string }): RoomMeta {
+  create(opts: { crew: string[]; workspace: string; pack?: string; name?: string; flow?: string; studio?: boolean; repo?: string; group?: string }): RoomMeta {
     const meta: RoomMeta = {
-      id: uid(), name: opts.name || 'New room', created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace, pack: opts.pack, flow: opts.flow, studio: opts.studio || undefined, repo: isRepo(opts.repo) ? opts.repo : undefined, design: opts.studio ? designFiles(opts.workspace) : undefined,
+      id: uid(), name: opts.name || 'New room', created: Date.now(), updated: Date.now(), crew: opts.crew, workspace: opts.workspace, pack: opts.pack, flow: opts.flow, studio: opts.studio || undefined, repo: isRepo(opts.repo) ? opts.repo : undefined, group: opts.group || undefined, design: opts.studio ? designFiles(opts.workspace) : undefined,
       sessions: {}, seen: {}, heard: {}, blocks: [], saved: { full: 0, sent: 0 },
     }
     if (opts.studio) Object.assign(meta, this.inspire(meta.id))
@@ -383,6 +383,14 @@ export class Engine {
     if (this.store.room(room)?.repo === next) return
     this.store.update(room, (m) => { m.repo = next })
     this.hooks.emit('room:meta', this.store.room(room))
+  }
+
+  // The sidebar folder a room is filed in; null takes it out.
+  setGroup(room: string, group: string | null) {
+    const next = typeof group === 'string' && group ? group : undefined
+    if (!this.store.room(room) || this.store.room(room)?.group === next) return
+    this.store.update(room, (m) => { m.group = next })
+    this.list()
   }
 
   mark(room: string, patch: { pinned?: boolean; archived?: boolean }) {

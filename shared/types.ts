@@ -117,6 +117,8 @@ export type RoomMeta = {
   studio?: boolean
   // A GitHub repository the room reads and changes, as owner/name.
   repo?: string
+  // The sidebar folder the room is filed in, by its id in Settings.groups.
+  group?: string
   // The project's own design files, found once when Studio is switched on, so the instructions stay
   // the same turn to turn and files an agent creates later are never taken for the person's taste.
   design?: string[]
@@ -149,7 +151,7 @@ export type RoomMeta = {
 // The folder as it was just before a message was handled, kept in a shadow git repository.
 export type Checkpoint = { ref: string; event: string; at: number; files?: number }
 
-export type RoomSummary = Pick<RoomMeta, 'id' | 'name' | 'created' | 'updated' | 'crew' | 'workspace' | 'pack' | 'flow' | 'pinned' | 'archived'> & { busy: boolean; waiting: boolean }
+export type RoomSummary = Pick<RoomMeta, 'id' | 'name' | 'created' | 'updated' | 'crew' | 'workspace' | 'pack' | 'flow' | 'pinned' | 'archived' | 'group'> & { busy: boolean; waiting: boolean }
 
 // Everything across the rooms that is waiting for a person: decisions and commands to approve.
 export type Waiting = { room: string; name: string; items: ({ kind: 'decide'; ref: string; text: string; options: string[] } | { kind: 'run'; id: string; command: string; reason: string })[] }
@@ -249,6 +251,9 @@ export type Skill = {
 // Limits that stop an agent part way. Each is off unless the person sets a number.
 export type Limits = { toolCalls?: number; handoffs?: number; failures?: number; minutes?: number }
 
+// A sidebar folder of rooms. Pinned ones lead the list; archived ones wait under Archived with their rooms.
+export type Group = { id: string; name: string; pinned?: boolean; archived?: boolean }
+
 export type Settings = {
   limits?: Limits
   // Local models are freed from memory as soon as they answer.
@@ -264,6 +269,8 @@ export type Settings = {
   tools?: Record<string, { on: boolean; input?: string }>
   // GitHub repositories added to the repo picker, as owner/name, most recently added first.
   repos?: string[]
+  // Folders in the sidebar that rooms are filed in, in the order they were made.
+  groups?: Group[]
   browser?: boolean
   remote?: { on: boolean; chat?: number; name?: string; access?: Access }
   planLimits?: boolean
