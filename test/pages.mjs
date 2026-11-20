@@ -111,7 +111,7 @@ await visit('Agents', '08b-agents', async () => {
   await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 99999))
   await shot('08c-agents-local', 600)
   await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 0))
-  await page.click('.agenthead:has-text("Gemini CLI")')
+  await page.click('.agenthead:has-text("Antigravity")')
   await shot('08d-agent-install', 500)
 })
 await visit('Settings', '09-settings')
