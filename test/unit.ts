@@ -1667,6 +1667,38 @@ test('rich: tables, rules and emphasis are read as what they are', async () => {
   assert.equal(blocks('###### Deep')[0].t, 'h')
 })
 
+test('theme colour: what a theme reaches keeps its contrast, and waiting and failure stay apart', async () => {
+  const { THEMES, tokens, withTune } = await import('../src/lib/themes')
+  const { contrast, grounds, oklch } = await import('../src/lib/custom')
+  const apart = (a: string, b: string) => Math.abs(((oklch(a).h - oklch(b).h + 540) % 360) - 180)
+  assert.deepEqual(tokens(THEMES[0], 'dark', 'rich'), {})
+  for (const t of THEMES.slice(1)) for (const mode of ['dark', 'light'] as const) {
+    const at = `${t.id} ${mode}`
+    const quiet = tokens(t, mode, 'quiet')
+    assert.equal(quiet['--focus'], undefined, at)
+    assert.deepEqual(quiet, tokens(t, mode), at)
+    const { sheet } = grounds(t.hue, t.chroma, mode)
+    for (const reach of ['balanced', 'rich'] as const) {
+      const k = tokens(t, mode, reach)
+      assert.ok(contrast(k['--focus'], sheet) >= 3, `${at} ${reach} focus`)
+      assert.ok(contrast(k['--link'], sheet) >= 4.5, `${at} ${reach} link`)
+      assert.ok(contrast(k['--on-lit'], k['--lit']) >= 3, `${at} ${reach} switch`)
+      if (!t[mode].warn) assert.ok(contrast(k['--warn'], sheet) >= 4.5, `${at} ${reach} waiting`)
+      if (!t[mode].bad) assert.ok(contrast(k['--bad'], sheet) >= 4.5, `${at} ${reach} failure`)
+      assert.ok(apart(k['--warn'], k['--bad']) >= 26, `${at} ${reach} waiting beside failure`)
+      // Plan, Ask and Auto are never drawn in a colour that could be taken for Full access.
+      if (k['--mode-auto']) assert.ok(apart(k['--mode-auto'], k['--bad']) >= 40, `${at} ${reach} modes`)
+    }
+    const rich = tokens(t, mode, 'rich')
+    assert.ok(contrast(rich['--on-btn'], rich['--btn']) >= 4.5, `${at} button`)
+    assert.equal(tokens(t, mode, 'balanced')['--btn'], undefined, at)
+  }
+  // A colour changed by hand carries into what follows from it.
+  const lagoon = THEMES.find((t) => t.id === 'lagoon')!
+  assert.equal(tokens(withTune(lagoon, 'dark', { '--accent': '#ff66cc' }), 'dark', 'balanced')['--focus'], '#ff66cc')
+  assert.equal(tokens(withTune(lagoon, 'dark', { '--bad': '#ff0000' }), 'dark', 'balanced')['--bad'], '#ff0000')
+})
+
 test('tweaks: each theme keeps its own, and the old global ones go to the theme that was on', async () => {
   const { loadTweaks, withTweak } = await import('../src/lib/tweaks')
   const jar = (start: Record<string, unknown>) => {

@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { ThemeCards } from '../ui/ThemeCards'
-import { ASCII, THEMES, themeOf, type AsciiId, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { ASCII, REACH, THEMES, themeOf, type AsciiId, type Mode, type Reach, type Theme, type ThemeId } from '../lib/themes'
 import { draftOf, type Draft } from '../lib/custom'
 import { ThemeEditor } from '../ui/ThemeEditor'
 import { TuneSheet } from '../ui/TuneSheet'
@@ -80,9 +80,9 @@ function Phone({ say }: { say: (t: string) => void }) {
 const EFFORT = ['claude', 'codex']
 const LEVELS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
 
-export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
+export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, reach, setReach, look, setLook, restart, say }: {
   edit?: string; theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
-  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
+  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; reach: Reach; setReach: (r: Reach, e?: MouseEvent) => void; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
   const agents = useApp((s) => s.agents)
@@ -149,6 +149,10 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
               <button className="btn small quiet" onClick={themeWithAgent}><IconPalette />Make one with an agent</button>
             </div>
             {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
+          </div>
+          <div className="setting">
+            <div className="grow"><b>Theme colour</b><span>{theme === 'lunchbox' ? 'How far a theme carries its colour. Lunchbox is ink alone, so this shows on the other themes.' : `How far ${themeName} carries its colour. ${REACH.find((r) => r.id === reach)!.line}`}</span></div>
+            <div className="seg" role="radiogroup" aria-label="Theme colour">{REACH.map((r) => <button key={r.id} role="radio" aria-checked={r.id === reach} className={r.id === reach ? 'on' : ''} onClick={(e) => setReach(r.id, e)} title={r.line}>{r.name}</button>)}</div>
           </div>
           <div className="setting">
             <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand on ${themeName}. Other themes keep their own.` : `Change single colours of ${themeName}, like the text or the sheet. Other themes keep their own.`}</span></div>

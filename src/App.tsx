@@ -23,7 +23,7 @@ import { Library } from './views/Library'
 import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
 import { ImportSheet } from './views/Import'
-import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
+import { THEMES, asciiOf, reachOf, themeOf, tokens, withTune, type AsciiId, type Mode, type Reach, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
 import { codeColours, wellOf } from './lib/codecolors'
 import { NO_TUNE, tuned, type Tune } from './lib/tune'
@@ -84,6 +84,7 @@ export function App() {
   const [custom, setCustom] = useState<Theme[]>(loadCustom)
   const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox'), custom).id)
   const [preview, setPreview] = useState<Theme | null>(null)
+  const [reach, setReachState] = useState<Reach>(() => reachOf(saved('reach', 'balanced')))
   // The ASCII colour and the single colours changed by hand belong to the theme they were set on.
   const [tweaks, setTweaks] = useState(loadTweaks)
   const ascii: AsciiId = tweaks[theme]?.ascii ?? 'theme'
@@ -160,7 +161,7 @@ export function App() {
     const t = preview ?? themeOf(theme, custom)
     // A theme still being made is shown as itself.
     const a = asciiOf(preview ? 'theme' : ascii)
-    const set: Record<string, string> = tokens(t, mode)
+    const set: Record<string, string> = tokens(preview ? t : withTune(t, mode, tune[mode]), mode, reach)
     const own = a.id === 'theme' || a.id === 'ink' ? null : a[mode]!
     own?.forEach((c, i) => { set[`--glyph-${i + 1}`] = c })
     // The tune goes last, so a colour picked by hand wins over the theme's.
@@ -178,10 +179,12 @@ export function App() {
     if (own || (a.id === 'theme' && t.id !== 'lunchbox')) root.dataset.glyphs = ''
     else delete root.dataset.glyphs
     root.dataset.ascii = a.id
+    root.dataset.reach = reach
+    keep('reach', reach)
     keep('theme', mode)
     if (!preview) keep('palette', t.id)
     desk.call('theme', mode === 'dark')
-  }, [theme, mode, ascii, custom, preview, tweaks])
+  }, [theme, mode, ascii, custom, preview, tweaks, reach])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
   // Every window shares one saved appearance, so a change made in one is put on in the others.
   useEffect(() => {
@@ -194,6 +197,7 @@ export function App() {
         setThemeState(themeOf(saved('palette', 'lunchbox'), list).id)
       }
       if (key === 'tweaks') setTweaks(loadTweaks())
+      if (key === 'reach') setReachState(reachOf(saved('reach', 'balanced')))
       if (key === 'look') setLookState(saved<string>('look', 'lunchbox') === 'neyra' ? 'neyra' : 'lunchbox')
       if (key === 'ready') setReady(saved<unknown>('ready', false) === true)
     }
@@ -239,6 +243,7 @@ export function App() {
   const themeWithAgent = () => go({ name: 'new', text: themeBrief(themeOf(theme, custom)), send: true })
   const setMode = (m: Mode, e?: MouseEvent) => { if (m !== mode) reveal(() => setModeState(m), e && { x: e.clientX, y: e.clientY }) }
   const setLook = (l: Look) => flow(() => setLookState(l))
+  const setReach = (r: Reach, e?: MouseEvent) => { if (r !== reach) reveal(() => setReachState(r), e && { x: e.clientX, y: e.clientY }) }
   const setAccess = (a: Access) => { setAccessState(a); keep('access', a) }
   const setWorkspace = (w: string) => { setWorkspaceState(w); keep('workspace', w) }
   const say = useCallback((text: string) => setToast({ text, id: Date.now() }), [])
@@ -382,7 +387,7 @@ export function App() {
         {view.name === 'savings' && <Savings go={go} />}
         {view.name === 'library' && <Library go={go} say={say} />}
         {view.name === 'browser' && <Browser say={say} covered={palette} />}
-        {view.name === 'settings' && <Settings edit={view.edit} theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} tune={tune} setTune={setTune} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
+        {view.name === 'settings' && <Settings edit={view.edit} theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} tune={tune} setTune={setTune} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} reach={reach} setReach={setReach} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
         </Guard>
       </main>
 

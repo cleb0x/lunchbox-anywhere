@@ -7,13 +7,16 @@
 // - day and night are tuned separately, not inverted: a colour that is a soft block at night is
 //   often the deep one by day.
 
+import { contrast, grounds, hexOf, lift, oklch, on } from './custom'
+
 // The built in themes by name; a theme a person makes has an id of its own.
 export type ThemeId = string
 export type Mode = 'dark' | 'light'
 type Ramp = [string, string, string, string]
 // A theme made by hand or by an agent may also set its own text, sheet, frame and message box,
-// which then replace the neutrals for that mode.
-type Tone = { block: string; onBlock: string; accent: string; onAccent: string; glyphs: Ramp; warn?: string; bad?: string; text?: string; sheet?: string; frame?: string; box?: string }
+// which then replace the neutrals for that mode. pinned says waiting and failure were picked by
+// hand, so no reach recolours them.
+type Tone = { block: string; onBlock: string; accent: string; onAccent: string; glyphs: Ramp; warn?: string; bad?: string; text?: string; sheet?: string; frame?: string; box?: string; pinned?: boolean }
 export type Theme = { id: ThemeId; name: string; note: string; hue: number; chroma: number; dark: Tone; light: Tone; custom?: boolean }
 
 export const THEMES: Theme[] = [
@@ -62,10 +65,122 @@ export function surfacesOf(t: Theme, mode: Mode) {
   return { ground: tone.frame ?? s.ground, sheet: tone.sheet ?? s.sheet, well: tone.box ?? s.well, ink: tone.text ?? s.ink }
 }
 
+// How far a theme's colour reaches past the send button, the selected row and the ASCII. Quiet is
+// those three. Balanced adds what shows state: focus, switches, links, progress, the mode icons,
+// and waiting, failure and Full access in colours that belong to the theme. Rich adds the main buttons, the lines and
+// hover, on surfaces that hold more of the theme's hue.
+export type Reach = 'quiet' | 'balanced' | 'rich'
+export const REACH: { id: Reach; name: string; line: string }[] = [
+  { id: 'quiet', name: 'Quiet', line: 'Colour on send, the selected row and the ASCII.' },
+  { id: 'balanced', name: 'Balanced', line: 'Also on focus, switches, links, progress and the mode icons.' },
+  { id: 'rich', name: 'Rich', line: 'Also on buttons, lines and hover, over deeper surfaces.' },
+]
+export const reachOf = (v: unknown): Reach => REACH.find((r) => r.id === v)?.id ?? 'balanced'
+
+const HEX = /^#[0-9a-f]{6}$/i
+const hexOr = (v: string | undefined, fallback: string) => (v && HEX.test(v) ? v : fallback)
+const apart = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180)
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+const loud = (hex: string) => oklch(hex).c > 0.07
+
+// The surfaces as hex, for working out contrast.
+function solid(t: Theme, mode: Mode) {
+  const g = grounds(t.hue, t.chroma, mode), tone = t[mode]
+  const well = mode === 'dark' ? hexOf(0.22, t.chroma, t.hue) : hexOf(0.96, t.chroma * 0.6, t.hue)
+  return { sheet: hexOr(tone.sheet, g.sheet), ground: hexOr(tone.frame, g.ground), well: hexOr(tone.box, well) }
+}
+
+// What asks to be noticed is coloured from the theme's own family, so on a blue theme it is a
+// blue: the notice comes from being brighter and fuller than what is around it, and from its
+// shape and its motion, never from a hue that fights the rest.
+const cool = (h: number) => h > 100 && h < 300
+const far = (h: number, from: string[]) => from.every((c) => !loud(c) || apart(oklch(c).h, h) >= 26)
+const bright = (l: number, c: number, h: number, bg: string, mode: Mode) => lift(hexOf(mode === 'dark' ? clamp(l, 0.74, 0.86) : clamp(l, 0.42, 0.58), c, (h + 360) % 360), bg, 4.5, mode)
+
+// Waiting for you: the brightest note the theme's palette has that is not the accent, such as
+// Meadow's butter or Cobalt's sky. A palette of one hue gets the neighbour of its lead colour.
+function waiting(t: Theme, mode: Mode, bg: string, lead: string, avoid: string[]) {
+  const tone = t[mode], g = tone.glyphs
+  const own = (mode === 'dark' ? [g[3], g[2], tone.block, g[1]] : [g[2], g[1], tone.block, g[3]]).map((c) => oklch(c)).find((c) => c.c >= 0.05 && far(c.h, avoid))
+  if (own) return bright(own.l, Math.max(own.c, mode === 'dark' ? 0.12 : 0.16), own.h, bg, mode)
+  const a = oklch(lead)
+  const h = [a.h - 40, a.h + 40].find((x) => far((x + 360) % 360, avoid)) ?? a.h - 40
+  return bright(0.86, mode === 'dark' ? 0.12 : 0.16, h, bg, mode)
+}
+
+// Full access: a step round from the theme's hue towards red, by way of violet on a cool theme
+// so it never lands on green, and fuller than anything near it. A warm theme is already beside
+// red, so there it is the theme's failure colour, as it is in Quiet.
+function risk(t: Theme, mode: Mode, bg: string, bad: string, avoid: string[]) {
+  if (!cool(t.hue)) return bad
+  const h = [t.hue + 50, t.hue + 70, t.hue + 30].find((x) => far(x % 360, avoid)) ?? t.hue + 50
+  return bright(mode === 'dark' ? 0.74 : 0.5, 0.19, h, bg, mode)
+}
+
+// Failure stays a red, since it has to be read as one, turned to the end of red that sits with
+// the theme: rose beside blues and greens, a deeper or an orange red beside warm palettes. It
+// keeps clear of the accent, so a coral accent is never taken for it.
+const SIGNAL = { dark: '#f2542d', light: '#d43a16' }
+function failure(t: Theme, mode: Mode, bg: string, avoid: string[]) {
+  const base = oklch(SIGNAL[mode])
+  const lo = 4, hi = 42
+  let h = cool(t.hue) ? 10 : clamp(base.h + clamp(((t.hue - base.h + 540) % 360) - 180, -25, 25), lo, hi)
+  if (!far(h, avoid)) h = [lo, hi].sort((x, y) => Math.min(...avoid.filter(loud).map((c) => apart(oklch(c).h, y))) - Math.min(...avoid.filter(loud).map((c) => apart(oklch(c).h, x))))[0]
+  return lift(hexOf(base.l, base.c, h), bg, 4.5, mode)
+}
+
+// A colour to put words on: moved further from the page until its own text reads on it.
+function filled(color: string, mode: Mode) {
+  let { l } = oklch(color)
+  const { c, h } = oklch(color)
+  let out = color
+  for (let i = 0; i < 24 && contrast(on(out), out) < 4.5; i++) {
+    l = mode === 'dark' ? Math.min(0.97, l + 0.02) : Math.max(0.15, l - 0.02)
+    out = hexOf(l, c, h)
+  }
+  return out
+}
+
+// The colours behind each reach. Every one is held to the contrast its job needs: 3 to 1 for a
+// ring, a dot or an icon, 4.5 to 1 for text.
+function reaching(t: Theme, mode: Mode, reach: Reach): Record<string, string> {
+  if (reach === 'quiet') return {}
+  const tone = t[mode], s = solid(t, mode)
+  // A pale accent, a yellow by day, cannot draw a ring on paper; the block colour can.
+  const strong = contrast(tone.accent, s.sheet) >= 2 || !loud(tone.block) || contrast(tone.block, s.sheet) < 2 ? tone.accent : tone.block
+  const focus = lift(lift(strong, s.sheet, 3, mode), s.ground, 3, mode)
+  // A built in cool theme's own failure and waiting colours are its Quiet ones; here they join
+  // the family. What a person picked, in a theme of their own or by hand, is left alone.
+  const kept = t.custom || tone.pinned || !cool(t.hue)
+  const bad = kept && tone.bad ? tone.bad : failure(t, mode, s.sheet, [tone.accent])
+  const full = kept && tone.bad ? bad : risk(t, mode, s.well, bad, [strong, tone.accent])
+  const warn = kept && tone.warn ? tone.warn : waiting(t, mode, s.sheet, strong, [strong, tone.accent, bad, full])
+  // The modes other than Full access take a colour that cannot be read as failure or waiting.
+  const safe = (c: string) => loud(c) && apart(oklch(c).h, oklch(bad).h) >= 40 && far(oklch(c).h, [warn, full])
+  const calm = [strong, tone.accent, tone.block, tone.glyphs[1]].find(safe)
+  const auto = calm && lift(calm, s.well, 3, mode)
+  const set: Record<string, string> = {
+    '--focus': focus, '--live': focus, '--lit': focus, '--on-lit': on(focus),
+    '--link': lift(focus, s.sheet, 4.5, mode),
+    '--thumb': `color-mix(in oklab, ${focus} 30%, var(--cell))`,
+    '--edge': `color-mix(in oklab, ${focus} ${reach === 'rich' ? 34 : 20}%, var(--line))`,
+    '--warn': warn, '--bad': bad, '--full': full,
+    '--sel': reach === 'rich' ? '24%' : '20%', '--sel-edge': reach === 'rich' ? '38%' : '32%',
+    ...(auto ? { '--mode-auto': auto, '--mode-ask': `color-mix(in oklab, ${auto} 72%, var(--dim))`, '--mode-plan': `color-mix(in oklab, ${auto} 44%, var(--dim))` } : {}),
+  }
+  if (reach === 'rich') {
+    const line = (n: number) => `color-mix(in oklab, color-mix(in oklab, ${focus} 45%, var(--ink)) ${n}%, transparent)`
+    const btn = filled(focus, mode)
+    Object.assign(set, { '--btn': btn, '--on-btn': on(btn), '--line': line(11), '--line2': line(19), '--cell': line(15), '--hover': `color-mix(in oklab, ${focus} 8%, transparent)` })
+  }
+  return set
+}
+
 // Every custom property a theme sets on the root. Lunchbox sets none: styles.css is its source.
-export function tokens(t: Theme, mode: Mode): Record<string, string> {
+export function tokens(t: Theme, mode: Mode, reach: Reach = 'quiet'): Record<string, string> {
   if (t.id === 'lunchbox') return {}
-  const s = surfacesOf(t, mode)
+  // Rich lets the surfaces hold more of the hue; the lightness steps stay where they are.
+  const s = surfacesOf(reach === 'rich' ? { ...t, chroma: Math.min(0.055, t.chroma * 1.6) } : t, mode)
   const tone = t[mode]
   const mix = (n: number) => `color-mix(in oklab, var(--ink) ${n}%, transparent)`
   return {
@@ -74,7 +189,19 @@ export function tokens(t: Theme, mode: Mode): Record<string, string> {
     '--block': tone.block, '--on-block': tone.onBlock, '--accent': tone.accent, '--on-accent': tone.onAccent,
     ...(tone.warn ? { '--warn': tone.warn } : {}), ...(tone.bad ? { '--bad': tone.bad } : {}),
     ...Object.fromEntries(tone.glyphs.map((g, i) => [`--glyph-${i + 1}`, g])),
+    ...reaching(t, mode, reach),
   }
+}
+
+// A theme with the single colours a person changed by hand folded in, so what follows from a
+// colour (the ring, the switches, the links) follows the changed one.
+export function withTune(t: Theme, mode: Mode, own: Partial<Record<string, string>>): Theme {
+  const tone = { ...t[mode] }
+  const put = (key: string, to: 'block' | 'accent' | 'warn' | 'bad' | 'text' | 'sheet' | 'frame' | 'box') => { const v = own[key]; if (v) tone[to] = v }
+  put('--block', 'block'); put('--accent', 'accent'); put('--warn', 'warn'); put('--bad', 'bad')
+  put('--ink', 'text'); put('--sheet', 'sheet'); put('--ground', 'frame'); put('--well', 'box')
+  if (own['--warn'] || own['--bad']) tone.pinned = true
+  return { ...t, [mode]: tone }
 }
 
 // The ASCII on its own: the welcome band, the room's field and the dot fields. Theme follows the theme; Ink is plain; the rest are ramps from faint

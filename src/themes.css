@@ -6,13 +6,33 @@
   --glyph-1 to --glyph-4 the ASCII ramp from faint to loud
 */
 :root{--accent:var(--ink);--on-accent:var(--ground);--block:var(--hover);--on-block:var(--ink)}
+/*
+  How far a theme's colour reaches, set in Settings as Quiet, Balanced or Rich. Each of these has
+  one job and falls back to ink, which is what Quiet and Lunchbox's own theme show. themes.ts
+  works the colours out from the theme and holds each to the contrast it needs.
+  --focus          the ring on what the keyboard is on, and the edge of a field being typed in
+  --live           what is working right now: dots, carets, progress
+  --lit, --on-lit  what is switched on or filled: toggles, meters, bars, ticked boxes
+  --link           links in messages and on pages
+  --thumb          the scrollbar
+  --btn, --on-btn  the main button of a page or a sheet
+  --edge           the message box at rest
+  --mode-*         Plan, Ask and Auto, from faint to full
+  --full           Full access: the failure colour, or on a cool theme a fuller neighbour of its hue
+  --sel, --sel-edge  how strong the tint behind a selected row or segment is
+*/
+:root{--focus:var(--ink);--live:var(--ink);--lit:var(--ink);--on-lit:var(--ground);--link:var(--ink);--thumb:var(--cell);--btn:var(--ink);--on-btn:var(--ground);--edge:var(--line);--mode-plan:var(--ink);--mode-ask:var(--ink);--mode-auto:var(--ink);--full:var(--bad);--sel:16%;--sel-edge:26%}
 
 /* What is selected takes a soft tint of the block colour, never a solid fill: the theme is in it,
    but it stays as quiet as the rest of the app. The row's label is bare text, so the tint goes
    behind it inside the row's own layer. */
 :root[data-palette] :is(.sbitem,.sbroom){isolation:isolate}
-:root[data-palette] :is(.sbitem,.sbroom)>.sbsel{z-index:-1;background:color-mix(in oklab,var(--block) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--block) 26%,transparent)}
+:root[data-palette] :is(.sbitem,.sbroom)>.sbsel{z-index:-1;background:color-mix(in oklab,var(--block) var(--sel),transparent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--block) var(--sel-edge),transparent)}
 :root[data-palette] .seg button.on{background:color-mix(in oklab,var(--block) 20%,var(--well));color:var(--ink);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--block) 34%,transparent)}
+/* Past Quiet, the tabs of a page are picked the way a segment is, and the same holds for the
+   focused message box: its edge is the focus colour. */
+:root[data-palette]:not([data-reach=quiet]) .tabs button.on{background:color-mix(in oklab,var(--block) 20%,var(--well));color:var(--ink);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--block) 34%,transparent)}
+:root[data-palette]:not([data-reach=quiet]) .tabs button.on small{color:var(--dim)}
 :root[data-palette] .chip.on{background:color-mix(in oklab,var(--block) 18%,transparent);color:var(--ink);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--block) 34%,transparent)}
 
 /* The accent: what acts, and what shows progress. */
@@ -25,6 +45,7 @@
 .planbox .tick{stroke:var(--on-accent)}
 .item.checked .check{background:var(--accent);box-shadow:inset 0 0 0 3px var(--sheet),inset 0 0 0 4px var(--accent)}
 :root[data-palette] .composer:focus-within{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--accent) 50%,transparent),0 8px 24px -12px rgb(0 0 0/calc(.35*var(--shade)))}
+:root[data-palette]:not([data-reach=quiet]) .composer:focus-within{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--focus) 70%,transparent),0 8px 24px -12px rgb(0 0 0/calc(.35*var(--shade)))}
 
 /* Theme cards, in Settings and on the first run: seven to a row, so the built in themes are one
    even line and the ones a person makes line up under them. The cards show the theme in the mode
