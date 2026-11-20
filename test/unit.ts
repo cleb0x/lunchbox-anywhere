@@ -2215,3 +2215,18 @@ test('slash commands: found in each agent, filled with arguments, and the folder
     if (prevCodex !== undefined) process.env.CODEX_HOME = prevCodex
   }
 })
+
+test('browsers: agents are pointed at the Lunchbox browser, and Claude Code is kept from others', async () => {
+  const { protocol } = await import('../electron/room/context')
+  const meta = { id: 'r', name: 'Room', crew: ['claude'], workspace: '/w', sessions: {}, seen: {}, heard: {}, blocks: [], saved: { full: 0, sent: 0 }, created: 0, updated: 0 } as unknown as Parameters<typeof protocol>[0]
+  const me = { id: 'claude', short: 'Claude', name: 'Claude Code', maker: 'Anthropic', via: 'cli', tools: true, found: true, ready: true, good: '', alphabet: '', mark: 'claude' } as Parameters<typeof protocol>[1]
+  const auto = protocol(meta, me, [me], 'workspace', undefined, ['browser_open', 'browser_read', 'expert_look'])
+  assert.match(auto, /Use the Lunchbox browser[\s\S]*Never start Playwright[\s\S]*own tests may/)
+  const { CATALOG } = await import('../electron/agents/index')
+  const claude = CATALOG.find((d) => d.id === 'claude')!
+  const base = { prompt: 'hi', system: '', cwd: '/w', access: 'workspace' as const }
+  const off = claude.spawn!({ ...base, ownBrowser: true }, '/tmp/x.txt').args
+  assert.ok(off.includes('--disallowedTools') && off[off.indexOf('--disallowedTools') + 1].includes('mcp__playwright'))
+  assert.ok(!claude.spawn!(base, '/tmp/x.txt').args.includes('--disallowedTools'), 'without the Lunchbox browser nothing is taken away')
+})
+

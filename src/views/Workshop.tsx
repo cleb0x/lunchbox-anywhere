@@ -74,6 +74,7 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
           <section className="ws-mine rise" style={{ '--i': 1 } as CSSProperties}>
             <span className="ws-dot" aria-hidden />
             <div className="grow"><b>You are using your Lunchbox</b><span>Everything you built is in this one. Updates arrive in the standard Lunchbox.</span></div>
+            {(state.changes.length ?? 0) > 0 && <Suggest disabled={busy} say={say} />}
             <button className="btn small quiet" onClick={() => act('workshop:back')}>Switch back</button>
           </section>
         )}
@@ -105,13 +106,13 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
               <b>{state.mine ? 'Your Lunchbox' : 'Ready to try'}</b>
               <span>{changed} file{changed === 1 ? '' : 's'} changed{ideas.length ? `, from ${ideas.length} idea${ideas.length === 1 ? '' : 's'}` : ''}. <button className="linkish" onClick={() => setDetails(!details)} aria-expanded={details}>{details ? 'Hide details' : 'Details'}</button></span>
             </div>
-            <Suggest disabled={busy} say={say} />
             <button className="btn" disabled={busy} onClick={() => act('workshop:open')}><IconPlay />{state.mine ? 'Restart with changes' : 'Try it'}</button>
+            <div className="ws-also"><span>Want everyone to have it too?</span><Suggest disabled={busy} say={say} /></div>
             {details && (
               <div className="ws-details">
                 <Changes state={state} />
                 <div className="ws-actions">
-                  <span className="hint grow">Your copy lives in <code>{state.dir}</code>, on top of Lunchbox {label(state.base)}.</span>
+                  <span className="hint grow">Built on Lunchbox {label(state.base)}.</span>
                   <button className="btn small quiet" onClick={() => desk.call('workshop:folder')}><IconFolder />Show folder</button>
                   <Sure act={() => act('workshop:reset', 'Back to Lunchbox as it shipped')} className="btn small quiet ws-undo" label="Undo every change in your copy">
                     {(sure) => (sure ? 'Undo everything?' : 'Undo all changes')}
@@ -173,7 +174,7 @@ export function WorkshopBar({ busy, say }: { busy: boolean; say: (t: string) => 
     <span className="ws-bar">
       <span className="tag ws-tag">Workshop</span>
       <button className="ghostbtn" disabled={busy || opening} onClick={openIt} title={wait ?? 'Build your Lunchbox and open it in place of the standard one'}>{opening ? <Loader size={10} /> : <IconPlay />}<span>{mine ? 'Restart with changes' : 'Try it'}</span></button>
-      <button className="ghostbtn" disabled={busy || sending} onClick={send} title={wait ?? 'Send the change to the Lunchbox maintainers'}>{sending ? <Loader size={10} /> : <IconShare />}<span>Send to Lunchbox</span></button>
+      <button className="ghostbtn" disabled={busy || sending} onClick={send} title={wait ?? 'Also send it to the Lunchbox maintainers, so everyone can have it. Your own Lunchbox keeps it either way.'}>{sending ? <Loader size={10} /> : <IconShare />}<span>Send to Lunchbox too</span></button>
     </span>
   )
 }
@@ -258,8 +259,8 @@ function Suggest({ disabled, say }: { disabled: boolean; say: (t: string) => voi
   if (!open) {
     return (
       <span className="ws-send">
-        <button className="btn quiet" disabled={disabled || sending} onClick={send} title="Sends your change and what you asked for to the Lunchbox maintainers">
-          {sending ? <Loader size={10} /> : <IconShare />}{sent ? 'Sent, send again' : 'Send to Lunchbox'}
+        <button className="btn small quiet" disabled={disabled || sending} onClick={send} title="Sends your change and what you asked for to the Lunchbox maintainers. Your own Lunchbox keeps it either way.">
+          {sending ? <Loader size={10} /> : <IconShare />}{sent ? 'Sent, send again' : 'Send it to Lunchbox'}
         </button>
         <button className="linkish ws-note-link" disabled={disabled} onClick={() => setOpen(true)}>Add a note</button>
       </span>

@@ -77,7 +77,7 @@ writeFileSync(join(ws, 'README.md'), readFileSync(join(ws, 'README.md'), 'utf8')
   await shot(page, '04-suggest', 500)
   await page.click('.ws-suggest button:has-text("Cancel")')
   // One click sends; the report service here answers nothing, so it waits in the outbox.
-  await page.click('button:has-text("Send to Lunchbox")')
+  await page.click('button:has-text("Send it to Lunchbox")')
   await page.waitForTimeout(2500)
   const outbox = join(profile, 'data', 'outbox.jsonl')
   const queued = existsSync(outbox) ? readFileSync(outbox, 'utf8') : ''

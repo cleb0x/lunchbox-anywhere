@@ -989,7 +989,7 @@ export class Engine {
       prompt: http ? p.tail : p.text, history: http ? p.history : undefined, cacheKey: `${room}:${who}`, system, fresh: !resumed || meta.protos?.[who] !== sent, cwd: meta.workspace, access,
       model: ctx.models?.[who] || this.store.settings.models[who] || me.model, session: resumed ? session : undefined, meter: resumed && meta.meters?.[who]?.session === session ? meta.meters[who] : undefined, allow: ctx.allow, hands: grant?.url || undefined, bench,
       hook: grant?.hook || undefined, outputs: shorten ? outputs(room) : undefined, effort: this.store.settings.effort?.[who], lean: saving.lean, short,
-      inbox: grant?.hook || http ? inbox : undefined, unload: this.store.settings.unload,
+      inbox: grant?.hook || http ? inbox : undefined, unload: this.store.settings.unload, ownBrowser: held.includes('browser_open'),
       env: me.via === 'cli' ? refusals(me, this.agents, meta.crew, held, nested) : undefined, front: this.front || undefined,
     }, this.store.keys(), (u) => {
       if (u.delta) lt.text += u.delta

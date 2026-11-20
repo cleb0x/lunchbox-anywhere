@@ -551,3 +551,5 @@ input[type=number].select{width:64px}
 .ws-tail{font:11px var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .setting.ws-idea .loader+small{margin-left:-8px}
 @media (prefers-reduced-motion:reduce){.ws-details{animation:none}}
+.ws-also{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding-top:12px;margin-top:2px;border-top:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+.ws-mine .ws-send{margin-left:auto}

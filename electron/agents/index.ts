@@ -44,6 +44,8 @@ export type Input = {
   inbox?: () => string | null
   // Local models: free the model from memory when it has answered.
   unload?: boolean
+  // The room lends the Lunchbox browser, so other browsers the agent could start are kept from it.
+  ownBrowser?: boolean
   // For the agent's own shell: extra variables, and a folder that goes first on its PATH.
   env?: Record<string, string>
   front?: string
@@ -83,6 +85,10 @@ export const providerOf = (d: Def) => d.provider ?? d.key!
 
 // A resumed session already has the protocol; it is sent again only when it changed.
 const prompt = (i: Input) => (i.fresh === false ? i.prompt : `${i.system}\n\n${i.prompt}`)
+
+// Browser MCP servers people often have set up in Claude Code. Inside a room the Lunchbox browser
+// does their job where the person can see it, so a turn that has it gets none of these.
+const OTHER_BROWSERS = ['mcp__playwright', 'mcp__puppeteer', 'mcp__chrome-devtools', 'mcp__claude-in-chrome', 'mcp__browsermcp', 'mcp__browser-use', 'mcp__browserbase']
 
 // Calls to a crewmate can take minutes, far past the CLIs' default tool timeouts.
 const HANDS_TIMEOUT = 15 * 60
@@ -147,6 +153,7 @@ export const CATALOG: Def[] = [
           ...hands.args,
           ...hook.args,
           ...(i.lean ? ['--strict-mcp-config'] : []),
+          ...(i.ownBrowser ? ['--disallowedTools', OTHER_BROWSERS.join(',')] : []),
           ...(i.effort ? ['--effort', i.effort] : []),
           ...(i.model ? ['--model', i.model] : []),
           ...(i.session ? ['--resume', i.session] : []),
