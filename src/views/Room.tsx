@@ -1252,13 +1252,16 @@ function Panel({ meta, events, live, agents }: { meta: RoomMeta; events: Event[]
   const out = (a: AgentInfo) => !!unavailable(a)
   scene.current.sources = crew.map((a, i) => ({ alphabet: a.alphabet, x: (i + 0.5) / crew.length, y: i % 2 ? 0.66 : 0.34, energy: out(a) ? -0.3 : 0.22 }))
   scene.current.active = live.active ? meta.crew.indexOf(live.active) : -1
-  scene.current.hold = live.waiting
+  // A command held for a yes stops the work. A decision left open does not: an agent answering
+  // the next message is working, and the panel says so.
+  const waiting = live.waiting && (!live.turns.length || live.runs.some((r) => r.state === 'asking'))
+  scene.current.hold = waiting
   scene.current.cables = cables.current.filter((c) => meta.crew.includes(c.from) && meta.crew.includes(c.to)).map((c) => ({ from: meta.crew.indexOf(c.from), to: meta.crew.indexOf(c.to), at: c.at }))
   const prev = useRef(events.length)
   if (prev.current !== events.length) { prev.current = events.length; scene.current.bump = (scene.current.bump ?? 0) + 1 }
 
-  const state = live.waiting ? 'waiting' : live.active ? 'working' : 'idle'
-  const caption = live.waiting ? 'Waiting for you' : live.doing || (events.length ? 'Quiet' : 'Ready when you are')
+  const state = waiting ? 'waiting' : live.active ? 'working' : 'idle'
+  const caption = waiting ? 'Waiting for you' : live.doing || (events.length ? 'Quiet' : 'Ready when you are')
   const settledSteps = useMemo(() => plan(events, crew), [events, meta.crew.join(), agents])
   const steps = useMemo(() => planOn(settledSteps, liveEvents(live), crew), [settledSteps, live])
 
@@ -1279,10 +1282,10 @@ function Panel({ meta, events, live, agents }: { meta: RoomMeta; events: Event[]
           const working = live.turns.some((t) => t.who === a.id)
           const used = today ? `${tokens(today.input + today.output + today.cached)} tokens today${today.cost ? `, ${money(today.cost)}` : ''}` : ''
           const role = i === 0 ? 'Main' : 'On call'
-          const status = working ? (live.waiting && live.active === a.id ? 'Waiting for your OK' : i === 0 ? 'Main, working' : 'Working') : why ?? [role, used].filter(Boolean).join(', ')
+          const status = working ? (waiting && live.active === a.id ? 'Waiting for your OK' : i === 0 ? 'Main, working' : 'Working') : why ?? [role, used].filter(Boolean).join(', ')
           return (
             <div key={a.id} className={`crew${working ? ' on' : ''}${why ? ' spent' : ''}`} title={a.name}>
-              <Mark seed={a.mark} size={16} active={working && !live.waiting} />
+              <Mark seed={a.mark} size={16} active={working && !waiting} />
               <span className="grow">{a.short}<small>{status}</small></span>
               {budget > 0 && <Meter value={Math.max(0, 1 - (today?.cost ?? 0) / budget)} cells={10} tone={(today?.cost ?? 0) > budget * 0.75 ? 'warn' : undefined} />}
             </div>
