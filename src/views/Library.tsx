@@ -120,7 +120,7 @@ function PlaybookSheet({ p, close, go }: { p: Playbook; close: () => void; go: (
     addEventListener('keydown', key)
     return () => removeEventListener('keydown', key)
   }, [close])
-  const start = () => go({ name: 'new', pack: p.pack, text: fillPlaybook(p, input) })
+  const start = () => go({ name: 'new', pack: p.pack, text: fillPlaybook(p, input), crew: p.crew })
   const tools = (p.tools ?? []).map((t) => CATALOG.find((c) => c.id === t)).filter((t): t is CatalogTool => !!t)
   return createPortal(
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && close()}>

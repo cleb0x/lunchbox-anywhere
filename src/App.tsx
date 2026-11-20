@@ -34,7 +34,7 @@ import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access 
 
 export type View =
   | { name: 'room'; id: string; focus?: string }
-  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean }
+  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean; crew?: string[] }
   | { name: 'agents' } | { name: 'free' } | { name: 'settings'; edit?: string } | { name: 'pool' } | { name: 'savings' } | { name: 'library' } | { name: 'browser' } | { name: 'waiting' }
   | { name: 'flows'; edit?: string; template?: string }
   | { name: 'workshop' }
@@ -382,7 +382,7 @@ export function App() {
             also a drag region swallows the wheel on macOS. */}
         {!['room', 'browser', 'new'].includes(view.name) && <div className="sheetdrag" aria-hidden="true" />}
         {view.name === 'room' && <RoomView key={view.id} id={view.id} focus={view.focus} access={access} setAccess={setAccess} open={(id) => go({ name: 'room', id })} say={say} />}
-        {view.name === 'new' && <NewRoom key={view.skill?.id ?? view.pack ?? (view.send ? 'send' : 'new')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
+        {view.name === 'new' && <NewRoom key={view.skill?.id ?? (view.pack ? `${view.pack}:${view.crew?.join(',') ?? ''}` : undefined) ?? (view.send ? 'send' : 'new')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} suggested={view.crew} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
         {view.name === 'agents' && <Agents say={say} />}
         {view.name === 'free' && <FreeModels go={go} say={say} />}
         {view.name === 'flows' && <Flows key={view.edit ?? view.template ?? 'list'} edit={view.edit} template={view.template} go={go} say={say} workspace={workspace || env.cwd} />}

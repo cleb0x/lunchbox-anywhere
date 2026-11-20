@@ -59,9 +59,9 @@ function defaultCrew(ids: string[], preferred: string[]) {
 
 const skillText = (s: Skill) => `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}`
 
-export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send }: {
+export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send, suggested }: {
   say: (t: string) => void
-  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean
+  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean; suggested?: string[]
 }) {
   const agents = useApp((s) => s.agents)
   const packs = useApp((s) => s.packs)
@@ -69,7 +69,12 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
   const settings = useApp((s) => s.settings)
   const env = useApp((s) => s.env)
   const usable = agents.filter((a) => !unavailable(a)).sort((a, b) => Number(b.tools) - Number(a.tools)).map((a) => a.id)
-  const [chosen, setChosen] = useState<string[] | null>(() => (skill && skill.crew.every((c) => usable.includes(c)) ? skill.crew : null))
+  // A playbook's crew is taken as far as those agents are set up here; with none of them, the usual crew.
+  const [chosen, setChosen] = useState<string[] | null>(() => {
+    if (skill && skill.crew.every((c) => usable.includes(c))) return skill.crew
+    const ready = (suggested ?? []).filter((c) => usable.includes(c))
+    return ready.length ? ready : null
+  })
   const crew = chosen ?? defaultCrew(usable, settings.defaultCrew)
   const [pack, setPack] = useState<string | undefined>(skill?.pack ?? startPack)
   const [draft, setDraft] = useState<{ text: string; files?: string[]; n: number } | undefined>(() => (skill ? { text: skillText(skill), n: 1 } : text ? { text, n: 1 } : undefined))
