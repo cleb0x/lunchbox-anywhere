@@ -46,6 +46,8 @@ export type Input = {
   unload?: boolean
   // The room lends the Lunchbox browser, so other browsers the agent could start are kept from it.
   ownBrowser?: boolean
+  // The person's limits, when they set any.
+  limits?: import('../../shared/types').Limits
   // For the agent's own shell: extra variables, and a folder that goes first on its PATH.
   env?: Record<string, string>
   front?: string
@@ -92,8 +94,6 @@ const OTHER_BROWSERS = ['mcp__playwright', 'mcp__puppeteer', 'mcp__chrome-devtoo
 
 // Calls to a crewmate can take minutes, far past the CLIs' default tool timeouts.
 const HANDS_TIMEOUT = 15 * 60
-// Long enough for any real turn; past it the CLI is stuck, and the room's queue with it.
-const TURN_LIMIT = 60 * 60 * 1000
 
 // The hands URL carries a per-turn token, so it goes in a private file rather than the command
 // line, where any other program on the computer could read it.
@@ -473,7 +473,7 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     const ctl = new AbortController()
     const t0 = Date.now()
     wear(d, keys)
-    const hands = input.bench ? { bench: input.bench, onStep: (s: { working?: string; acts?: Act[] }) => onUpdate(s), inbox: input.inbox } : undefined
+    const hands = input.bench ? { bench: input.bench, onStep: (s: { working?: string; acts?: Act[] }) => onUpdate(s), inbox: input.inbox, rounds: input.limits?.toolCalls, same: input.limits?.failures } : undefined
     if (PROVIDERS[provider]?.style === 'ollama') PROVIDERS[provider].unload = !!input.unload
     const done = chat(provider, keys[d.key ?? ''] ?? '', input.model ?? '', input.system, input.prompt, ctl.signal, (delta) => onUpdate({ delta }), input.history, input.cacheKey, hands)
       .then((r) => ({ text: r.text, acts: r.acts, usage: r.usage, denied: [], ms: Date.now() - t0 }))
@@ -545,7 +545,9 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
         if (u) onUpdate(u)
       } catch {}
     })
-    const cap = setTimeout(() => { timedOut = true; stop(proc) }, TURN_LIMIT)
+    // A turn runs until it ends or is stopped, unless the person set a time limit.
+    const minutes = input.limits?.minutes
+    const cap = minutes ? setTimeout(() => { timedOut = true; stop(proc) }, minutes * 60_000) : undefined
     const code = await new Promise<number | null>((ok) => {
       proc.on('close', ok)
       // A background process the CLI started can hold its output open long after the CLI is done.
@@ -558,7 +560,7 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     // The CLI's final answer is only its last message. When the turn wrote before that too, keep it all.
     const text = (turn.final && turn.text.trim().endsWith(turn.final.trim()) ? turn.text : turn.final || turn.text).trim()
     let error = turn.error
-    if (timedOut) error = `${name} was still working after ${TURN_LIMIT / 60000} minutes, so Lunchbox stopped it`
+    if (timedOut) error = `${name} was still working after ${minutes} minutes, the limit set in Settings, so Lunchbox stopped it`
     else if (stopped) error = 'Stopped'
     // A crash partway through keeps what was written, but it is not a finished answer.
     else if (code !== 0 && !error) error = reason(stderr) || `${name} exited with code ${code}`

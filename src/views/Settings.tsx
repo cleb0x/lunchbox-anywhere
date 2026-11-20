@@ -12,6 +12,7 @@ import { Maker } from '../ui/Maker'
 import { Effort } from '../ui/ModelPicker'
 import { ACCESS, desk, reason, reload, short, unavailable, useApp, type RemoteStatus } from '../lib/desk'
 import type { Look } from '../App'
+import type { Limits } from '../../shared/types'
 import { Toggle } from './Flows'
 
 // Lunchbox from a phone through a Telegram bot: make one with @BotFather, paste its token, then
@@ -251,6 +252,8 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
         </div>
       </section>
 
+      <LimitSettings />
+
       <Phone say={say} />
 
       <section className="group">
@@ -276,3 +279,42 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
     </div>
   )
 }
+
+// Lunchbox lets agents work until they are done. Each limit here is off until it is switched on,
+// and then stops them at the number set.
+const LIMITS: { key: keyof Limits; name: string; line: string; unit: string; start: number; min: number; max: number }[] = [
+  { key: 'toolCalls', name: 'Tool calls per turn', line: 'Stops an agent on an API key or a local model after this many tool calls in one turn.', unit: 'calls', start: 60, min: 5, max: 1000 },
+  { key: 'handoffs', name: 'Handoffs per message', line: 'Pauses the room after agents have handed work to each other this many times for one message.', unit: 'handoffs', start: 24, min: 2, max: 200 },
+  { key: 'failures', name: 'Same failing command', line: 'Pauses an agent that runs the same command this many times in a row and fails each time.', unit: 'times', start: 3, min: 2, max: 50 },
+  { key: 'minutes', name: 'Time per turn', line: 'Stops a command line agent that is still working after this long.', unit: 'minutes', start: 60, min: 5, max: 600 },
+]
+
+function LimitSettings() {
+  const limits = useApp((s) => s.settings.limits) ?? {}
+  const set = (key: string, v: number | undefined) => reload.settings({ limits: { ...limits, [key]: v } })
+  return (
+    <section className="group">
+      <h2>Limits<span className="quiet">off unless you turn one on; agents work until they are done or you stop them</span></h2>
+      <div className="settings">
+        {LIMITS.map((l) => {
+          const now = limits[l.key]
+          return (
+            <div className="setting" key={l.key}>
+              <div className="grow"><b>{l.name}</b><span>{l.line}</span></div>
+              {now ? (
+                <label className="limitnum">
+                  <input type="number" min={l.min} max={l.max} defaultValue={now} key={now} aria-label={`${l.name}, ${l.unit}`}
+                    onBlur={(e) => { const v = Math.round(Number(e.target.value)); set(l.key, Number.isFinite(v) ? Math.min(l.max, Math.max(l.min, v)) : now) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                  <span>{l.unit}</span>
+                </label>
+              ) : null}
+              <Toggle on={!!now} set={(on) => set(l.key, on ? l.start : undefined)} label={l.name} />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+

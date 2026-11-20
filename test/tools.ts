@@ -252,7 +252,7 @@ test('text calls: a server that refuses tools is asked again in text, and a bad 
   } finally { delete PROVIDERS['fake-old']; f.close() }
 })
 
-test('text calls: a model that never gets a call right is stopped with a plain reason, and so is one that repeats a failing call', async () => {
+test('text calls: a model that never gets a call right is stopped with a plain reason, and the limits in Settings stop one that repeats a call', async () => {
   const { bench } = folder()
   const f = await fake((n) => (n < 9 ? says('<tool_call>{broken</tool_call>') : says('x')), (req, res) => { if (req.url !== '/api/show') return false; res.writeHead(200); res.end('{"capabilities":["completion"]}'); return true })
   PROVIDERS['fake-bad'] = { base: `${f.base}/api`, style: 'ollama', prefer: /./ }
@@ -263,9 +263,13 @@ test('text calls: a model that never gets a call right is stopped with a plain r
   const g = await fake(() => calls('read_file', { path: 'nope.txt' }), (req, res) => { if (req.url !== '/api/show') return false; res.writeHead(200); res.end('{"capabilities":["tools"]}'); return true })
   PROVIDERS['fake-loop'] = { base: `${g.base}/api`, style: 'ollama', prefer: /./ }
   try {
-    const err = await chat('fake-loop', '', 'tiny', 'Rules', 'Go', AbortSignal.timeout(8000), () => {}, [], '', { bench, onStep() {} }).catch((e) => e)
+    const err = await chat('fake-loop', '', 'tiny', 'Rules', 'Go', AbortSignal.timeout(8000), () => {}, [], '', { bench, onStep() {}, same: 3 }).catch((e) => e)
     assert.match(err.message, /same failing read_file call 3 times/)
     assert.equal(err.acts.length, 3, 'what it did before stopping is kept')
+    // With only a limit on tool calls, the same failing call goes on until that limit.
+    const capped = await chat('fake-loop', '', 'tiny', 'Rules', 'Go', AbortSignal.timeout(8000), () => {}, [], '', { bench, onStep() {}, rounds: 5 }).catch((e) => e)
+    assert.match(capped.message, /used 5 tool calls without finishing, the limit set in Settings/)
+    assert.equal(capped.acts.length, 5)
   } finally { delete PROVIDERS['fake-loop']; g.close() }
 })
 

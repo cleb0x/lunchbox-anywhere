@@ -244,7 +244,11 @@ export type Skill = {
   created: number
 }
 
+// Limits that stop an agent part way. Each is off unless the person sets a number.
+export type Limits = { toolCalls?: number; handoffs?: number; failures?: number; minutes?: number }
+
 export type Settings = {
+  limits?: Limits
   // Local models are freed from memory as soon as they answer.
   unload?: boolean
   models: Record<string, string>
