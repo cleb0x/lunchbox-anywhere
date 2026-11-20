@@ -1674,6 +1674,11 @@ test('model names: a snapshot date is not a version', async () => {
   assert.equal(modelName('claude-sonnet-4-20250514'), 'Sonnet 4')
   assert.equal(modelName('claude-opus-4-1-20250805'), 'Opus 4.1')
   assert.equal(modelName('gpt-6-sol'), 'GPT-6 Sol')
+  // The ids `agy models` lists.
+  assert.equal(modelName('gemini-3.8-flash-high'), 'Gemini 3.8 Flash High')
+  assert.equal(modelName('claude-sonnet-4-6'), 'Sonnet 4.6')
+  assert.equal(modelName('claude-opus-4-6-thinking'), 'Opus 4.6 Thinking')
+  assert.equal(modelName('gpt-oss-120b-medium'), 'GPT-OSS 120B Medium')
 })
 
 test('hands: a guard stands in front of every command the agent runs by itself', async () => {
