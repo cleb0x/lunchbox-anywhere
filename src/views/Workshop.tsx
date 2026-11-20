@@ -122,7 +122,7 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
               {state.changes.length > 0 ? <Changes state={state} /> : <div className="ws-empty">What your agents change shows up here, file by file.</div>}
               <div className="settings">
                 <div className="setting">
-                  <div className="grow"><b>{state.mine ? 'You are using your version' : 'Use your version'}</b><span>{state.mine ? 'Restart to pick up what changed since it was built.' : 'Builds your copy and opens it in place of the standard Lunchbox. One click brings the standard one back.'}</span></div>
+                  <div className="grow"><b>{state.mine ? 'Pick up new changes' : 'Use your version'}</b><span>{state.mine ? 'Builds your copy again and restarts it with what changed since.' : 'Builds your copy and opens it in place of the standard Lunchbox. One click brings the standard one back.'}</span></div>
                   <button className="btn small" disabled={!!busy || behind || (!state.mine && !state.changes.length)} onClick={() => act('workshop:open')} title={behind ? 'Bring your changes to this version first' : undefined}>
                     <IconPlay />{state.mine ? 'Restart with the latest changes' : 'Open your version'}
                   </button>
