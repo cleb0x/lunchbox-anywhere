@@ -49,6 +49,12 @@ export const BUILTIN: Pack[] = [
     checks: [{ label: 'npm audit', command: 'npm audit --omit=dev' }],
   },
   {
+    id: 'workshop', name: 'Workshop', line: 'Change Lunchbox itself', hidden: true,
+    brief: 'This room changes Lunchbox itself: the folder is the person\'s own copy of its source, and what you build runs only on their computer. Read WORKSHOP.md in this folder before anything else and follow it. Build what they asked so it looks and behaves like the rest of the app, keep the change as small as it can be, and run npm run typecheck, npm test and npm run build before saying it works. Then tell them to press Open your version on the Workshop page to use it.',
+    ideas: ['A button that copies the whole room as Markdown', 'A shortcut that opens the room\'s folder in my editor', 'A page that lists my open pull requests'],
+    checks: [{ label: 'Type check', command: 'npm run typecheck' }, { label: 'Tests', command: 'npm test' }, { label: 'Build', command: 'npm run build' }],
+  },
+  {
     id: 'learn', name: 'Learning', line: 'Understand anything, step by step',
     brief: 'This room teaches. Find out what the person already knows, explain one idea at a time with a concrete example, and check understanding with a short question before moving on. Link to good sources for going deeper.',
     ideas: ['Teach me how this codebase is put together', 'Explain a topic from scratch with examples', 'Quiz me on what we covered last time'],

@@ -24,7 +24,7 @@ const ids = new Set()
 for (const n of notices) {
   if (!n.id || !['toast', 'card', 'banner'].includes(n.kind) || !n.title) throw new Error(`Each notice needs an id, a kind (toast, card or banner) and a title: ${JSON.stringify(n)}`)
   if (ids.has(n.id)) throw new Error(`Two notices share the id ${n.id}`)
-  if ((n.image && !n.image.startsWith('https://')) || (n.action && !n.action.url?.startsWith('https://'))) throw new Error(`Images and links must be https: ${n.id}`)
+  if ((n.image && !n.image.startsWith('https://')) || (n.action && !n.action.url?.startsWith('https://') && n.action.url !== 'lunchbox:update')) throw new Error(`Images and links must be https, or lunchbox:update for the update button: ${n.id}`)
   ids.add(n.id)
 }
 const issued = Date.now()

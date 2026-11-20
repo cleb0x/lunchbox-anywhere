@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import type { Hit, RoomSummary, Skill } from '../shared/types'
 import { Loader, Sure } from './ui/bits'
 import { Logo } from './ui/Logo'
-import { IconAgents, IconBrowser, IconClock, IconFlows, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings } from './ui/icons'
+import { IconAgents, IconBrowser, IconClock, IconFlows, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings, IconWorkshop } from './ui/icons'
 import { Onboarding } from './views/Onboarding'
 import { RoomView } from './views/Room'
 import { NewRoom } from './views/NewRoom'
@@ -23,6 +23,7 @@ import { Library } from './views/Library'
 import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
 import { ImportSheet } from './views/Import'
+import { Workshop } from './views/Workshop'
 import { THEMES, asciiOf, reachOf, themeOf, tokens, withTune, type AsciiId, type Mode, type Reach, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
 import { codeColours, wellOf } from './lib/codecolors'
@@ -36,8 +37,9 @@ export type View =
   | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean }
   | { name: 'agents' } | { name: 'free' } | { name: 'settings'; edit?: string } | { name: 'pool' } | { name: 'savings' } | { name: 'library' } | { name: 'browser' } | { name: 'waiting' }
   | { name: 'flows'; edit?: string; template?: string }
+  | { name: 'workshop' }
 export type Look = 'lunchbox' | 'neyra'
-const VIEWS: View['name'][] = ['room', 'new', 'agents', 'free', 'settings', 'pool', 'savings', 'library', 'browser', 'waiting', 'flows']
+const VIEWS: View['name'][] = ['room', 'new', 'agents', 'free', 'settings', 'pool', 'savings', 'library', 'browser', 'waiting', 'flows', 'workshop']
 
 const saved = <T,>(key: string, fallback: T): T => {
   try { const v = localStorage.getItem('lb.' + key); return v ? JSON.parse(v) : fallback } catch { return fallback }
@@ -307,6 +309,7 @@ export function App() {
     { group: 'Go to', label: 'Pool', hint: `${mod}⇧P`, run: () => go({ name: 'pool' }) },
     { group: 'Go to', label: 'Savings', hint: `${mod}⇧S`, run: () => go({ name: 'savings' }) },
     { group: 'Go to', label: 'Library', hint: `${mod}⇧L`, run: () => go({ name: 'library' }) },
+    { group: 'Go to', label: 'Workshop', hint: 'Add what Lunchbox is missing', run: () => go({ name: 'workshop' }) },
     { group: 'Go to', label: 'Browser', hint: `${mod}⇧B`, run: () => go({ name: 'browser' }) },
     { group: 'Actions', label: 'New flow', hint: 'Flows', run: () => go({ name: 'flows', edit: 'new' }) },
     { group: 'Actions', label: 'Import a chat', hint: 'From Claude Code, Codex, Gemini CLI or Grok', run: () => setImporting(true) },
@@ -366,6 +369,7 @@ export function App() {
           ))}
         </div>
         <div className="sbfoot">
+          <button className={`sbitem${on('workshop') ? ' on' : ''}`} onClick={() => go({ name: 'workshop' })} title="Ask an agent to add what Lunchbox is missing">{on('workshop') && sel}<IconWorkshop />Workshop{env.workshop && <i className="ws-dot" title="You are using your version" />}</button>
           <button className={`sbitem${on('agents') ? ' on' : ''}`} onClick={() => go({ name: 'agents' })}>{on('agents') && sel}<IconAgents />Agents<small>{ready_}</small></button>
           <button className={`sbitem${on('settings') ? ' on' : ''}`} onClick={() => go({ name: 'settings' })}>{on('settings') && sel}<IconSettings />Settings</button>
           {look === 'neyra' && <div className="sbversion">lunchbox {env.version}</div>}
@@ -386,6 +390,7 @@ export function App() {
         {view.name === 'waiting' && <WaitingPage go={go} access={access} />}
         {view.name === 'savings' && <Savings go={go} />}
         {view.name === 'library' && <Library go={go} say={say} />}
+        {view.name === 'workshop' && <Workshop go={go} say={say} />}
         {view.name === 'browser' && <Browser say={say} covered={palette} />}
         {view.name === 'settings' && <Settings edit={view.edit} theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} tune={tune} setTune={setTune} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} reach={reach} setReach={setReach} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
         </Guard>

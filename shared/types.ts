@@ -229,6 +229,8 @@ export type Pack = {
   crew?: string[]
   checks?: { label: string; command: string }[]
   source?: 'builtin' | 'user'
+  // Kept out of the pack lists: used by one place in the app, such as the Workshop.
+  hidden?: boolean
 }
 
 export type Skill = {
@@ -319,7 +321,7 @@ export type Day = { day: string; cost: number; tokens: number; input: number; ca
 export type Hit = { room: string; roomName: string; event?: string; text: string }
 
 // window: which of the app's windows is asking.
-export type Env = { home: string; platform: string; version: string; cwd: string; data: string; window?: number }
+export type Env = { home: string; platform: string; version: string; cwd: string; data: string; window?: number; workshop?: boolean }
 
 // A message pushed to every copy of the app from the signed feed, no update needed. A toast sits in
 // the corner, a card is a designed pop-up for big news, a banner runs across the top of the page.
@@ -350,4 +352,25 @@ export type UpdateState =
 export type ChatSource = 'claude' | 'codex' | 'gemini' | 'grok'
 export type FoundChat = { agent: ChatSource; id: string; file: string; folder: string; there: boolean; first: string; title?: string; at: number; size: number }
 
-export type Report = { kind: 'bug' | 'idea' | 'question'; text: string; contact?: string; context?: string; diagnostics?: string }
+export type Report = { kind: 'bug' | 'idea' | 'question'; text: string; contact?: string; context?: string; diagnostics?: string; patch?: string }
+
+// The person's own copy of Lunchbox's source, where agents add what they want.
+export type WorkshopChange = { file: string; added: number; removed: number; fresh?: boolean }
+export type WorkshopState = {
+  ready: boolean
+  dir: string
+  // The release the copy is built on, and the one this app is.
+  base?: string
+  current: string
+  // This window belongs to the person's own build.
+  mine: boolean
+  // Their build opens in place of the standard app.
+  use: boolean
+  built: boolean
+  changes: WorkshopChange[]
+  // Versions of the tools it needs, empty when missing.
+  needs: { git: string; node: string; npm: string }
+  busy?: { step: string; log: string[]; at: number; error?: string }
+  failed?: string
+  conflict?: boolean
+}

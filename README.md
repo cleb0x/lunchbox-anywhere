@@ -112,7 +112,7 @@ You can also download the dmg, the Windows installer, the deb or the AppImage fr
 | --- | --- | --- |
 | Claude Code | `npm install -g @anthropic-ai/claude-code` | `claude` |
 | Codex | `npm install -g @openai/codex` | `codex login` |
-| Antigravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | `agy` |
+| Antigravity | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | A Gemini API key, on the Agents page |
 | Gemini CLI | `npm install -g @google/gemini-cli` | `gemini` |
 | Grok Build | [x.ai/cli](https://x.ai/cli) | `grok login` |
 | Local models | [Ollama](https://ollama.com), [LM Studio](https://lmstudio.ai) or `llama-server` | none |

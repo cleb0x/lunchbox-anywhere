@@ -20,6 +20,7 @@ import { Changes } from './Changes'
 import { Composer } from './Composer'
 import { Find } from './Find'
 import { Quote } from './Quote'
+import { WorkshopBar } from './Workshop'
 
 type Data = { meta: RoomMeta; events: Event[]; live: Live }
 type Say = Extract<Event, { kind: 'say' }>
@@ -203,6 +204,7 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
         <header className="roomhead">
           <Title name={meta.name} rename={(n) => desk.call('room:rename', id, n)} />
           {meta.forkedFrom && <button className="tag" onClick={() => open(meta.forkedFrom!.room)}>fork</button>}
+          {meta.pack === 'workshop' && <WorkshopBar busy={busy} say={say} />}
           <span className="spacer" />
           <button className="ghostbtn mono" onClick={pick} title={meta.workspace}><IconFolder /><span>{tail(meta.workspace)}</span></button>
           <RoomMenu id={id} meta={meta} events={events} canReplay={events.length > 1} replay={() => setReplay(0)} open={open} say={say} />

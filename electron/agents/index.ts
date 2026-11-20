@@ -163,7 +163,7 @@ export const CATALOG: Def[] = [
     good: 'Building, running and fixing tests', alphabet: '.-01',
     spawn: (i) => {
       const sandbox = { plan: ['-s', 'read-only'], ask: ['-s', 'read-only'], workspace: ['-s', 'workspace-write'], full: ['--dangerously-bypass-approvals-and-sandbox'] }[i.access]
-      const tail = [...codexHands(i), ...(i.effort ? ['-c', `model_reasoning_effort="${i.effort}"`] : []), ...(i.model ? ['-m', i.model] : [])]
+      const tail = [...codexHands(i), ...(i.effort && codexTakes(i.model, i.effort) ? ['-c', `model_reasoning_effort="${i.effort}"`] : []), ...(i.model ? ['-m', i.model] : [])]
       // `exec resume` takes neither -C nor -s: the folder comes from the working directory and the
       // sandbox from config, or every resumed turn fails and silently starts a new session.
       const resumeSandbox = i.access === 'full' ? ['--dangerously-bypass-approvals-and-sandbox'] : ['-c', `sandbox_mode="${i.access === 'workspace' ? 'workspace-write' : 'read-only'}"`]
@@ -201,8 +201,7 @@ export const CATALOG: Def[] = [
       args: [
         '--print=', '--input-format', 'stream-json', '--output-format', 'stream-json',
         ...{ plan: ['--mode', 'plan'], ask: i.allow?.length ? ['--mode', 'accept-edits'] : ['--mode', 'plan'], workspace: ['--mode', 'accept-edits'], full: ['--dangerously-skip-permissions'] }[i.access],
-        ...(i.effort ? ['--effort', i.effort] : []),
-        ...(i.model ? ['--model', i.model] : []),
+        ...agyChoice(i.model, i.effort),
         ...(i.session ? ['--conversation', i.session] : []),
       ],
       // A prompt as an argument would not fit a whole room on Windows; on stdin it is one message.
@@ -323,6 +322,10 @@ export async function detect(keys: Record<string, string>, models: Record<string
           return { ...base, found: false, ready: false, note: `There is a ${d.bin} at ${path}, but it does not start. Install ${d.name} again, then check again.` }
         }
         paths.set(d.id, path)
+        if (d.id === 'antigravity') {
+          lastKey = agyKey(keys)
+          if (!agyKeyMode() || !lastKey) return { ...base, found: true, ready: false, version: started.version || undefined, note: AGY_NEEDS_KEY }
+        }
         return { ...base, found: true, ready: true, version: started.version || undefined }
       }
       if (d.via === 'local') {
@@ -347,23 +350,91 @@ const CLAUDE_MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'claude-fable-5-2', '
 // Gemini CLI has no command that lists models; these are the ones it accepts by name, newest first.
 const GEMINI_MODELS = ['auto-gemini-3', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.1-flash-lite']
 
-// `agy models` prints one model a line: its id, a tab, then the name it shows.
+// Google lets other apps run Antigravity only on a Gemini API key, never on a person's Google
+// account: an app driving agy under a consumer login can get that account suspended. agy uses a
+// key when its own settings name the gemini provider and GEMINI_API_KEY is set; Lunchbox checks
+// both before every run and never starts agy any other way.
+export const agySettings = () => join(homedir(), '.gemini', 'antigravity-cli', 'settings.json')
+export function agyKeyMode() {
+  try { return JSON.parse(readFileSync(agySettings(), 'utf8')).modelProvider === 'gemini' } catch { return false }
+}
+const agyKey = (keys: Record<string, string>) => keys.google || process.env.GEMINI_API_KEY || ''
+export const AGY_NEEDS_KEY = 'Google allows apps to run Antigravity only with a Gemini API key, not your Google account. Set it up here in one step.'
+
+// `agy models` prints one model a line: its id, a tab, then the name it shows. A model offered
+// at several efforts comes as one id per effort (gemini-3.8-flash-high); agy also takes the bare
+// id with --effort, so the list shows each model once and effort is picked beside it.
+const LEVEL = /-(minimal|low|medium|high|xhigh|max)$/
+const agyEfforts = new Map<string, string[]>()
+// The key the last agent check saw, so the model list can be read with it.
+let lastKey = ''
 async function antigravityModels() {
   const path = paths.get('antigravity') ?? (await locate('agy'))
-  if (!path) return []
-  const out = await capture(path, ['models'], 15000, await env())
-  return [...out.matchAll(/^([\w.:/-]+)\t/gm)].map((m) => m[1])
+  if (!path || !agyKeyMode()) return []
+  return learnAgyModels(await capture(path, ['models'], 15000, await env(lastKey ? { GEMINI_API_KEY: lastKey } : {})))
 }
 
-// Codex keeps the models this account may pick in its own cache, in the order its picker shows them.
-function codexModels() {
+export function learnAgyModels(out: string) {
+  const ids = [...out.matchAll(/^([\w.:/-]+)\t/gm)].map((m) => m[1])
+  const bases: string[] = []
+  agyEfforts.clear()
+  for (const id of ids) {
+    const level = id.match(LEVEL)?.[1]
+    const base = level ? id.slice(0, -level.length - 1) : id
+    if (!bases.includes(base)) bases.push(base)
+    if (level) agyEfforts.set(base, [...(agyEfforts.get(base) ?? []), level])
+  }
+  return bases
+}
+
+// The model and effort agy is started with. An id saved with its effort in it still works, and an
+// effort the model has no setting for is left out, since agy refuses the whole run over it.
+export function agyChoice(model?: string, effort?: string): string[] {
+  if (!model) return []
+  const level = model.match(LEVEL)?.[1]
+  const base = level && agyEfforts.has(model.slice(0, -level.length - 1)) ? model.slice(0, -level.length - 1) : model
+  const levels = agyEfforts.get(base) ?? []
+  const want = effort && levels.includes(effort) ? effort : base !== model ? level : undefined
+  return want ? ['--model', base, '--effort', want] : ['--model', model]
+}
+
+// Codex keeps the models this account may pick in its own cache, in the order its picker shows
+// them, each with the reasoning efforts it takes.
+type CodexModel = { slug?: string; visibility?: string; priority?: number; supported_reasoning_levels?: { effort?: string }[] }
+function codexCache(): CodexModel[] {
   try {
     const file = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'models_cache.json')
-    const list: { slug?: string; visibility?: string; priority?: number }[] = JSON.parse(readFileSync(file, 'utf8')).models ?? []
-    return list.filter((m) => m.slug && m.visibility !== 'hide').sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0)).map((m) => m.slug!)
+    const list: CodexModel[] = JSON.parse(readFileSync(file, 'utf8')).models ?? []
+    return list.filter((m) => m.slug && m.visibility !== 'hide').sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
   } catch {
     return []
   }
+}
+const codexModels = () => codexCache().map((m) => m.slug!)
+// A level the model does not list is left out rather than failing the turn; with no cache to ask,
+// Codex is trusted to judge it.
+function codexTakes(model: string | undefined, effort: string) {
+  const list = codexCache()
+  const m = model ? list.find((x) => x.slug === model) : list[0]
+  return !m?.supported_reasoning_levels?.length || m.supported_reasoning_levels.some((l) => l.effort === effort)
+}
+
+// What the person can set as effort for an agent with a given model, in order. Empty when the
+// tool or model has no such setting. Claude Code takes the same five levels for every model.
+export async function effortsFor(id: string, model?: string): Promise<string[]> {
+  if (id === 'claude') return ['low', 'medium', 'high', 'xhigh', 'max']
+  if (id === 'codex') {
+    const list = codexCache()
+    const m = (model && list.find((x) => x.slug === model)) || (!model ? list[0] : undefined)
+    return (m?.supported_reasoning_levels ?? []).map((l) => l.effort!).filter(Boolean)
+  }
+  if (id === 'antigravity') {
+    if (!model) return []
+    if (!agyEfforts.size) await antigravityModels()
+    const level = model.match(LEVEL)?.[1]
+    return agyEfforts.get(model) ?? (level ? agyEfforts.get(model.slice(0, -level.length - 1)) : undefined) ?? []
+  }
+  return []
 }
 
 // Grok prints its models with `grok models`: the default marked with *, the rest with -.
@@ -419,7 +490,13 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     const path = paths.get(id) || (await locate(d.bin!))
     if (!path) return failed(`${d.name} is not installed on this computer`)
     const file = join(tmpdir(), `lunchbox-${process.pid}-${t0}-${Math.random().toString(36).slice(2, 8)}.txt`)
+    if (id === 'antigravity') {
+      if (!agyKeyMode() || !agyKey(keys)) return failed(AGY_NEEDS_KEY)
+      lastKey = agyKey(keys)
+      if (input.model && !agyEfforts.size) await antigravityModels()
+    }
     const spec = d.spawn!(input, file)
+    if (id === 'antigravity') spec.env = { ...spec.env, GEMINI_API_KEY: agyKey(keys) }
     // The prompt and the hands token are in these files, so they go however the turn ends.
     try {
       if (spec.file) writeFileSync(file, spec.file, { mode: 0o600 })

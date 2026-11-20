@@ -484,3 +484,67 @@ input[type=number].select{width:64px}
 .sbimport svg{width:13px;height:13px}
 @media (hover:hover){.sbimport:hover{color:var(--ink)}}
 .bhole .linkbtn{margin-left:4px}
+
+/* Workshop */
+.linkish{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px;transition:text-decoration-color 140ms var(--out)}
+@media (hover:hover){.linkish:hover{text-decoration-color:var(--ink)}}
+.ws-mine,.ws-note,.ws-progress{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:14px 18px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line2);background:var(--well)}
+.ws-mine .grow{display:flex;flex-direction:column;gap:2px}
+.ws-mine .grow b{font-weight:500}
+.ws-mine .grow span{font-size:12px;color:var(--dim)}
+.ws-dot{width:7px;height:7px;border-radius:2px;background:var(--accent,var(--ink));flex:none;animation:markbreathe 2.4s ease-in-out infinite}
+.ws-note{font-size:13px;color:var(--dim)}
+.ws-progress{flex-direction:column;align-items:stretch;gap:10px}
+.ws-progresshead{display:flex;align-items:center;gap:10px}
+.ws-progresshead b{font-weight:500}
+.ws-progresshead code{font:11px var(--mono);color:var(--faint)}
+.ws-progress p{font-size:13px;color:var(--dim);line-height:1.5}
+.ws-progress.failed{box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--bad) 40%,transparent)}
+.ws-bad{width:7px;height:7px;border-radius:2px;background:var(--bad);flex:none}
+.ws-log{margin:0;padding:10px 12px;border-radius:8px;background:var(--sheet);font:11px/1.6 var(--mono);color:var(--faint);white-space:pre-wrap;word-break:break-word;max-height:116px;overflow:hidden}
+.ws-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.ws-steps li{display:flex;gap:12px;padding:16px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line)}
+.ws-steps code{font:11px var(--mono);color:var(--faint);padding-top:2px}
+.ws-steps div{display:flex;flex-direction:column;gap:4px}
+.ws-steps b{font-weight:500}
+.ws-steps span{font-size:12px;line-height:1.5;color:var(--dim)}
+.ws-ok{font:11px var(--mono);color:var(--dim)}
+.ws-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ws-actions .grow{flex:1}
+.ws-ask{display:flex;flex-direction:column;gap:12px}
+.ws-field{display:flex;align-items:flex-end;gap:10px;padding:10px 10px 10px 14px;border-radius:12px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line2);transition:box-shadow 160ms var(--out)}
+.ws-field:focus-within{box-shadow:inset 0 0 0 1px var(--accent,var(--ink))}
+.ws-field textarea{flex:1;min-height:44px;resize:none;font-size:14px;line-height:1.55;padding:4px 0}
+.ws-field textarea::placeholder{color:var(--faint)}
+.ws-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ws-chip{height:26px;padding:0 10px;border-radius:13px;font-size:12px;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line);transition:color 140ms var(--out),box-shadow 140ms var(--out),background-color 140ms var(--out)}
+@media (hover:hover){.ws-chip:hover{color:var(--ink);background:var(--hover);box-shadow:inset 0 0 0 1px var(--line2)}}
+.ws-empty{display:flex;align-items:center;gap:10px;padding:18px 20px;border-radius:12px;font-size:13px;color:var(--faint);box-shadow:inset 0 0 0 1px var(--line)}
+.ws-files{display:flex;flex-direction:column;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line);padding:6px}
+.ws-file{display:flex;align-items:center;gap:12px;padding:6px 10px;border-radius:7px}
+.ws-file code{font:12px var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ws-files>.linkish{align-self:flex-start;margin:6px 10px;font-size:12px}
+.ws-count{display:flex;gap:8px;font:11px var(--mono)}
+.ws-count i{font-style:normal;color:var(--dim)}
+.ws-count em{font-style:normal;color:var(--faint)}
+.ws-new{font:11px var(--mono);color:var(--dim);padding:1px 6px;border-radius:4px;background:var(--hover)}
+.ws-suggest{flex-basis:100%;order:10;display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line2);animation:rise 360ms var(--out) both}
+.ws-suggest textarea,.ws-suggest input{width:100%;padding:8px 10px;border-radius:8px;background:var(--sheet);box-shadow:inset 0 0 0 1px var(--line);font-size:13px;line-height:1.5;transition:box-shadow 140ms var(--out)}
+.ws-suggest textarea{resize:vertical;min-height:64px}
+.ws-suggest :is(textarea,input):focus{box-shadow:inset 0 0 0 1px var(--ink)}
+.ws-suggest ::placeholder{color:var(--faint)}
+.setting.ws-idea{width:100%;text-align:left;transition:background-color 140ms var(--out)}
+.settings>.setting.ws-idea:first-child{border-top:0;border-radius:12px 12px 0 0}
+.settings>.setting.ws-idea:last-child{border-radius:0 0 12px 12px}
+.settings>.setting.ws-idea:only-child{border-radius:12px}
+@media (hover:hover){.setting.ws-idea:hover{background:var(--hover)}}
+.setting.ws-idea small{font:11px var(--mono);color:var(--faint)}
+.ws-undo.sure{color:var(--bad);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--bad) 45%,transparent)}
+@media (prefers-reduced-motion:reduce){.ws-suggest,.ws-dot{animation:none}}
+.ws-send{display:inline-flex;align-items:center;gap:12px}
+.ws-note-link{font-size:12px;color:var(--dim)}
+.ws-note-link:disabled{opacity:.4}
+.ws-bar{display:inline-flex;align-items:center;gap:2px;margin-left:8px;min-width:0}
+.ws-bar .ws-tag{margin-right:6px}
+.ws-bar .ghostbtn:disabled{opacity:.45}
+@media (max-width:980px){.ws-bar .ghostbtn span{display:none}}
