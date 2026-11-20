@@ -221,12 +221,14 @@ export const CATALOG: Def[] = [
     id: 'antigravity', name: 'Antigravity', short: 'Antigravity', maker: 'Google', via: 'cli', bin: 'agy', tools: true, mark: 'gemini',
     good: 'Long files, review, second opinions', alphabet: '.,oO0@',
     // Headless, a permission it would ask for is refused, so Ask runs as Plan: it reads and
-    // proposes, and nothing changes. Auto edits files but is refused commands. --sandbox is no
-    // limit here: a sandboxed command could still write to the home folder.
+    // proposes, and nothing changes. Auto is agy's own auto mode, which agy -p uses wherever the
+    // account has it: edits in the folder, commands in its sandbox (the folder, temp and build
+    // caches writable, no network, ~/.ssh and .env blocked) and its own check on anything that
+    // has to leave it. Passing no mode keeps that, and falls back to agy's default elsewhere.
     spawn: (i) => ({
       args: [
         '--print=', '--input-format', 'stream-json', '--output-format', 'stream-json',
-        ...{ plan: ['--mode', 'plan'], ask: i.allow?.length ? ['--mode', 'accept-edits'] : ['--mode', 'plan'], workspace: ['--mode', 'accept-edits'], full: ['--dangerously-skip-permissions'] }[i.access],
+        ...{ plan: ['--mode', 'plan'], ask: i.allow?.length ? ['--mode', 'accept-edits'] : ['--mode', 'plan'], workspace: [], full: ['--dangerously-skip-permissions'] }[i.access],
         ...agyChoice(i.model, i.effort),
         ...(i.session ? ['--conversation', i.session] : []),
       ],
