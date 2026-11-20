@@ -131,7 +131,7 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
           ) : (
             <div className="noagents">
               <b>No agent is ready yet.</b>
-              <span>Install Claude Code, Codex, Grok or Gemini CLI, or add an API key or a local model. Lunchbox picks them up on its own.</span>
+              <span>Install Claude Code, Codex, Grok or Antigravity, or add an API key or a local model. Lunchbox picks them up on its own.</span>
               <button className="btn small" onClick={() => go({ name: 'agents' })}>Set up an agent</button>
             </div>
           )}

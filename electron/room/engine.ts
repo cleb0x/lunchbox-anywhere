@@ -882,7 +882,7 @@ export class Engine {
     const pack = this.hooks.packs().find((p) => p.id === meta.pack)
     const session = meta.sessions[who]
     // Only the CLIs Lunchbox knows how to resume get a delta; a connector always gets the whole room.
-    const resumed = !!session && ['claude', 'codex', 'grok'].includes(who)
+    const resumed = !!session && ['claude', 'codex', 'grok', 'antigravity'].includes(who)
     const events = this.store.events(room)
     // The log is live and grows while the agent works; only what it was sent counts as heard.
     const upto = events.length

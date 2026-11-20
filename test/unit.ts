@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { claudeLike, codex, gemini, limitOf, plain, reason } from '../electron/agents/parse'
+import { antigravity, claudeLike, codex, gemini, limitOf, plain, reason } from '../electron/agents/parse'
 import { wallWhy } from '../shared/wall'
 import { check } from '../electron/room/proof'
 import { prompt } from '../electron/room/context'
@@ -546,6 +546,37 @@ test('savings: Gemini CLI cached tokens are not counted twice', () => {
   const q = gemini()
   q.line({ type: 'result', status: 'success', stats: { input_tokens: 1200, output_tokens: 100, cached: 800 } })
   assert.equal(q.turn.usage.input, 400)
+})
+
+// Lines as agy 1.5.13 prints them with --output-format stream-json.
+test('antigravity: text, commands, a refused command and usage', () => {
+  const p = antigravity()
+  const step = (s: object) => p.line({ event: 'step_update', step_update: { conversation_id: 'c1', ...s } })
+  p.line({ event: 'init', conversation_id: 'c1', init: { model: 'gemini-3.8-flash-low', cwd: '/w', tools: ['run_command'], permission_mode: 'request-review' } })
+  assert.deepEqual(step({ step_index: 2, state: 'ACTIVE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'echo hi' } } }), { working: 'run_command echo hi' })
+  step({ step_index: 2, state: 'DONE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'echo hi' }, output: 'Created At: 2026-11-20T10:42:36+01:00\nCompleted At: 2026-11-20T10:42:36+01:00\nCommand exited with code 0.\n\nCommand output:\nhi\r\n' } })
+  step({ step_index: 3, state: 'DONE', step_type: 'tool', tool_name: 'write_to_file', tool_info: { name: 'write_to_file', parameters: { TargetFile: '/w/a.txt' } } })
+  step({ step_index: 4, state: 'ERROR', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'touch u.txt' }, error: { type: 'TOOL_ERROR', message: 'permission check failed for unsandboxed "touch u.txt": user denied permission to run command:\ntouch u.txt' } } })
+  step({ step_index: 5, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'do' })
+  step({ step_index: 5, state: 'DONE', step_type: 'agent_response', text_delta: 'ne', usage: { input_tokens: 10 } })
+  p.line({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: 'done', usage: { input_tokens: 2195, output_tokens: 67, thinking_tokens: 11, cache_read_tokens: 14126 } } })
+  const t = p.turn
+  assert.equal(t.text, 'done')
+  assert.equal(t.session, 'c1')
+  assert.equal(t.model, 'gemini-3.8-flash-low')
+  assert.deepEqual(t.acts[0], { t: 'cmd', command: 'echo hi', exit: 0, out: 'Command exited with code 0.\nhi\r\n' })
+  assert.deepEqual(t.acts[1], { t: 'edit', path: '/w/a.txt', change: 'write' })
+  assert.equal(t.acts[2].t === 'cmd' && t.acts[2].exit, 1)
+  assert.deepEqual(t.denied, ['run_command(touch u.txt:*)'])
+  assert.deepEqual(t.usage, { input: 2195, output: 78, cached: 14126, cost: 0 })
+  assert.equal(t.error, undefined)
+})
+
+test('antigravity: a failed run says why', () => {
+  const p = antigravity()
+  p.line({ event: 'result', result: { conversation_id: 'c2', status: 'ERROR', response: '', error: 'not signed in' } })
+  assert.equal(p.turn.error, 'not signed in')
+  assert.equal(p.turn.session, 'c2')
 })
 
 test('savings: the ledger sums per day, per agent and per room', async () => {

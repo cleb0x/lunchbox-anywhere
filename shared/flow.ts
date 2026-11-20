@@ -136,26 +136,26 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'competitors', group: 'research', name: 'Competitor watch', line: 'What the competition shipped this week',
-    every: 'week', day: 5, at: '16:00', crew: ['grok', 'gemini', 'claude'], pack: 'research',
+    every: 'week', day: 5, at: '16:00', crew: ['grok', 'antigravity', 'claude'], pack: 'research',
     steps: [
       { to: 'grok', text: 'What did the competitors named in this folder\'s brief announce or ship this week? Check X and the web, with links.' },
-      { to: 'gemini', text: 'Check their sites, pricing pages and changelogs for changes the posts missed.' },
+      { to: 'antigravity', text: 'Check their sites, pricing pages and changelogs for changes the posts missed.' },
       { to: 'claude', text: 'Summarise what matters for us and what we should do about it. Last week: {{last}}' },
     ],
   },
   {
     id: 'papers', group: 'research', name: 'New papers', line: 'This week\'s papers in your field, read for you',
-    every: 'week', day: 1, at: '08:00', crew: ['gemini', 'claude'], pack: 'research',
+    every: 'week', day: 1, at: '08:00', crew: ['antigravity', 'claude'], pack: 'research',
     steps: [
-      { to: 'gemini', text: 'Find papers from the last seven days on the topics in this folder\'s brief, on arXiv and the main venues. Keep the five with the strongest results.' },
+      { to: 'antigravity', text: 'Find papers from the last seven days on the topics in this folder\'s brief, on arXiv and the main venues. Keep the five with the strongest results.' },
       { to: 'claude', text: 'For each: the claim in one sentence, how they tested it, and whether it changes anything for us. Skip anything already covered: {{last}}' },
     ],
   },
   {
     id: 'releases', group: 'research', name: 'Release radar', line: 'New versions of the tools you depend on',
-    every: 'week', day: 2, at: '09:00', crew: ['gemini', 'claude'],
+    every: 'week', day: 2, at: '09:00', crew: ['antigravity', 'claude'],
     steps: [
-      { to: 'gemini', text: 'Read the dependency files in this folder. Check which of the main libraries and services had releases this week, with links to their notes.' },
+      { to: 'antigravity', text: 'Read the dependency files in this folder. Check which of the main libraries and services had releases this week, with links to their notes.' },
       { to: 'claude', text: 'Say which releases matter for this project and why, in one line each.' },
     ],
   },
@@ -206,7 +206,7 @@ export const TEMPLATES: Template[] = [
   // Business
   {
     id: 'seo-week', group: 'business', name: 'Weekly SEO check', line: 'Rankings, broken links and quick wins',
-    every: 'week', day: 1, at: '09:00', crew: ['claude', 'gemini', 'grok'], pack: 'seo',
+    every: 'week', day: 1, at: '09:00', crew: ['claude', 'antigravity', 'grok'], pack: 'seo',
     steps: [
       { text: 'Audit the site in this folder: titles, descriptions, headings, broken links, missing alt text and structured data. Rank the issues by impact.' },
       { to: 'grok', text: 'What are people searching for and saying this week about the topics this site covers? Five opportunities with evidence.' },
@@ -215,9 +215,9 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'leads', group: 'business', name: 'Lead list', line: 'Ten fresh companies that fit, with a reason each',
-    every: 'week', day: 1, at: '08:30', crew: ['gemini', 'grok', 'claude'], pack: 'research',
+    every: 'week', day: 1, at: '08:30', crew: ['antigravity', 'grok', 'claude'], pack: 'research',
     steps: [
-      { to: 'gemini', text: 'Using the ideal customer in this folder\'s brief, find ten companies that fit and are not already in leads.csv. Website, size, and the signal that makes them a fit now.' },
+      { to: 'antigravity', text: 'Using the ideal customer in this folder\'s brief, find ten companies that fit and are not already in leads.csv. Website, size, and the signal that makes them a fit now.' },
       { to: 'grok', text: 'Check each on X for recent posts by the company or its founders that would make a good opening line.' },
       { to: 'claude', text: 'Append them to leads.csv and draft a three sentence first message for each. Do not send anything.' },
     ],
@@ -237,9 +237,9 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'pricing', group: 'business', name: 'Pricing check', line: 'Your prices next to the market, monthly',
-    every: 'week', day: 1, at: '10:00', crew: ['gemini', 'claude'],
+    every: 'week', day: 1, at: '10:00', crew: ['antigravity', 'claude'],
     steps: [
-      { to: 'gemini', text: 'Collect the current public pricing of the competitors in this folder\'s brief: plans, limits and what each tier includes.' },
+      { to: 'antigravity', text: 'Collect the current public pricing of the competitors in this folder\'s brief: plans, limits and what each tier includes.' },
       { to: 'claude', text: 'Put it in a table next to ours and say where we are cheap, expensive or confusing. Changes since last time: {{last}}' },
     ],
   },
@@ -252,17 +252,17 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'learning', group: 'personal', name: 'Learn one thing', line: 'A short daily lesson that builds on yesterday',
-    every: 'weekday', at: '07:00', crew: ['claude', 'gemini'],
+    every: 'weekday', at: '07:00', crew: ['claude', 'antigravity'],
     steps: [
-      { to: 'gemini', text: 'Read learning.md in this folder for the topic and what was covered so far, and find one good source for the next step.' },
+      { to: 'antigravity', text: 'Read learning.md in this folder for the topic and what was covered so far, and find one good source for the next step.' },
       { to: 'claude', text: 'Write a ten minute lesson with one exercise, building on yesterday: {{last}}. Append a line to learning.md about what this lesson covered.' },
     ],
   },
   {
     id: 'trip', group: 'personal', name: 'Trip planner', line: 'Flights, stays and a day by day plan',
-    crew: ['gemini', 'grok', 'claude'],
+    crew: ['antigravity', 'grok', 'claude'],
     steps: [
-      { to: 'gemini', text: 'Read trip.md in this folder for where, when and the budget. Find flight options and three places to stay in the best areas, with prices and links.' },
+      { to: 'antigravity', text: 'Read trip.md in this folder for where, when and the budget. Find flight options and three places to stay in the best areas, with prices and links.' },
       { to: 'grok', text: 'What are locals and recent visitors recommending right now? Food, things to skip, and anything happening on those dates.' },
       { to: 'claude', text: 'Write a day by day plan inside the budget, with the bookings to make first. Save it to trip-plan.md.' },
     ],

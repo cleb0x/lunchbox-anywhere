@@ -168,7 +168,7 @@ function Tools({ q, say }: { q: string; say: (t: string) => void }) {
       <div className="toolnote rise" style={{ '--i': 2 } as CSSProperties}>
         <div className="grow">
           <b>{ready.length ? `${ready.length} connected, ${count} tools in every room` : 'Connect a tool once, every agent can use it'}</b>
-          <span>Lunchbox runs these open source MCP servers itself and passes their tools to Claude Code, Codex and Gemini in every room. Nothing to configure per agent.</span>
+          <span>Lunchbox runs these open source MCP servers itself and passes their tools to Claude Code, Codex and Gemini CLI in every room. Nothing to configure per agent.</span>
         </div>
         <div className="row">
           <span className="quiet">Lunchbox browser</span>

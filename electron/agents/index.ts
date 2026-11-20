@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import type { Access, AgentInfo, Act, Connector, Meter, Usage } from '../../shared/types'
 import { capture, env, launch, probe, runnable, stop, version, which } from '../system'
-import { claudeLike, codex, gemini, limitOf, reason, textOut, type Turn, type Update } from './parse'
+import { antigravity, claudeLike, codex, gemini, limitOf, reason, textOut, type Turn, type Update } from './parse'
 import { chat, listModels, parseHeaders, PROVIDERS } from './http'
 import type { Bench } from './bench'
 import { logoOf } from '../../shared/logos'
@@ -192,8 +192,27 @@ export const CATALOG: Def[] = [
     }),
   },
   {
-    id: 'gemini', name: 'Gemini CLI', short: 'Gemini', maker: 'Google', via: 'cli', bin: 'gemini', tools: true, mark: 'gemini',
+    id: 'antigravity', name: 'Antigravity', short: 'Antigravity', maker: 'Google', via: 'cli', bin: 'agy', tools: true, mark: 'gemini',
     good: 'Long files, review, second opinions', alphabet: '.,oO0@',
+    // Headless, a permission it would ask for is refused, so Ask runs as Plan: it reads and
+    // proposes, and nothing changes. Auto edits files but is refused commands. --sandbox is no
+    // limit here: a sandboxed command could still write to the home folder.
+    spawn: (i) => ({
+      args: [
+        '--print=', '--input-format', 'stream-json', '--output-format', 'stream-json',
+        ...{ plan: ['--mode', 'plan'], ask: i.allow?.length ? ['--mode', 'accept-edits'] : ['--mode', 'plan'], workspace: ['--mode', 'accept-edits'], full: ['--dangerously-skip-permissions'] }[i.access],
+        ...(i.effort ? ['--effort', i.effort] : []),
+        ...(i.model ? ['--model', i.model] : []),
+        ...(i.session ? ['--conversation', i.session] : []),
+      ],
+      // A prompt as an argument would not fit a whole room on Windows; on stdin it is one message.
+      stdin: JSON.stringify({ event: 'user', message: { content: prompt(i) } }) + '\n',
+      parser: antigravity(),
+    }),
+  },
+  {
+    id: 'gemini', name: 'Gemini CLI', short: 'Gemini', maker: 'Google', via: 'cli', bin: 'gemini', tools: true, mark: 'gemini',
+    good: 'For a Gemini API key or Enterprise sign in; personal accounts use Antigravity', alphabet: '.,oO0@',
     spawn: (i, file) => ({
       args: [
         '-o', 'stream-json', '--skip-trust', '-p', 'Respond to the request above.',
@@ -328,6 +347,14 @@ const CLAUDE_MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'claude-fable-5-2', '
 // Gemini CLI has no command that lists models; these are the ones it accepts by name, newest first.
 const GEMINI_MODELS = ['auto-gemini-3', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.1-flash-lite']
 
+// `agy models` prints one model a line: its id, a tab, then the name it shows.
+async function antigravityModels() {
+  const path = paths.get('antigravity') ?? (await locate('agy'))
+  if (!path) return []
+  const out = await capture(path, ['models'], 15000, await env())
+  return [...out.matchAll(/^([\w.:/-]+)\t/gm)].map((m) => m[1])
+}
+
 // Codex keeps the models this account may pick in its own cache, in the order its picker shows them.
 function codexModels() {
   try {
@@ -353,6 +380,7 @@ export async function modelsFor(id: string, keys: Record<string, string>) {
   if (d?.id === 'codex') return codexModels()
   if (d?.id === 'grok') return grokModels()
   if (d?.id === 'gemini') return GEMINI_MODELS
+  if (d?.id === 'antigravity') return antigravityModels()
   if (!d || d.via === 'cli') return []
   wear(d, keys)
   const all = await listModels(providerOf(d), keys[d.key!] ?? '')

@@ -16,7 +16,7 @@ export type Host = {
   lead: boolean
 }
 
-const SEARCHERS = { x: ['grok'], web: ['gemini', 'grok'] }
+const SEARCHERS = { x: ['grok'], web: ['antigravity', 'gemini', 'grok'] }
 const str = (v: unknown, name: string) => {
   if (typeof v !== 'string' || !v.trim()) throw new Error(`${name} is required`)
   return v.trim()

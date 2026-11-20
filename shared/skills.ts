@@ -138,7 +138,7 @@ export const PLAYBOOKS: Playbook[] = [
   },
   // Research
   {
-    id: 'deep', name: 'Deep research', field: 'Research', line: 'A sourced answer, with what is uncertain', pack: 'research', crew: ['claude', 'grok', 'gemini'], ask: 'What do you want to know?',
+    id: 'deep', name: 'Deep research', field: 'Research', line: 'A sourced answer, with what is uncertain', pack: 'research', crew: ['claude', 'grok', 'antigravity'], ask: 'What do you want to know?',
     prompt: 'Research: {{input}}\n\nSplit it into the three to five questions that decide the answer. Search the web and X for each, prefer primary sources, and note where sources disagree. Write a short answer first, then the evidence with links, then what is still uncertain.',
     tools: ['exa', 'firecrawl'],
   },
