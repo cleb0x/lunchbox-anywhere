@@ -24,8 +24,11 @@ import { Store, type Cipher } from './store'
 import { cancelPull, pull, start } from './local'
 import { Limits } from './limits'
 import { allowed, claudeDir, found, read, resumes, room as roomFrom } from './import'
+import { Workshop } from './workshop'
 
 app.setName('Lunchbox')
+// The person's own build from the Workshop shares the standard app's profile: same rooms, same keys.
+if (process.env.LUNCHBOX_USER_DATA) app.setPath('userData', process.env.LUNCHBOX_USER_DATA)
 // Electron exposes FedCM but has no browser side for it, so "Continue with Google" buttons fail
 // without a word. With it off, Google falls back to its sign-in popup, which the browser opens.
 app.commandLine.appendSwitch('disable-blink-features', 'FedCm')
@@ -61,6 +64,7 @@ let remote: Remote
 let browser: Browser
 let toolbox: Toolbox
 let updates: Updates | undefined
+let workshop: Workshop
 const packs = () => loadPacks(store.packFiles())
 const name = (id: string) => engine.agents.find((a) => a.id === id)?.short ?? id
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'room'
@@ -160,7 +164,7 @@ function createWindow(room?: string) {
   wins.add(win)
   last = win
   if (at.maximized) win.maximize()
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => { win.show(); workshop?.started() })
   win.on('focus', () => { last = win })
   for (const e of ['resize', 'move', 'maximize', 'unmaximize'] as const) win.on(e as 'resize', () => remember(win))
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -440,7 +444,23 @@ function wire() {
   h('connector:test', (c: Connector, key: string, headers?: string) => testConnector(c, key ?? '', typeof headers === 'string' ? headers : ''))
   // An installer may have just added its folder to the shell profile, so the PATH is read again.
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
-  h('packs', () => packs())
+  h('packs', () => packs().filter((p) => !p.hidden))
+  h('workshop', () => workshop.state())
+  h('workshop:setup', () => workshop.setup())
+  h('workshop:open', () => workshop.open())
+  h('workshop:back', () => workshop.back())
+  h('workshop:stop-using', () => workshop.stopUsing())
+  h('workshop:dismiss', () => workshop.dismiss())
+  h('workshop:reset', () => workshop.reset())
+  h('workshop:update', () => workshop.update())
+  h('workshop:folder', () => shell.openPath(workshop.dir))
+  // A suggestion is the person's note with the change attached, sent the way reports go.
+  h('workshop:suggest', async (note: string, contact?: string) => {
+    const { stat, diff } = await workshop.patch()
+    if (!stat) throw new Error('There are no changes to send yet')
+    const text = `Workshop suggestion\n\n${String(note ?? '').trim() || '(no note)'}\n\nFiles:\n${stat}`
+    return send({ kind: 'idea', text, contact: contact || undefined, context: diff.slice(0, 4000), diagnostics: diagnostics(engine.agents) }, store.dir, Object.values(store.keys()))
+  })
   hw('packs:import', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Import a pack', filters: [{ name: 'Lunchbox pack', extensions: ['json'] }], properties: ['openFile'] })
     if (r.canceled) return null
@@ -543,6 +563,9 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(async () => {
   if (!first) return
+  workshop = new Workshop(app.getPath('userData'), (s) => emit('workshop', s))
+  // The person chose to run their own build: it opens instead, unless it failed last time.
+  if (await workshop.takeOver()) return
   // The Lunchbox folder exists from the first launch, so the first room has somewhere to go.
   try { mkdirSync(workspace(), { recursive: true }) } catch {}
   store = new Store(join(app.getPath('userData'), 'data'), cipher)
@@ -579,7 +602,7 @@ app.whenReady().then(async () => {
   remote.start()
   toolbox.startAll()
 })
-app.on('before-quit', () => { engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush() })
+app.on('before-quit', () => { workshop?.stop(); engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush() })
 app.on('will-quit', finishStops)
 app.on('window-all-closed', () => { if (!mac) app.quit() })
 app.on('activate', () => { if (!wins.size && store) createWindow() })
