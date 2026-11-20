@@ -26,7 +26,8 @@ import { ImportSheet } from './views/Import'
 import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
 import { codeColours, wellOf } from './lib/codecolors'
-import { loadTune, saveTune, tuned, type Tune } from './lib/tune'
+import { NO_TUNE, tuned, type Tune } from './lib/tune'
+import { loadTweaks, saveTweaks, withTweak, type Tweak } from './lib/tweaks'
 import { shift } from './lib/fit'
 import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
 
@@ -82,11 +83,14 @@ export function App() {
   // Themes a person made, and the one being made right now, shown on the app before it is saved.
   const [custom, setCustom] = useState<Theme[]>(loadCustom)
   const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox'), custom).id)
-  const [ascii, setAscii] = useState<AsciiId>(() => asciiOf(saved('ascii', 'theme')).id)
   const [preview, setPreview] = useState<Theme | null>(null)
-  // Single colours changed on top of the theme, per mode, from Fine tune in Settings.
-  const [tune, setTuneState] = useState<Tune>(loadTune)
-  const setTune = (t: Tune) => { setTuneState(t); saveTune(t) }
+  // The ASCII colour and the single colours changed by hand belong to the theme they were set on.
+  const [tweaks, setTweaks] = useState(loadTweaks)
+  const ascii: AsciiId = tweaks[theme]?.ascii ?? 'theme'
+  const tune: Tune = tweaks[theme]?.tune ?? NO_TUNE
+  const tweak = (change: Tweak) => setTweaks((all) => { const next = withTweak(all, theme, change); saveTweaks(next); return next })
+  const setAscii = (a: AsciiId) => tweak({ ascii: a })
+  const setTune = (t: Tune) => tweak({ tune: t })
   const [look, setLookState] = useState<Look>(() => ((new URLSearchParams(location.search).get('look') ?? saved('look', 'lunchbox')) === 'neyra' ? 'neyra' : 'lunchbox'))
   const [ready, setReady] = useState<boolean>(() => saved<unknown>('ready', false) === true)
   const [arriving, setArriving] = useState(false)
@@ -154,7 +158,8 @@ export function App() {
   useLayoutEffect(() => {
     const root = document.documentElement
     const t = preview ?? themeOf(theme, custom)
-    const a = asciiOf(ascii)
+    // A theme still being made is shown as itself.
+    const a = asciiOf(preview ? 'theme' : ascii)
     const set: Record<string, string> = tokens(t, mode)
     const own = a.id === 'theme' || a.id === 'ink' ? null : a[mode]!
     own?.forEach((c, i) => { set[`--glyph-${i + 1}`] = c })
@@ -175,9 +180,8 @@ export function App() {
     root.dataset.ascii = a.id
     keep('theme', mode)
     if (!preview) keep('palette', t.id)
-    keep('ascii', a.id)
     desk.call('theme', mode === 'dark')
-  }, [theme, mode, ascii, custom, preview, tune])
+  }, [theme, mode, ascii, custom, preview, tweaks])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
   // Every window shares one saved appearance, so a change made in one is put on in the others.
   useEffect(() => {
@@ -189,8 +193,7 @@ export function App() {
         setCustom(list)
         setThemeState(themeOf(saved('palette', 'lunchbox'), list).id)
       }
-      if (key === 'ascii') setAscii(asciiOf(saved('ascii', 'theme')).id)
-      if (key === 'tune') setTuneState(loadTune())
+      if (key === 'tweaks') setTweaks(loadTweaks())
       if (key === 'look') setLookState(saved<string>('look', 'lunchbox') === 'neyra' ? 'neyra' : 'lunchbox')
       if (key === 'ready') setReady(saved<unknown>('ready', false) === true)
     }
@@ -223,6 +226,7 @@ export function App() {
     const next = custom.filter((x) => x.id !== id)
     setCustom(next)
     saveCustom(next)
+    setTweaks((all) => { const rest = withTweak(all, id, { ascii: 'theme', tune: NO_TUNE }); saveTweaks(rest); return rest })
     if (theme === id) setTheme('lunchbox')
   }
   useEffect(() => {

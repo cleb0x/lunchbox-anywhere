@@ -7,8 +7,8 @@ import { useModal } from '../lib/modal'
 // Fine tuning one colour at a time on top of the theme that is on. Changes apply at once and are
 // kept; each has its own reset. The colours shown are read back from the window after App has
 // painted, so they are what is on screen, theme and tune together.
-export function TuneSheet({ tune, setTune, mode, setMode, close, theme }: {
-  tune: Tune; setTune: (t: Tune) => void; mode: Mode; setMode: (m: Mode) => void; close: () => void; theme: string
+export function TuneSheet({ tune, setTune, mode, setMode, close, theme, name }: {
+  tune: Tune; setTune: (t: Tune) => void; mode: Mode; setMode: (m: Mode) => void; close: () => void; theme: string; name: string
 }) {
   const [seen, setSeen] = useState<Record<string, string>>({})
   useModal()
@@ -35,7 +35,7 @@ export function TuneSheet({ tune, setTune, mode, setMode, close, theme }: {
       <div className="sheetcard tunesheet" role="dialog" aria-label="Fine tune colours">
         <header>
           <h2>Fine tune</h2>
-          <p>Change any colour on its own, on top of the theme. Night and day keep their own.</p>
+          <p>Change any colour of {name} on its own. Night and day keep their own, and so does each theme.</p>
         </header>
         <div className="tmode">
           <span>Colours for</span>

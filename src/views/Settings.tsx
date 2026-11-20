@@ -101,6 +101,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
     if (t) setEditing({ draft: draftOf(t), id: t.id })
   }, [edit])
   const tunedCount = Object.keys(tune.dark).length + Object.keys(tune.light).length
+  const themeName = themeOf(theme, custom).name
 
   return (
     <div className="page">
@@ -114,7 +115,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             <div className="seg">{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
           </div>
           <div className="setting col">
-            <div className="grow"><b>ASCII colour</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own.</span></div>
+            <div className="grow"><b className="withreset">ASCII colour{ascii !== 'theme' && <button className="linkbtn" onClick={() => setAscii('theme')}>Reset to {themeName}</button>}</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own. Each theme remembers its own choice.</span></div>
             <div className="asciis" role="radiogroup" aria-label="ASCII colour">
               {ASCII.map((a) => {
                 const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme, custom)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!
@@ -150,9 +151,10 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
           </div>
           <div className="setting">
-            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand, on top of the theme.` : 'Change single colours, like the text or the sheet, on top of any theme.'}</span></div>
+            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand on ${themeName}. Other themes keep their own.` : `Change single colours of ${themeName}, like the text or the sheet. Other themes keep their own.`}</span></div>
+            {tunedCount > 0 && <button className="btn small quiet" onClick={() => setTune({ dark: {}, light: {} })}>Reset to {themeName}</button>}
             <button className="btn small quiet" onClick={() => setTuning(true)}>Customise</button>
-            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} />}
+            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} name={themeName} />}
           </div>
           <div className="setting">
             <div className="grow"><b>Look</b><span>Lunchbox floats the work on a soft sheet. Square is flat panes, hairlines and square corners.</span></div>

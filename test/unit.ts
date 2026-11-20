@@ -1667,6 +1667,32 @@ test('rich: tables, rules and emphasis are read as what they are', async () => {
   assert.equal(blocks('###### Deep')[0].t, 'h')
 })
 
+test('tweaks: each theme keeps its own, and the old global ones go to the theme that was on', async () => {
+  const { loadTweaks, withTweak } = await import('../src/lib/tweaks')
+  const jar = (start: Record<string, unknown>) => {
+    const m = new Map(Object.entries(start).map(([k, v]) => [k, JSON.stringify(v)]))
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) }, m }
+  }
+  const old = jar({ 'lb.palette': 'cobalt', 'lb.ascii': 'riso', 'lb.tune': { dark: { '--ink': '#ffffff' }, light: {} } })
+  const moved = loadTweaks(old)
+  assert.deepEqual(moved, { cobalt: { ascii: 'riso', tune: { dark: { '--ink': '#ffffff' }, light: {} } } })
+  assert.deepEqual(JSON.parse(old.m.get('lb.tweaks')!), moved)
+  // The move happens once: a later change to the old keys is not read again.
+  old.m.set('lb.ascii', JSON.stringify('koi'))
+  assert.deepEqual(loadTweaks(old), moved)
+  assert.deepEqual(loadTweaks(jar({ 'lb.palette': 'meadow', 'lb.ascii': 'theme' })), {})
+  assert.deepEqual(loadTweaks(jar({ 'lb.ascii': 'brass' })), { lunchbox: { ascii: 'brass' } })
+
+  const two = withTweak(moved, 'meadow', { ascii: 'sakura' })
+  assert.equal(two.meadow.ascii, 'sakura')
+  assert.equal(two.cobalt.ascii, 'riso')
+  assert.equal(two.dusk, undefined)
+  // Back to the theme's own in every part, and nothing is left to store.
+  assert.deepEqual(withTweak(two, 'meadow', { ascii: 'theme' }), moved)
+  assert.deepEqual(withTweak(moved, 'cobalt', { ascii: 'theme', tune: { dark: {}, light: {} } }), {})
+  assert.deepEqual(loadTweaks(jar({ 'lb.tweaks': { koi: { ascii: 'nope', tune: { dark: { '--evil': '#000000' } } }, dusk: { ascii: 'ember' } } })), { dusk: { ascii: 'ember' } })
+})
+
 test('model names: a snapshot date is not a version', async () => {
   ;(globalThis as any).window ??= globalThis
   const { modelName } = await import('../src/ui/ModelPicker')
