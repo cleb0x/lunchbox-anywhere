@@ -209,7 +209,8 @@ export class Workshop {
     const child = spawn(electron, [this.dir], {
       detached: true,
       stdio: 'ignore',
-      env: { ...process.env, LUNCHBOX_WORKSHOP: '1', LUNCHBOX_STANDARD: process.execPath, LUNCHBOX_USER_DATA: app.getPath('userData') },
+      // From the person's own build, the way back is still the standard app it was started from.
+      env: { ...process.env, LUNCHBOX_WORKSHOP: '1', LUNCHBOX_STANDARD: process.env.LUNCHBOX_STANDARD || process.execPath, LUNCHBOX_USER_DATA: app.getPath('userData') },
     })
     child.unref()
     const exited = new Promise<boolean>((done) => child.once('exit', () => done(false)))

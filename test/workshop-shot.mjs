@@ -78,13 +78,18 @@ writeFileSync(join(ws, 'README.md'), readFileSync(join(ws, 'README.md'), 'utf8')
   const closed = new Promise((done) => app.process().once('exit', done))
   await page.click('button:has-text("Open your version")')
   await page.waitForSelector('.ws-progress', { timeout: 10000 }).catch(() => {})
-  await shot(page, '05-building', 1500)
+  await shot(page, '05-building', 300).catch(() => {})
   const ended = await Promise.race([closed.then(() => true), new Promise((r) => setTimeout(() => r(false), 180000))])
   check(ended, 'the standard app steps aside after the hand over')
   const saved = JSON.parse(readFileSync(join(profile, 'workshop.json'), 'utf8'))
   check(saved.use === true && saved.start?.ok === true, `the person's build opened a window and said so (${JSON.stringify(saved.start)})`)
   check(existsSync(join(ws, 'out', 'main.cjs')), 'the copy was built')
+  // The own build holds the profile until it has quit, so the next step waits for it to go.
   try { execFileSync('pkill', ['-f', ws]) } catch {}
+  for (let i = 0; i < 40; i++) {
+    try { execFileSync('pgrep', ['-f', ws]) } catch { break }
+    await new Promise((r) => setTimeout(r, 250))
+  }
 }
 
 // 3. The person's build itself shows that it is theirs and offers the way back.

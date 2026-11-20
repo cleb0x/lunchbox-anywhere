@@ -5,6 +5,9 @@ import { IconFolder, IconPlay, IconShare } from '../ui/icons'
 import { ago, desk, isDesktop, mod, reason, unavailable, useApp } from '../lib/desk'
 import type { View } from '../App'
 
+// A release reads as its version; anything else, such as a commit in tests, by its short id.
+const label = (ref?: string) => (!ref ? '' : /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 7) : ref.replace(/^v/, ''))
+
 const IDEAS = [
   'A button that copies the whole room as Markdown',
   'A shortcut that opens the room\'s folder in my editor',
@@ -74,7 +77,7 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
         {state?.mine && (
           <section className="ws-mine rise" style={{ '--i': 1 } as CSSProperties}>
             <span className="ws-dot" aria-hidden />
-            <div className="grow"><b>You are using your version</b><span>Built from your Workshop on Lunchbox {state.base?.replace(/^v/, '')}. Updates install in the standard Lunchbox.</span></div>
+            <div className="grow"><b>You are using your version</b><span>Built from your Workshop on Lunchbox {label(state.base)}. Updates install in the standard Lunchbox.</span></div>
             <button className="btn small quiet" onClick={() => act('workshop:back')}>Back to standard Lunchbox</button>
           </section>
         )}
@@ -98,7 +101,7 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
               <section className="group rise" style={{ '--i': 2 } as CSSProperties}>
                 <div className="settings">
                   <div className="setting">
-                    <div className="grow"><b>Lunchbox was updated</b><span>Your changes are on {state.base?.replace(/^v/, '')} and this is {state.current.replace(/^v/, '')}. Bring them along to keep using your version.</span></div>
+                    <div className="grow"><b>Lunchbox was updated</b><span>Your changes are on {label(state.base)} and this is {label(state.current)}. Bring them along to keep using your version.</span></div>
                     <button className="btn small" disabled={!!busy} onClick={() => act('workshop:update', 'Your changes are on the new version')}>Bring them along</button>
                   </div>
                 </div>
@@ -106,14 +109,12 @@ export function Workshop({ go, say }: { go: (v: View) => void; say: (t: string) 
             )}
 
             <section className="group rise" style={{ '--i': 3 } as CSSProperties}>
-              <h2>Your changes<span className="quiet">{state.changes.length ? `${state.changes.length} file${state.changes.length === 1 ? '' : 's'} differ from Lunchbox ${state.base?.replace(/^v/, '')}` : 'nothing yet'}</span></h2>
+              <h2>Your changes<span className="quiet">{state.changes.length ? `${state.changes.length} file${state.changes.length === 1 ? '' : 's'} differ from Lunchbox ${label(state.base)}` : 'nothing yet'}</span></h2>
               {state.changes.length > 0 ? <Changes state={state} /> : <div className="ws-empty">What your agents change shows up here, file by file.</div>}
               <div className="ws-actions">
-                {!state.mine && (
-                  <button className="btn" disabled={!!busy || behind || !state.changes.length} onClick={() => act('workshop:open')} title={behind ? 'Bring your changes to this version first' : undefined}>
-                    <IconPlay />Open your version
-                  </button>
-                )}
+                <button className="btn" disabled={!!busy || behind || (!state.mine && !state.changes.length)} onClick={() => act('workshop:open')} title={behind ? 'Bring your changes to this version first' : undefined}>
+                  <IconPlay />{state.mine ? 'Restart with the latest changes' : 'Open your version'}
+                </button>
                 <Suggest disabled={!!busy || !state.changes.length} say={say} />
                 <span className="grow" />
                 <button className="btn small quiet" onClick={() => desk.call('workshop:folder')}><IconFolder />Show folder</button>
