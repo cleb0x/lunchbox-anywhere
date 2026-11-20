@@ -4,6 +4,7 @@ import { Loader, Mark, Meter } from '../ui/bits'
 import { clock, desk, money, reason, reload, tokens, unavailable, useApp } from '../lib/desk'
 import { addOpenCode, ConnectorSheet, hasOpenCode, OPENCODE_INSTALL, openCodeFound, removeConnector } from './Connect'
 import type { Connector } from '../../shared/types'
+import { INSTALL } from '../lib/install'
 
 const GROUPS: { via: AgentInfo['via'][]; title: string; line: string }[] = [
   { via: ['cli'], title: 'On this computer', line: 'Command line agents with their own login and plan. Lunchbox runs the real tool.' },
@@ -78,6 +79,13 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
   const budget = settings.budgets[a.id] ?? 0
   const spent = ledger?.spent[a.id]
   const s = a.setup
+  // The row stays for as long as it takes to fold shut.
+  const [shown, setShown] = useState(open)
+  useEffect(() => {
+    if (open) { setShown(true); return }
+    const t = setTimeout(() => setShown(false), 200)
+    return () => clearTimeout(t)
+  }, [open])
   const state = !a.found ? (a.via === 'api' ? 'No key' : a.note ? 'Does not start' : 'Not installed') : s && !s.running ? 'Not running' : s && !a.ready ? 'No chat model' : why ? 'Unavailable' : 'Ready'
   return (
     <div className={`agent${open ? ' open' : ''}${a.found ? '' : ' missing'}`} style={{ '--i': i } as CSSProperties}>
@@ -90,11 +98,13 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
           <span>{today ? `${tokens(today.input + today.output + today.cached)} today${today.cost ? `, ${money(today.cost)}` : ''}` : state}</span>
         </span>
       </button>
-      {open && (
-        <div className="agentbody">
-          {a.note && <p className="anote">{a.note}</p>}
+      {(open || shown) && (
+        <div className={`agentfold${open ? '' : ' closing'}`}><div><div className="agentbody">
+          {a.note && !(a.id === 'antigravity' && a.found) && <p className="anote">{a.note}</p>}
           {a.setup && <LocalSetupBox a={a} say={say} />}
+          {!a.found && a.via === 'cli' && !a.note && <InstallBox a={a} />}
           {a.via === 'api' && PROVIDER[a.id] && <KeyField a={a} say={say} />}
+          {a.id === 'antigravity' && a.found && <AgyKey a={a} say={say} />}
           {extra}
           {a.found && (!a.setup || a.ready) && <ModelField a={a} />}
           {a.via === 'local' && <AddressField a={a} />}
@@ -106,24 +116,40 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
               <small>US dollars. Over it, the room moves work to the next agent.</small>
             </label>
           )}
-          <div className="astats">
+          {a.found && <div className="astats">
             <span><b>{week ? tokens(week.input + week.output + week.cached) : 0}</b> tokens this week</span>
             {week && week.cached > 0 && <span><b>{Math.round((week.cached / (week.input + week.cached)) * 100)}%</b> read from cache</span>}
             {week && week.cost > 0 && <span><b>{money(week.cost)}</b> this week</span>}
             <span><b>{wins}</b> side by side {wins === 1 ? 'win' : 'wins'}</span>
-          </div>
-          <div className="row">
-            {a.found && (
-              <button className="btn small quiet" onClick={() => reload.settings({ disabled: settings.disabled.includes(a.id) ? settings.disabled.filter((d) => d !== a.id) : [...settings.disabled, a.id] })}>
-                {settings.disabled.includes(a.id) ? 'Turn on' : 'Turn off'}
-              </button>
-            )}
+          </div>}
+          {a.found && <div className="row">
+            <button className="btn small quiet" onClick={() => reload.settings({ disabled: settings.disabled.includes(a.id) ? settings.disabled.filter((d) => d !== a.id) : [...settings.disabled, a.id] })}>
+              {settings.disabled.includes(a.id) ? 'Turn on' : 'Turn off'}
+            </button>
             {spent && spent.until > Date.now() && (
               <button className="btn small quiet" onClick={() => { desk.call('spent:clear', a.id); say(`${a.short} is back in rotation`) }}>Back already? Clear the limit ({clock(spent.until)})</button>
             )}
-          </div>
-        </div>
+          </div>}
+        </div></div></div>
       )}
+    </div>
+  )
+}
+
+// How to get a command line agent that is not on this computer: its install line, copied on a click.
+function InstallBox({ a }: { a: AgentInfo }) {
+  const how = INSTALL[a.id]
+  const [copied, setCopied] = useState(false)
+  if (!how) return null
+  const site = how.url.replace('https://', '')
+  const copy = () => { navigator.clipboard.writeText(how.cmd!); setCopied(true); setTimeout(() => setCopied(false), 1400) }
+  return (
+    <div className="localbox">
+      <p>{a.name} is not on this computer yet. {a.id === 'antigravity' ? 'Run this in a terminal and press Check again. Lunchbox then sets it up with a Gemini API key.' : how.cmd ? 'Run this in a terminal, sign in there once, and press Check again.' : 'Install it, sign in once, and press Check again.'}</p>
+      <div className="row">
+        {how.cmd && <button className="installcmd" onClick={copy} title="Copy">{copied ? 'copied' : `$ ${how.cmd}`}</button>}
+        <a className="hint" href={how.url} target="_blank" rel="noreferrer">{site}</a>
+      </div>
     </div>
   )
 }
@@ -133,6 +159,7 @@ const PROVIDER: Record<string, { key: string; url: string; hint: string }> = {
   'openai-api': { key: 'openai', url: 'https://platform.openai.com/api-keys', hint: 'sk-…' },
   'grok-api': { key: 'xai', url: 'https://console.x.ai', hint: 'xai-…' },
   'gemini-api': { key: 'google', url: 'https://aistudio.google.com/apikey', hint: 'AIza…' },
+  antigravity: { key: 'google', url: 'https://aistudio.google.com/apikey', hint: 'AIza…' },
   openrouter: { key: 'openrouter', url: 'https://openrouter.ai/keys', hint: 'sk-or-…' },
 }
 
@@ -161,6 +188,35 @@ function KeyField({ a, say }: { a: AgentInfo; say: (t: string) => void }) {
       </div>
       <small>Get one at <a href={p.url} target="_blank" rel="noreferrer">{p.url.replace('https://', '')}</a></small>
     </label>
+  )
+}
+
+// Antigravity runs here only on a Gemini API key: Google suspends accounts whose Google login is
+// driven by another app. The key is the one Gemini API uses, and agy has to be told to use it.
+function AgyKey({ a, say }: { a: AgentInfo; say: (t: string) => void }) {
+  const [mode, setMode] = useState<{ keyMode: boolean; hasKey: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { desk.call('agents:agy-mode').then(setMode, () => {}) }, [a.ready, a.note])
+  if (!mode) return null
+  const switchOver = async () => {
+    setBusy(true)
+    try {
+      setMode(await desk.call('agents:agy-key'))
+      say('Antigravity now runs on your Gemini API key')
+      await reload.agents()
+    } catch (e) { say(reason(e)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="agykey">
+      <KeyField a={a} say={say} />
+      {!mode.keyMode && (
+        <div className="row">
+          <span className="hint grow">Switching tells Antigravity to use this key instead of your Google account, in your terminal as well. Usage goes to the key, which has a free tier. Your previous settings are kept in a backup file.</span>
+          <button className="btn small" disabled={!mode.hasKey || busy} onClick={switchOver} title={mode.hasKey ? undefined : 'Save a key first'}>{busy ? <Loader size={10} /> : 'Use the key'}</button>
+        </div>
+      )}
+      {mode.keyMode && <span className="hint">Antigravity runs on a Gemini API key. To go back to your Google account in the terminal, remove modelProvider from {'~/.gemini/antigravity-cli/settings.json'}.</span>}
+    </div>
   )
 }
 

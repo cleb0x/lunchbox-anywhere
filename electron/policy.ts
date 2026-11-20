@@ -38,7 +38,7 @@ const READ = new Set(['ls', 'cat', 'pwd', 'head', 'tail', 'wc', 'grep', 'rg', 'w
 // Only the forms of branch and tag that list; with a name they create, move or delete.
 const READ_GIT = /^git\s+(status|diff|log|show|branch(\s+(-a|-r|-vv?|--all|--remotes|--list|--show-current|--verbose))*\s*$|remote\s+-v|rev-parse|ls-files|blame|describe|tag\s*$)/
 // Asking for a version only reads when the program is one known to answer it; ./anything -v can do anything.
-const VERSION = /^(node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|uv|ruby|go|cargo|rustc|java|git|gh|docker|make|tsc|gcc|clang|php|perl|swift|dotnet|brew|claude|codex|gemini|grok|ollama)\s+(-v|--version|-V|version)\s*$/
+const VERSION = /^(node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|uv|ruby|go|cargo|rustc|java|git|gh|docker|make|tsc|gcc|clang|php|perl|swift|dotnet|brew|claude|codex|agy|gemini|grok|ollama)\s+(-v|--version|-V|version)\s*$/
 
 // Words as a shell splits them, quotes removed, so "$HOME"/x is one word. A backslash is part of
 // a path on Windows and an escape everywhere else.

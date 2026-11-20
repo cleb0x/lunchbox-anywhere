@@ -16,7 +16,7 @@ const GENERIC = new Set(['node', 'nodejs', 'deno', 'bun', 'python', 'python3', '
 const PACKAGES: Record<string, string> = { 'claude-code': 'claude', codex: 'codex', 'gemini-cli': 'gemini', 'grok-cli': 'grok', grok: 'grok', claude: 'claude', gemini: 'gemini' }
 
 // Subcommands that manage the tool itself and never run a prompt.
-export const QUIET = ['mcp', 'mcp-server', 'login', 'logout', 'auth', 'models', 'model', 'update', 'upgrade', 'doctor', 'config', 'completion', 'completions', 'install', 'uninstall', 'plugin', 'plugins', 'agents', 'extensions', 'setup-token', 'help', 'version', 'features']
+export const QUIET = ['mcp', 'mcp-server', 'login', 'logout', 'auth', 'models', 'model', 'update', 'upgrade', 'doctor', 'config', 'completion', 'completions', 'install', 'uninstall', 'plugin', 'plugins', 'agents', 'extensions', 'setup-token', 'help', 'version', 'features', 'changelog']
 const quiet = new Set(QUIET)
 const ABOUT = /^(-v|-V|--version|-h|--help)$/
 

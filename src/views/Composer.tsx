@@ -10,7 +10,8 @@ import { addOpenCode, hasOpenCode, openCodeFound } from './Connect'
 import { draftOf, remember, saveDraft, sentIn } from '../lib/drafts'
 
 
-type Suggestion = { key: string; label: string; hint: string; insert: string; mark?: string }
+type Suggestion = { key: string; label: string; hint: string; insert: string; mark?: string; run?: () => void }
+type Command = { name: string; agent: string; from: string; description: string; kind: 'prompt' | 'skill' }
 
 export function Composer({ crew, setCrew, onSend, access, setAccess, busy = false, onStop, arena = false, setArena, studio = false, setStudio, draft, autoFocus = true, placeholder, pack, folder, room }: {
   crew: string[]; setCrew: (c: string[]) => void; onSend: (t: string, files?: string[]) => void; access: Access; setAccess: (a: Access) => void
@@ -61,6 +62,13 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   }, [])
   const [at, setAt] = useState(0)
   const [caret, setCaret] = useState(0)
+  // Where the caret goes after text is put in for the person, set before the next key can land.
+  const place = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    if (place.current === null || !area.current) return
+    area.current.setSelectionRange(place.current, place.current)
+    place.current = null
+  }, [text])
   const area = useRef<HTMLTextAreaElement>(null)
   const list = useRef<HTMLDivElement>(null)
   // The crew as it is now, for a menu action that finishes after an await.
@@ -71,6 +79,13 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   const skills = useApp((s) => s.skills)
   const packs = useApp((s) => s.packs)
   useApp((s) => s.ledger)
+  // The slash commands set up in the person's agents, here and in this folder.
+  const [commands, setCommands] = useState<Command[]>([])
+  useEffect(() => {
+    let on = true
+    desk.call('commands', folder).then((c: Command[]) => on && Array.isArray(c) && setCommands(c), () => {})
+    return () => { on = false }
+  }, [folder])
 
   useEffect(() => {
     if (!draft) return
@@ -106,7 +121,7 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
 
   const before = text.slice(0, caret)
   const mention = before.match(/(^|\s)@([\w-]*)$/)
-  const slash = before.match(/^\/([\w -]*)$/)
+  const slash = before.match(/^\/([\w: -]*)$/)
   let suggestions: Suggestion[] = []
   if (mention) {
     // The crew first, then anyone else who is ready: @ brings them in for this message.
@@ -117,18 +132,23 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   } else if (slash) {
     const q = slash[1].toLowerCase()
     const checks = packs.find((p) => p.id === pack)?.checks ?? []
-    suggestions = [
+    const own = (c: Command) => (crew.includes(c.agent) ? 0 : 1)
+    suggestions = ([
+      ...builtins(setAccess, setStudio, studio, setArena, arena).filter((b) => b.key.slice(2).startsWith(q.trim())),
+      ...[...commands].sort((a, b) => own(a) - own(b)).map((c) => ({ key: `c-${c.agent}-${c.name}`, label: `/${c.name}`, hint: `${c.from}${c.description ? ` · ${c.description}` : ''}`, insert: `/${c.name} `, mark: agentOf(c.agent, agents).mark })),
       ...checks.map((c) => ({ key: c.command, label: c.label, hint: c.command, insert: `!${c.command}` })),
       ...skills.map((s) => ({ key: s.id, label: s.name, hint: `Skill, ${s.steps.length} step${s.steps.length === 1 ? '' : 's'}`, insert: `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}` })),
       ...PLAYBOOKS.map((p) => ({ key: `p-${p.id}`, label: p.name, hint: `${p.field} · ${p.line}`, insert: fillPlaybook(p, '') })),
-    ].filter((s) => s.label.toLowerCase().includes(q) || s.hint.toLowerCase().includes(q)).slice(0, 8)
+    ] as Suggestion[]).filter((s) => s.run || s.label.toLowerCase().includes(q) || s.hint.toLowerCase().includes(q)).slice(0, 10)
   }
   const pickSuggestion = (s: Suggestion) => {
+    if (s.run) { s.run(); setText(''); setCaret(0); return }
     const start = mention ? caret - mention[2].length - 1 : 0
     const next = text.slice(0, start) + s.insert + text.slice(caret)
     setText(next)
     const pos = start + s.insert.length
-    requestAnimationFrame(() => { area.current?.setSelectionRange(pos, pos); setCaret(pos) })
+    place.current = pos
+    setCaret(pos)
   }
 
   // The list opens above the box, or below it when there is no room, and keeps the chosen row in view.
@@ -139,9 +159,26 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
   useLayoutEffect(() => { list.current?.querySelector('.on')?.scrollIntoView({ block: 'nearest' }) }, [at, listing])
 
   const shell = text.startsWith('!')
-  const submit = () => {
-    if (!text.trim() && !files.length) return
-    onSend(text.trim() || 'Have a look at the attached files.', files.length ? files : undefined)
+  // Expanding a command waits on the main process; a second Enter in that moment sends nothing.
+  // A message is on its way from the moment Enter is pressed until the box is empty again, so a
+  // second Enter in between, which still sees the old text, sends nothing.
+  const sending = useRef(false)
+  useEffect(() => { sending.current = false }, [text, files])
+  const submit = async () => {
+    if ((!text.trim() && !files.length) || sending.current) return
+    sending.current = true
+    let message = text.trim() || 'Have a look at the attached files.'
+    // A slash command runs in Lunchbox, or becomes the instructions it stands for; an unknown one
+    // goes as typed.
+    const cmd = message.match(/^\/([\w:-]+)(?:\s+([\s\S]*))?$/)
+    if (cmd) {
+      const b = builtins(setAccess, setStudio, studio, setArena, arena).find((x) => x.key.slice(2) === cmd[1].toLowerCase())
+      if (b && !cmd[2]) { b.run!(); setText(''); setCaret(0); return }
+      const matches = commands.filter((c) => c.name === cmd[1])
+      const c = matches.find((x) => x.agent === crew[0]) ?? matches.find((x) => crew.includes(x.agent)) ?? matches[0]
+      if (c) message = (await desk.call('commands:expand', folder, c.agent, c.name, cmd[2] ?? '', crew[0]).catch(() => null)) ?? message
+    }
+    onSend(message, files.length ? files : undefined)
     remember(room, text.trim())
     setPast(-1)
     setText('')
@@ -251,4 +288,17 @@ export function Composer({ crew, setCrew, onSend, access, setAccess, busy = fals
       </div>
     </div>
   )
+}
+
+// What Lunchbox does itself when typed after a slash: switch mode, Expert and side by side.
+function builtins(setAccess: (a: Access) => void, setStudio: ((on: boolean) => void) | undefined, studio: boolean, setArena: ((a: boolean) => void) | undefined, arena: boolean): Suggestion[] {
+  const list: Suggestion[] = [
+    { key: 'b-plan', label: '/plan', hint: 'Lunchbox · Plan mode: agents read and propose, nothing changes', insert: '', run: () => setAccess('plan') },
+    { key: 'b-ask', label: '/ask', hint: 'Lunchbox · Ask mode: edits and commands wait for your OK', insert: '', run: () => setAccess('ask') },
+    { key: 'b-auto', label: '/auto', hint: 'Lunchbox · Auto mode: agents work inside the folder', insert: '', run: () => setAccess('workspace') },
+    { key: 'b-full', label: '/full', hint: 'Lunchbox · Full access to this computer', insert: '', run: () => setAccess('full') },
+  ]
+  if (setStudio) list.push({ key: 'b-expert', label: '/expert', hint: `Lunchbox · Turn Expert ${studio ? 'off' : 'on'}`, insert: '', run: () => setStudio(!studio) })
+  if (setArena) list.push({ key: 'b-side', label: '/side', hint: `Lunchbox · Side by side ${arena ? 'off' : 'on'}: several agents answer, you keep the best`, insert: '', run: () => setArena(!arena) })
+  return list
 }

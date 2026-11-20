@@ -10,6 +10,22 @@ if (args[0] === '--version') {
   console.log(`${name} 1.0.0`)
   process.exit(0)
 }
+// Antigravity lists its models as an id, a tab and a name, and streams its own event shapes.
+if (name === 'agy') {
+  if (args[0] === 'models') {
+    console.log('Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\nclaude-opus-4-6-thinking\tClaude Opus 4.6 (Thinking)\ngpt-oss-120b-medium\tGPT-OSS 120B (Medium)')
+    process.exit(0)
+  }
+  let asked = ''
+  try { asked = readFileSync(0, 'utf8') } catch {}
+  if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, JSON.stringify({ name, args, input: asked }) + '\n')
+  const out = (o) => process.stdout.write(JSON.stringify(o) + '\n')
+  const text = 'Three sources agree: weekly caps are the main complaint.'
+  out({ event: 'init', conversation_id: 'agy-session', init: { model: 'gemini-3.8-flash-high' } })
+  out({ event: 'step_update', step_update: { step_type: 'agent_response', text_delta: text } })
+  out({ event: 'result', result: { status: 'SUCCESS', response: text, conversation_id: 'agy-session', usage: { input_tokens: 120, output_tokens: 18, cache_read_tokens: 900 } } })
+  process.exit(0)
+}
 // Asked for plain text, the way one agent starts another from a shell: a short written answer.
 if (args[args.indexOf('--output-format') + 1] === 'text') {
   console.log('The plan holds up. One risk: step 3 assumes the API key is already set.')

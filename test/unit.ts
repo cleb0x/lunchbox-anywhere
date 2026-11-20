@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { claudeLike, codex, gemini, limitOf, plain, reason } from '../electron/agents/parse'
+import { antigravity, claudeLike, codex, gemini, limitOf, plain, reason } from '../electron/agents/parse'
 import { wallWhy } from '../shared/wall'
 import { check } from '../electron/room/proof'
 import { prompt } from '../electron/room/context'
@@ -546,6 +546,72 @@ test('savings: Gemini CLI cached tokens are not counted twice', () => {
   const q = gemini()
   q.line({ type: 'result', status: 'success', stats: { input_tokens: 1200, output_tokens: 100, cached: 800 } })
   assert.equal(q.turn.usage.input, 400)
+})
+
+// Lines as agy 1.5.13 prints them with --output-format stream-json.
+test('antigravity: text, commands, a refused command and usage', () => {
+  const p = antigravity()
+  const step = (s: object) => p.line({ event: 'step_update', step_update: { conversation_id: 'c1', ...s } })
+  p.line({ event: 'init', conversation_id: 'c1', init: { model: 'gemini-3.8-flash-low', cwd: '/w', tools: ['run_command'], permission_mode: 'request-review' } })
+  assert.deepEqual(step({ step_index: 2, state: 'ACTIVE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'echo hi' } } }), { working: 'run_command echo hi' })
+  step({ step_index: 2, state: 'DONE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'echo hi' }, output: 'Created At: 2026-11-20T10:42:36+01:00\nCompleted At: 2026-11-20T10:42:36+01:00\nCommand exited with code 0.\n\nCommand output:\nhi\r\n' } })
+  step({ step_index: 3, state: 'DONE', step_type: 'tool', tool_name: 'write_to_file', tool_info: { name: 'write_to_file', parameters: { TargetFile: '/w/a.txt' } } })
+  step({ step_index: 4, state: 'ERROR', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'touch u.txt' }, error: { type: 'TOOL_ERROR', message: 'permission check failed for unsandboxed "touch u.txt": user denied permission to run command:\ntouch u.txt' } } })
+  step({ step_index: 5, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'do' })
+  step({ step_index: 5, state: 'DONE', step_type: 'agent_response', text_delta: 'ne', usage: { input_tokens: 10 } })
+  p.line({ event: 'result', result: { conversation_id: 'c1', status: 'SUCCESS', response: 'done', usage: { input_tokens: 2195, output_tokens: 67, thinking_tokens: 11, cache_read_tokens: 14126 } } })
+  const t = p.turn
+  assert.equal(t.text, 'done')
+  assert.equal(t.session, 'c1')
+  assert.equal(t.model, 'gemini-3.8-flash-low')
+  assert.deepEqual(t.acts[0], { t: 'cmd', command: 'echo hi', exit: 0, out: 'Command exited with code 0.\nhi\r\n' })
+  assert.deepEqual(t.acts[1], { t: 'edit', path: '/w/a.txt', change: 'write' })
+  assert.equal(t.acts[2].t === 'cmd' && t.acts[2].exit, 1)
+  assert.deepEqual(t.denied, ['run_command(touch u.txt:*)'])
+  assert.deepEqual(t.usage, { input: 2195, output: 78, cached: 14126, cost: 0 })
+  assert.equal(t.error, undefined)
+})
+
+test('antigravity: models are listed once, with effort picked beside them', async () => {
+  const { learnAgyModels, agyChoice } = await import('../electron/agents/index')
+  const listed = learnAgyModels('gemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\nclaude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\n')
+  assert.deepEqual(listed, ['gemini-3.8-flash', 'claude-sonnet-4-6'])
+  assert.deepEqual(agyChoice('gemini-3.8-flash', 'high'), ['--model', 'gemini-3.8-flash', '--effort', 'high'])
+  assert.deepEqual(agyChoice('gemini-3.8-flash', 'max'), ['--model', 'gemini-3.8-flash'], 'a level the model lacks is left out')
+  assert.deepEqual(agyChoice('gemini-3.8-flash-high', 'low'), ['--model', 'gemini-3.8-flash', '--effort', 'low'], 'an id saved with its effort follows the effort picked')
+  assert.deepEqual(agyChoice('gemini-3.8-flash-high', undefined), ['--model', 'gemini-3.8-flash', '--effort', 'high'])
+  assert.deepEqual(agyChoice('claude-sonnet-4-6', 'high'), ['--model', 'claude-sonnet-4-6'], 'models with no effort setting never get one')
+  assert.deepEqual(agyChoice(undefined, 'high'), [])
+})
+
+test('antigravity: never starts on a Google login, only on a Gemini API key', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { run, agyKeyMode, AGY_NEEDS_KEY } = await import('../electron/agents/index')
+  // Windows takes the home folder from USERPROFILE, everywhere else from HOME.
+  const home = process.env.HOME, profile = process.env.USERPROFILE
+  process.env.HOME = process.env.USERPROFILE = mkdtempSync(join(tmpdir(), 'lb-agy-'))
+  try {
+    assert.equal(agyKeyMode(), false)
+    const r = await run('antigravity', { prompt: 'hi', system: '', cwd: process.env.HOME, access: 'plan' }, { google: 'AIza-test' }, () => {}).done
+    if (!/not installed/.test(r.error ?? '')) assert.equal(r.error, AGY_NEEDS_KEY, 'signed in with a Google account, agy is not started')
+    mkdirSync(join(process.env.HOME, '.gemini', 'antigravity-cli'), { recursive: true })
+    writeFileSync(join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json'), JSON.stringify({ modelProvider: 'gemini' }))
+    assert.equal(agyKeyMode(), true)
+    const keyless = await run('antigravity', { prompt: 'hi', system: '', cwd: process.env.HOME, access: 'plan' }, {}, () => {}).done
+    if (!/not installed/.test(keyless.error ?? '') && !process.env.GEMINI_API_KEY) assert.equal(keyless.error, AGY_NEEDS_KEY, 'key mode without a key does not start either')
+  } finally {
+    process.env.HOME = home
+    if (profile === undefined) delete process.env.USERPROFILE
+    else process.env.USERPROFILE = profile
+  }
+})
+
+test('antigravity: a failed run says why', () => {
+  const p = antigravity()
+  p.line({ event: 'result', result: { conversation_id: 'c2', status: 'ERROR', response: '', error: 'not signed in' } })
+  assert.equal(p.turn.error, 'not signed in')
+  assert.equal(p.turn.session, 'c2')
 })
 
 test('savings: the ledger sums per day, per agent and per room', async () => {
@@ -1636,6 +1702,64 @@ test('rich: tables, rules and emphasis are read as what they are', async () => {
   assert.equal(blocks('###### Deep')[0].t, 'h')
 })
 
+test('theme colour: what a theme reaches keeps its contrast, and waiting and failure stay apart', async () => {
+  const { THEMES, tokens, withTune } = await import('../src/lib/themes')
+  const { contrast, grounds, oklch } = await import('../src/lib/custom')
+  const apart = (a: string, b: string) => Math.abs(((oklch(a).h - oklch(b).h + 540) % 360) - 180)
+  assert.deepEqual(tokens(THEMES[0], 'dark', 'rich'), {})
+  for (const t of THEMES.slice(1)) for (const mode of ['dark', 'light'] as const) {
+    const at = `${t.id} ${mode}`
+    const quiet = tokens(t, mode, 'quiet')
+    assert.equal(quiet['--focus'], undefined, at)
+    assert.deepEqual(quiet, tokens(t, mode), at)
+    const { sheet } = grounds(t.hue, t.chroma, mode)
+    for (const reach of ['balanced', 'rich'] as const) {
+      const k = tokens(t, mode, reach)
+      assert.ok(contrast(k['--focus'], sheet) >= 3, `${at} ${reach} focus`)
+      assert.ok(contrast(k['--link'], sheet) >= 4.5, `${at} ${reach} link`)
+      assert.ok(contrast(k['--on-lit'], k['--lit']) >= 3, `${at} ${reach} switch`)
+      if (!t[mode].warn) assert.ok(contrast(k['--warn'], sheet) >= 4.5, `${at} ${reach} waiting`)
+      if (!t[mode].bad) assert.ok(contrast(k['--bad'], sheet) >= 4.5, `${at} ${reach} failure`)
+      assert.ok(apart(k['--warn'], k['--bad']) >= 26, `${at} ${reach} waiting beside failure`)
+      // Plan, Ask and Auto are never drawn in a colour that could be taken for Full access.
+      if (k['--mode-auto']) assert.ok(apart(k['--mode-auto'], k['--bad']) >= 40, `${at} ${reach} modes`)
+    }
+    const rich = tokens(t, mode, 'rich')
+    assert.ok(contrast(rich['--on-btn'], rich['--btn']) >= 4.5, `${at} button`)
+    assert.equal(tokens(t, mode, 'balanced')['--btn'], undefined, at)
+  }
+  // A colour changed by hand carries into what follows from it.
+  const lagoon = THEMES.find((t) => t.id === 'lagoon')!
+  assert.equal(tokens(withTune(lagoon, 'dark', { '--accent': '#ff66cc' }), 'dark', 'balanced')['--focus'], '#ff66cc')
+  assert.equal(tokens(withTune(lagoon, 'dark', { '--bad': '#ff0000' }), 'dark', 'balanced')['--bad'], '#ff0000')
+})
+
+test('tweaks: each theme keeps its own, and the old global ones go to the theme that was on', async () => {
+  const { loadTweaks, withTweak } = await import('../src/lib/tweaks')
+  const jar = (start: Record<string, unknown>) => {
+    const m = new Map(Object.entries(start).map(([k, v]) => [k, JSON.stringify(v)]))
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v) }, m }
+  }
+  const old = jar({ 'lb.palette': 'cobalt', 'lb.ascii': 'riso', 'lb.tune': { dark: { '--ink': '#ffffff' }, light: {} } })
+  const moved = loadTweaks(old)
+  assert.deepEqual(moved, { cobalt: { ascii: 'riso', tune: { dark: { '--ink': '#ffffff' }, light: {} } } })
+  assert.deepEqual(JSON.parse(old.m.get('lb.tweaks')!), moved)
+  // The move happens once: a later change to the old keys is not read again.
+  old.m.set('lb.ascii', JSON.stringify('koi'))
+  assert.deepEqual(loadTweaks(old), moved)
+  assert.deepEqual(loadTweaks(jar({ 'lb.palette': 'meadow', 'lb.ascii': 'theme' })), {})
+  assert.deepEqual(loadTweaks(jar({ 'lb.ascii': 'brass' })), { lunchbox: { ascii: 'brass' } })
+
+  const two = withTweak(moved, 'meadow', { ascii: 'sakura' })
+  assert.equal(two.meadow.ascii, 'sakura')
+  assert.equal(two.cobalt.ascii, 'riso')
+  assert.equal(two.dusk, undefined)
+  // Back to the theme's own in every part, and nothing is left to store.
+  assert.deepEqual(withTweak(two, 'meadow', { ascii: 'theme' }), moved)
+  assert.deepEqual(withTweak(moved, 'cobalt', { ascii: 'theme', tune: { dark: {}, light: {} } }), {})
+  assert.deepEqual(loadTweaks(jar({ 'lb.tweaks': { koi: { ascii: 'nope', tune: { dark: { '--evil': '#000000' } } }, dusk: { ascii: 'ember' } } })), { dusk: { ascii: 'ember' } })
+})
+
 test('model names: a snapshot date is not a version', async () => {
   ;(globalThis as any).window ??= globalThis
   const { modelName } = await import('../src/ui/ModelPicker')
@@ -1643,6 +1767,11 @@ test('model names: a snapshot date is not a version', async () => {
   assert.equal(modelName('claude-sonnet-4-20250514'), 'Sonnet 4')
   assert.equal(modelName('claude-opus-4-1-20250805'), 'Opus 4.1')
   assert.equal(modelName('gpt-6-sol'), 'GPT-6 Sol')
+  // The ids `agy models` lists.
+  assert.equal(modelName('gemini-3.8-flash-high'), 'Gemini 3.8 Flash High')
+  assert.equal(modelName('claude-sonnet-4-6'), 'Sonnet 4.6')
+  assert.equal(modelName('claude-opus-4-6-thinking'), 'Opus 4.6 Thinking')
+  assert.equal(modelName('gpt-oss-120b-medium'), 'GPT-OSS 120B Medium')
 })
 
 test('hands: a guard stands in front of every command the agent runs by itself', async () => {
@@ -2116,3 +2245,115 @@ test('import: a room made from a chat hands the agent its session and nothing it
   store.flush()
   require('node:fs').rmSync(root, { recursive: true, force: true })
 })
+
+test('slash commands: found in each agent, filled with arguments, and the folder wins', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const home = mkdtempSync(join(tmpdir(), 'lb-cmd-home-'))
+  const folder = mkdtempSync(join(tmpdir(), 'lb-cmd-room-'))
+  const put = (path: string, text: string) => { mkdirSync(join(path, '..'), { recursive: true }); writeFileSync(path, text) }
+  put(join(home, '.claude', 'commands', 'review.md'), '---\ndescription: Review the diff\n---\nReview $ARGUMENTS for bugs.\n')
+  put(join(home, '.claude', 'commands', 'git', 'ship.md'), 'Commit, then push branch $1 to $2.\n')
+  put(join(home, '.claude', 'skills', 'loop', 'SKILL.md'), '---\nname: loop\ndescription: Run a prompt again and again\n---\nRepeat the task on an interval.\n')
+  put(join(home, '.claude', 'skills', 'hidden', 'SKILL.md'), '---\nname: hidden\nuser-invocable: false\n---\nInternal.\n')
+  put(join(home, '.codex', 'prompts', 'tests.md'), 'Write tests for the code that has none.\n')
+  put(join(home, '.gemini', 'commands', 'git', 'commit.toml'), 'description = "Write a commit message"\nprompt = """Write a commit message for {{args}}."""\n')
+  put(join(folder, '.claude', 'commands', 'review.md'), 'This folder reviews $ARGUMENTS its own way.\n')
+  process.env.LB_COMMANDS_HOME = home
+  const prevCodex = process.env.CODEX_HOME
+  delete process.env.CODEX_HOME
+  try {
+    const { commands, expand } = await import('../electron/commands')
+    const list = commands(folder)
+    const names = list.map((c) => `${c.agent}:${c.name}`).sort()
+    assert.deepEqual(names, ['claude:loop', 'claude:review', 'claude:ship', 'codex:tests', 'gemini:git:commit'])
+    const review = list.find((c) => c.name === 'review')!
+    assert.match(review.body, /This folder reviews/, "the folder's own command wins")
+    assert.equal(expand(review, 'src/app.ts', 'codex'), '/review src/app.ts\n\nThis folder reviews src/app.ts its own way.')
+    assert.equal(expand(list.find((c) => c.name === 'ship')!, 'main origin', 'claude'), '/ship main origin\n\nCommit, then push branch main to origin.')
+    assert.equal(expand(list.find((c) => c.name === 'tests')!, 'in utils', 'codex'), '/tests in utils\n\nWrite tests for the code that has none.\n\nin utils', 'a command without placeholders gets the arguments after it')
+    assert.equal(expand(list.find((c) => c.name === 'git:commit')!, 'the login fix', 'gemini'), '/git:commit the login fix\n\nWrite a commit message for the login fix.')
+    const loop = list.find((c) => c.name === 'loop')!
+    assert.equal(expand(loop, '5m check the build', 'claude'), '/loop 5m check the build\n\nUse your loop skill for this. 5m check the build')
+    assert.match(expand(loop, '5m check the build', 'grok'), /Follow the loop skill below[\s\S]*Task: 5m check the build[\s\S]*Repeat the task on an interval\./, 'other agents get the skill itself')
+  } finally {
+    delete process.env.LB_COMMANDS_HOME
+    if (prevCodex !== undefined) process.env.CODEX_HOME = prevCodex
+  }
+})
+
+test('browsers: agents are pointed at the Lunchbox browser, and Claude Code is kept from others', async () => {
+  const { protocol } = await import('../electron/room/context')
+  const meta = { id: 'r', name: 'Room', crew: ['claude'], workspace: '/w', sessions: {}, seen: {}, heard: {}, blocks: [], saved: { full: 0, sent: 0 }, created: 0, updated: 0 } as unknown as Parameters<typeof protocol>[0]
+  const me = { id: 'claude', short: 'Claude', name: 'Claude Code', maker: 'Anthropic', via: 'cli', tools: true, found: true, ready: true, good: '', alphabet: '', mark: 'claude' } as Parameters<typeof protocol>[1]
+  const auto = protocol(meta, me, [me], 'workspace', undefined, ['browser_open', 'browser_read', 'expert_look'])
+  assert.match(auto, /Use the Lunchbox browser[\s\S]*Never start Playwright[\s\S]*own tests may/)
+  const { CATALOG } = await import('../electron/agents/index')
+  const claude = CATALOG.find((d) => d.id === 'claude')!
+  const base = { prompt: 'hi', system: '', cwd: '/w', access: 'workspace' as const }
+  const off = claude.spawn!({ ...base, ownBrowser: true }, '/tmp/x.txt').args
+  assert.ok(off.includes('--disallowedTools') && off[off.indexOf('--disallowedTools') + 1].includes('mcp__playwright'))
+  assert.ok(!claude.spawn!(base, '/tmp/x.txt').args.includes('--disallowedTools'), 'without the Lunchbox browser nothing is taken away')
+})
+
+
+test('library: playbooks, flow templates and packs point at things that exist', async () => {
+  const { PLAYBOOKS, FIELDS, fillPlaybook } = await import('../shared/skills')
+  const { TEMPLATES, GROUPS } = await import('../shared/flow')
+  const { BUILTIN } = await import('../electron/packs')
+  const { CATALOG: AGENTS } = await import('../electron/agents/index')
+  const { CATALOG: TOOLS } = await import('../shared/catalog')
+  const agents = new Set(AGENTS.map((a) => a.id)), tools = new Set(TOOLS.map((t) => t.id)), packs = new Set(BUILTIN.map((p) => p.id))
+  const once = (ids: string[], what: string) => assert.equal(new Set(ids).size, ids.length, `${what} ids are unique`)
+  once(PLAYBOOKS.map((p) => p.id), 'playbook')
+  once(TEMPLATES.map((t) => t.id), 'template')
+  once(BUILTIN.map((p) => p.id), 'pack')
+  for (const p of PLAYBOOKS) {
+    assert.ok(FIELDS.includes(p.field), p.id)
+    assert.ok(!p.pack || packs.has(p.pack), `${p.id} names a pack that exists`)
+    for (const c of p.crew ?? []) assert.ok(agents.has(c), `${p.id} crew ${c}`)
+    for (const t of p.tools ?? []) assert.ok(tools.has(t), `${p.id} tool ${t}`)
+    assert.equal(!!p.ask, p.prompt.includes('{{input}}'), `${p.id} asks for input exactly when its prompt uses it`)
+    assert.ok(p.name.length <= 40 && p.line.length <= 100, `${p.id} fits its card`)
+    assert.ok(!fillPlaybook(p, 'x').includes('{{'), p.id)
+  }
+  for (const f of FIELDS) assert.ok(PLAYBOOKS.some((p) => p.field === f), `${f} has playbooks`)
+  for (const t of TEMPLATES) {
+    assert.ok(GROUPS.some((g) => g.id === t.group), t.id)
+    assert.ok(!t.pack || packs.has(t.pack), `${t.id} names a pack that exists`)
+    assert.ok(t.crew.length && t.crew.every((c) => agents.has(c)), `${t.id} crew`)
+    assert.ok(t.steps.length && t.steps.every((s) => s.text.trim() && (!s.to || t.crew.includes(s.to))), `${t.id} sends each step to someone in its crew`)
+    assert.ok(t.name.length <= 40 && t.line.length <= 100, `${t.id} fits its card`)
+  }
+  for (const id of ['feature', 'deep', 'qa', 'launch']) assert.ok(PLAYBOOKS.some((p) => p.id === id), `${id} is featured on the new room page`)
+})
+
+test('claude: Auto keeps the web, skills and the person\'s own MCP servers, other modes ask', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const config = mkdtempSync(join(tmpdir(), 'lb-claude-config-'))
+  const work = mkdtempSync(join(tmpdir(), 'lb-claude-work-'))
+  writeFileSync(join(config, '.claude.json'), JSON.stringify({ mcpServers: { github: {}, playwright: {} }, projects: { [work]: { mcpServers: { linear: {} } } } }))
+  writeFileSync(join(work, '.mcp.json'), JSON.stringify({ mcpServers: { postgres: {}, lunchbox: {} } }))
+  const before = process.env.CLAUDE_CONFIG_DIR
+  process.env.CLAUDE_CONFIG_DIR = config
+  try {
+    const { CATALOG, claudeServers } = await import('../electron/agents/index')
+    assert.deepEqual(claudeServers(work).sort(), ['mcp__github', 'mcp__linear', 'mcp__playwright', 'mcp__postgres'])
+    assert.deepEqual(claudeServers(work, true).sort(), ['mcp__github', 'mcp__linear', 'mcp__postgres'], 'a room that lends its browser leaves the others out')
+    const claude = CATALOG.find((d) => d.id === 'claude')!
+    const allowedIn = (access: 'plan' | 'ask' | 'workspace') => {
+      const args = claude.spawn!({ prompt: 'hi', system: '', cwd: work, access }, '/tmp/x.txt').args
+      const at = args.indexOf('--allowedTools')
+      return at < 0 ? [] : args[at + 1].split(',')
+    }
+    const auto = allowedIn('workspace')
+    for (const t of ['Bash', 'WebSearch', 'WebFetch', 'Skill', 'mcp__github', 'mcp__postgres']) assert.ok(auto.includes(t), `${t} in Auto`)
+    const ask = allowedIn('ask')
+    assert.ok(!ask.includes('WebFetch') && !ask.includes('Bash') && !ask.includes('mcp__github'), 'Ask still asks')
+  } finally {
+    if (before === undefined) delete process.env.CLAUDE_CONFIG_DIR
+    else process.env.CLAUDE_CONFIG_DIR = before
+  }
+})
+

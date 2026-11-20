@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { ThemeCards } from '../ui/ThemeCards'
-import { ASCII, THEMES, themeOf, type AsciiId, type Mode, type Theme, type ThemeId } from '../lib/themes'
+import { ASCII, REACH, THEMES, themeOf, type AsciiId, type Mode, type Reach, type Theme, type ThemeId } from '../lib/themes'
 import { draftOf, type Draft } from '../lib/custom'
 import { ThemeEditor } from '../ui/ThemeEditor'
 import { TuneSheet } from '../ui/TuneSheet'
@@ -9,8 +9,10 @@ import { Loader, Mark, Sure } from '../ui/bits'
 import { IconEdit, IconPalette, IconPlus, IconTrash } from '../ui/icons'
 import { Logo } from '../ui/Logo'
 import { Maker } from '../ui/Maker'
+import { Effort } from '../ui/ModelPicker'
 import { ACCESS, desk, reason, reload, short, unavailable, useApp, type RemoteStatus } from '../lib/desk'
 import type { Look } from '../App'
+import type { Limits } from '../../shared/types'
 import { Toggle } from './Flows'
 
 // Lunchbox from a phone through a Telegram bot: make one with @BotFather, paste its token, then
@@ -76,13 +78,12 @@ function Phone({ say }: { say: (t: string) => void }) {
   )
 }
 
-// The agents that take an effort level on the command line, and the levels both understand.
-const EFFORT = ['claude', 'codex']
-const LEVELS = [['', 'Default'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]
+// The agents that take an effort level on the command line. Which levels depends on the model.
+const EFFORT = ['claude', 'codex', 'antigravity']
 
-export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, look, setLook, restart, say }: {
+export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, setTune, keepTheme, dropTheme, themeWithAgent, ascii, setAscii, reach, setReach, look, setLook, restart, say }: {
   edit?: string; theme: ThemeId; setTheme: (t: ThemeId, e?: MouseEvent) => void; mode: Mode; setMode: (m: Mode, e?: MouseEvent) => void
-  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
+  custom: Theme[]; tune: Tune; setTune: (t: Tune) => void; keepTheme: (t: Theme) => void; dropTheme: (id: string) => void; themeWithAgent: () => void; ascii: AsciiId; reach: Reach; setReach: (r: Reach, e?: MouseEvent) => void; setAscii: (a: AsciiId) => void; look: Look; setLook: (l: Look) => void; restart: () => void; say: (t: string) => void
 }) {
   const settings = useApp((s) => s.settings)
   const agents = useApp((s) => s.agents)
@@ -101,6 +102,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
     if (t) setEditing({ draft: draftOf(t), id: t.id })
   }, [edit])
   const tunedCount = Object.keys(tune.dark).length + Object.keys(tune.light).length
+  const themeName = themeOf(theme, custom).name
 
   return (
     <div className="page">
@@ -114,7 +116,7 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             <div className="seg">{(['dark', 'light'] as const).map((m) => <button key={m} className={m === mode ? 'on' : ''} onClick={(e) => setMode(m, e)}>{m === 'dark' ? 'Night' : 'Day'}</button>)}</div>
           </div>
           <div className="setting col">
-            <div className="grow"><b>ASCII colour</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own.</span></div>
+            <div className="grow"><b className="withreset">ASCII colour{ascii !== 'theme' && <button className="linkbtn" onClick={() => setAscii('theme')}>Reset to {themeName}</button>}</b><span>The characters on the home screen and in the room's field, and the dots behind a search or a drawing. Follow the theme, or give them a palette of their own. Each theme remembers its own choice.</span></div>
             <div className="asciis" role="radiogroup" aria-label="ASCII colour">
               {ASCII.map((a) => {
                 const ramp = a.id === 'theme' ? (theme === 'lunchbox' ? null : themeOf(theme, custom)[mode].glyphs) : a.id === 'ink' ? null : a[mode]!
@@ -150,9 +152,14 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             {editing && <ThemeEditor start={editing.draft} id={editing.id} mode={mode} setMode={(m) => setMode(m)} close={() => setEditing(null)} save={(t) => { keepTheme(t); setEditing(null) }} />}
           </div>
           <div className="setting">
-            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand, on top of the theme.` : 'Change single colours, like the text or the sheet, on top of any theme.'}</span></div>
+            <div className="grow"><b>Theme colour</b><span>{theme === 'lunchbox' ? 'How far a theme carries its colour. Lunchbox is ink alone, so this shows on the other themes.' : `How far ${themeName} carries its colour. ${REACH.find((r) => r.id === reach)!.line}`}</span></div>
+            <div className="seg" role="radiogroup" aria-label="Theme colour">{REACH.map((r) => <button key={r.id} role="radio" aria-checked={r.id === reach} className={r.id === reach ? 'on' : ''} onClick={(e) => setReach(r.id, e)} title={r.line}>{r.name}</button>)}</div>
+          </div>
+          <div className="setting">
+            <div className="grow"><b>Fine tune</b><span>{tunedCount ? `${tunedCount} ${tunedCount === 1 ? 'colour' : 'colours'} changed by hand on ${themeName}. Other themes keep their own.` : `Change single colours of ${themeName}, like the text or the sheet. Other themes keep their own.`}</span></div>
+            {tunedCount > 0 && <button className="btn small quiet" onClick={() => setTune({ dark: {}, light: {} })}>Reset to {themeName}</button>}
             <button className="btn small quiet" onClick={() => setTuning(true)}>Customise</button>
-            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} />}
+            {tuning && <TuneSheet tune={tune} setTune={setTune} mode={mode} setMode={(m) => setMode(m)} close={() => setTuning(false)} theme={theme} name={themeName} />}
           </div>
           <div className="setting">
             <div className="grow"><b>Look</b><span>Lunchbox floats the work on a soft sheet. Square is flat panes, hairlines and square corners.</span></div>
@@ -233,18 +240,19 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
             <div className="grow"><b>Only the tools connected in Lunchbox</b><span>Start Claude Code in rooms without the MCP servers you set up outside Lunchbox. Every step reads less. Leave it off if your rooms use those servers.</span></div>
             <Toggle on={saving.lean === true} set={(v) => reload.settings({ saving: { ...saving, lean: v } })} label="Only the tools connected in Lunchbox" />
           </div>
-          {EFFORT.filter((id) => agents.some((a) => a.id === id && a.found)).map((id) => {
+          {EFFORT.filter((id) => agents.some((a) => a.id === id && a.found) && (id !== 'antigravity' || settings.models[id])).map((id) => {
             const a = agents.find((x) => x.id === id)!
-            const now = settings.effort?.[id] ?? ''
             return (
               <div className="setting" key={id}>
-                <div className="grow"><b>{a.short} effort</b><span>How hard {a.short} thinks before it acts. Thinking is billed as output, the most expensive kind of token. Default leaves {a.name} as you set it up.</span></div>
-                <div className="seg">{LEVELS.map(([value, name]) => <button key={name} className={now === value ? 'on' : ''} onClick={() => reload.settings({ effort: { ...settings.effort, [id]: value } })}>{name}</button>)}</div>
+                <div className="grow"><b>{a.short} effort</b><span>How hard {a.short} thinks before it acts, for the model it uses now. Thinking is billed as output, the most expensive kind of token. Default leaves {a.name} as you set it up.</span></div>
+                <Effort a={a} model={settings.models[id] ?? ''} plain />
               </div>
             )
           })}
         </div>
       </section>
+
+      <LimitSettings />
 
       <Phone say={say} />
 
@@ -271,3 +279,42 @@ export function Settings({ edit, theme, setTheme, mode, setMode, custom, tune, s
     </div>
   )
 }
+
+// Lunchbox lets agents work until they are done. Each limit here is off until it is switched on,
+// and then stops them at the number set.
+const LIMITS: { key: keyof Limits; name: string; line: string; unit: string; start: number; min: number; max: number }[] = [
+  { key: 'toolCalls', name: 'Tool calls per turn', line: 'Stops an agent on an API key or a local model after this many tool calls in one turn.', unit: 'calls', start: 60, min: 5, max: 1000 },
+  { key: 'handoffs', name: 'Handoffs per message', line: 'Pauses the room after agents have handed work to each other this many times for one message.', unit: 'handoffs', start: 24, min: 2, max: 200 },
+  { key: 'failures', name: 'Same failing command', line: 'Pauses an agent that runs the same command this many times in a row and fails each time.', unit: 'times', start: 3, min: 2, max: 50 },
+  { key: 'minutes', name: 'Time per turn', line: 'Stops a command line agent that is still working after this long.', unit: 'minutes', start: 60, min: 5, max: 600 },
+]
+
+function LimitSettings() {
+  const limits = useApp((s) => s.settings.limits) ?? {}
+  const set = (key: string, v: number | undefined) => reload.settings({ limits: { ...limits, [key]: v } })
+  return (
+    <section className="group">
+      <h2>Limits<span className="quiet">off unless you turn one on; agents work until they are done or you stop them</span></h2>
+      <div className="settings">
+        {LIMITS.map((l) => {
+          const now = limits[l.key]
+          return (
+            <div className="setting" key={l.key}>
+              <div className="grow"><b>{l.name}</b><span>{l.line}</span></div>
+              {now ? (
+                <label className="limitnum">
+                  <input type="number" min={l.min} max={l.max} defaultValue={now} key={now} aria-label={`${l.name}, ${l.unit}`}
+                    onBlur={(e) => { const v = Math.round(Number(e.target.value)); set(l.key, Number.isFinite(v) ? Math.min(l.max, Math.max(l.min, v)) : now) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                  <span>{l.unit}</span>
+                </label>
+              ) : null}
+              <Toggle on={!!now} set={(on) => set(l.key, on ? l.start : undefined)} label={l.name} />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+

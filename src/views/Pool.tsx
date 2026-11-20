@@ -160,7 +160,7 @@ function Allowance({ a }: { a: AgentInfo }) {
       ) : (
         <>
           <span className={`state${why ? out ? ' warn' : ' off' : ''}`}>{out ? `Back at ${clock(spent!.until)}` : why ? 'Unavailable' : 'Ready'}</span>
-          <Meter value={left} cells={16} tone={left < 0.2 ? 'warn' : undefined} />
+          <Meter value={why && !out ? 0 : left} cells={16} tone={left < 0.2 ? 'warn' : undefined} />
           <span className="mono quiet amount">{budget > 0 ? `${money(budget)}/day` : a.via === 'api' ? 'no cap' : a.via === 'local' ? 'free' : 'no limits'}</span>
         </>
       )}

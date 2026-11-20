@@ -6,11 +6,12 @@ import { follow } from '../lib/fit'
 const P = { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.25, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const
 
 // Each mode drawn as what it lets the agents do: look, ask first, work in the folder, or open
-// the whole machine. Only full access gets colour, because it is the one to notice.
+// the whole machine. Full access is drawn in the failure colour, because it is the one to notice;
+// a theme may tint the other three, fainter for the modes that do less.
 export function ModeIcon({ id }: { id: Access }) {
-  if (id === 'plan') return <svg {...P} className="modeicon"><path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z" /><circle cx="8" cy="8" r="1.9" /></svg>
-  if (id === 'ask') return <svg {...P} className="modeicon"><path d="M2.75 3.25h10.5v7.25H8.5l-3 2.5v-2.5H2.75z" /><path d="M6.6 5.9a1.45 1.45 0 1 1 2.05 1.32c-.42.2-.65.5-.65.93" /><circle cx="8" cy="9.05" r=".05" strokeWidth="1.5" /></svg>
-  if (id === 'workspace') return <svg {...P} className="modeicon"><path d="M2.25 4.25h4l1.25 1.5h6.25v6.5H2.25z" /><path d="M5.9 9.1l1.4 1.35 2.8-2.85" /></svg>
+  if (id === 'plan') return <svg {...P} className="modeicon" data-mode="plan"><path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z" /><circle cx="8" cy="8" r="1.9" /></svg>
+  if (id === 'ask') return <svg {...P} className="modeicon" data-mode="ask"><path d="M2.75 3.25h10.5v7.25H8.5l-3 2.5v-2.5H2.75z" /><path d="M6.6 5.9a1.45 1.45 0 1 1 2.05 1.32c-.42.2-.65.5-.65.93" /><circle cx="8" cy="9.05" r=".05" strokeWidth="1.5" /></svg>
+  if (id === 'workspace') return <svg {...P} className="modeicon" data-mode="auto"><path d="M2.25 4.25h4l1.25 1.5h6.25v6.5H2.25z" /><path d="M5.9 9.1l1.4 1.35 2.8-2.85" /></svg>
   return <svg {...P} className="modeicon full"><rect x="3.25" y="7.25" width="9.5" height="6.25" rx="1.25" /><path d="M5.5 7.25V5a2.5 2.5 0 0 1 4.85-.85" /><path d="M8 9.6v1.5" /></svg>
 }
 

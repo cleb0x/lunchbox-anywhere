@@ -55,9 +55,8 @@ type Ctx = { gen: number; hops: { n: number }; arena?: string; allow?: string[];
 const within = (ctx: Ctx) => (ctx.host ? { inside: { turn: ctx.host.turn, mark: ctx.host.mark() } } : {})
 type Said = { who: string; text: string; asks: { to: string; ask: string }[] }
 
-// Failures of one command in one turn before the loop guard stops it.
-const LOOP = 3
-const MAX_HOPS = 24
+// Handoffs per message and failures of one command in one turn are only limited when the person
+// sets a limit in Settings; otherwise agents work until they are done or stopped.
 const FLOW_ASK = 15 * 60e3
 // Grok Build only loads MCP servers from config files, which the room does not touch.
 const BORROWS = new Set(['claude', 'codex', 'gemini'])
@@ -200,6 +199,11 @@ export class Engine {
     }
     return open
   }
+
+  // The person's limits on handoffs per message; with none set, the crew hands on until it is done.
+  // A limit also bounds how many rounds of @handle questions one message may have.
+  private maxHops() { return this.store.settings.limits?.handoffs || Infinity }
+  private maxRounds() { const h = this.store.settings.limits?.handoffs; return h ? Math.max(1, Math.ceil(h / 8)) : Infinity }
 
   summaries(): RoomSummary[] {
     return this.store.list().map((m) => {
@@ -732,12 +736,12 @@ export class Engine {
     // Asks over the limits are not sent, but they are said out loud so nobody waits on an answer.
     const skipped: { to: string; ask: string }[] = []
     while (res && res.asks.length) {
-      if (ctx.hops.n >= MAX_HOPS || rounds++ >= 3) { skipped.push(...res.asks); break }
+      if (ctx.hops.n >= this.maxHops() || ++rounds > this.maxRounds()) { skipped.push(...res.asks); break }
       const asker = res.who
       const now: { to: string; ask: string }[] = []
       let answered = 0
       for (const [i, a] of res.asks.entries()) {
-        if (i >= 2 || ctx.hops.n >= MAX_HOPS) { now.push(a); continue }
+        if (i >= 2 || ctx.hops.n >= this.maxHops()) { now.push(a); continue }
         ctx.hops.n++
         if (await this.turn(room, a.to, { kind: 'answer', from: asker, ask: a.ask }, access, ctx)) answered++
       }
@@ -804,7 +808,7 @@ export class Engine {
   }
 
   private async consult(room: string, from: string, to: string, ask: string, access: Access, ctx: Ctx, models?: Record<string, string>, quiet = false, label?: string, size?: string) {
-    if (++ctx.hops.n > MAX_HOPS) throw new Error('This message has used all its handoffs. Finish with what you have.')
+    if (++ctx.hops.n > this.maxHops()) throw new Error('This message has used the handoffs your limit in Settings allows. Finish with what you have.')
     const r = await this.turn(room, to, { kind: 'answer', from, ask, via: 'tool', quiet, label, size }, access, { ...ctx, arena: undefined, depth: (ctx.depth ?? 0) + 1, models })
     if (!r?.text) throw new Error(`${this.name(to)} could not answer right now.`)
     return r.text
@@ -813,7 +817,7 @@ export class Engine {
   // A crewmate joins for one piece of work: a line says so, it works in the room as itself, and it
   // steps out when done. Its report goes back to the agent that brought it in.
   private async bring(room: string, from: string, to: string, job: string, context: string | undefined, access: Access, ctx: Ctx) {
-    if (++ctx.hops.n > MAX_HOPS) throw new Error('This message has used all its handoffs. Finish with what you have.')
+    if (++ctx.hops.n > this.maxHops()) throw new Error('This message has used the handoffs your limit in Settings allows. Finish with what you have.')
     this.add(room, { kind: 'joined', who: to, by: from, task: job.slice(0, 200), ...within(ctx) })
     const r = await this.turn(room, to, { kind: 'job', from, job, context }, access, { ...ctx, arena: undefined, depth: (ctx.depth ?? 0) + 1 })
     this.add(room, { kind: 'left', who: r?.who ?? to, ...within(ctx) })
@@ -871,7 +875,7 @@ export class Engine {
       const next = ctx.arena ? null : this.fallback(meta, who, task.kind === 'answer' || task.kind === 'job' ? task.from : undefined, ctx.tried)
       if (next && ctx.main === who) ctx.main = next
       this.add(room, { kind: 'wall', from: who, to: next ?? '', arena: ctx.arena, reason: blocked, until: this.store.spent[who]?.until, ...within(ctx) })
-      if (!next || ++ctx.hops.n > MAX_HOPS) return null
+      if (!next || ++ctx.hops.n > this.maxHops()) return null
       return this.turn(room, next, task, access, ctx)
     }
     const me = this.agent(who)!
@@ -882,7 +886,7 @@ export class Engine {
     const pack = this.hooks.packs().find((p) => p.id === meta.pack)
     const session = meta.sessions[who]
     // Only the CLIs Lunchbox knows how to resume get a delta; a connector always gets the whole room.
-    const resumed = !!session && ['claude', 'codex', 'grok'].includes(who)
+    const resumed = !!session && ['claude', 'codex', 'grok', 'antigravity'].includes(who)
     const events = this.store.events(room)
     // The log is live and grows while the agent works; only what it was sent counts as heard.
     const upto = events.length
@@ -920,6 +924,7 @@ export class Engine {
     // A model behind an API has no file tools of its own, so the room gives it some.
     const bench = http ? this.bench(room, who, access) : undefined
     const fails = new Map<string, number>()
+    const loop = this.store.settings.limits?.failures || 0
     let looped = ''
     const system = protocol(meta, me, crew, access, pack, tools.map((t) => t.name), this.store.settings.habits, ctx.main ?? this.main(meta), meta.studio ? meta.design ?? [] : null)
     // A resumed session already has the protocol; it goes again only when it changed. The mark
@@ -989,7 +994,7 @@ export class Engine {
       prompt: http ? p.tail : p.text, history: http ? p.history : undefined, cacheKey: `${room}:${who}`, system, fresh: !resumed || meta.protos?.[who] !== sent, cwd: meta.workspace, access,
       model: ctx.models?.[who] || this.store.settings.models[who] || me.model, session: resumed ? session : undefined, meter: resumed && meta.meters?.[who]?.session === session ? meta.meters[who] : undefined, allow: ctx.allow, hands: grant?.url || undefined, bench,
       hook: grant?.hook || undefined, outputs: shorten ? outputs(room) : undefined, effort: this.store.settings.effort?.[who], lean: saving.lean, short,
-      inbox: grant?.hook || http ? inbox : undefined, unload: this.store.settings.unload,
+      inbox: grant?.hook || http ? inbox : undefined, unload: this.store.settings.unload, ownBrowser: held.includes('browser_open'), limits: this.store.settings.limits,
       env: me.via === 'cli' ? refusals(me, this.agents, meta.crew, held, nested) : undefined, front: this.front || undefined,
     }, this.store.keys(), (u) => {
       if (u.delta) lt.text += u.delta
@@ -1010,7 +1015,7 @@ export class Engine {
           if (a.exit === 0) { fails.delete(a.command); continue }
           const n = (fails.get(a.command) ?? 0) + 1
           fails.set(a.command, n)
-          if (n >= LOOP && !looped) { looped = a.command; running.stop() }
+          if (loop && n >= loop && !looped) { looped = a.command; running.stop() }
         }
       }
       for (const s of u.agents ?? []) {
@@ -1055,10 +1060,10 @@ export class Engine {
       const other = this.fallback(meta, who)
       this.add(room, {
         kind: 'decide',
-        text: `${me.short} ran \`${looped}\` ${LOOP} times and it failed each time, so Lunchbox paused it before it spends more of your plan.`,
+        text: `${me.short} ran \`${looped}\` ${loop} times and it failed each time, so Lunchbox paused it, as your limit in Settings says.`,
         options: [
-          { label: 'Try another way', action: { type: 'ask', who, text: `@${who} \`${looped}\` failed ${LOOP} times. Step back, find the cause first, and try a different approach. Say what you changed.` } },
-          ...(other ? [{ label: `Hand it to ${this.name(other)}`, action: { type: 'ask' as const, who: other, text: `@${other} ${me.short} got stuck: \`${looped}\` failed ${LOOP} times. Look at why and fix it.` } }] : []),
+          { label: 'Try another way', action: { type: 'ask', who, text: `@${who} \`${looped}\` failed ${loop} times. Step back, find the cause first, and try a different approach. Say what you changed.` } },
+          ...(other ? [{ label: `Hand it to ${this.name(other)}`, action: { type: 'ask' as const, who: other, text: `@${other} ${me.short} got stuck: \`${looped}\` failed ${loop} times. Look at why and fix it.` } }] : []),
           { label: 'Leave it', action: { type: 'accept' } },
         ],
       })
@@ -1068,7 +1073,7 @@ export class Engine {
     if (r.usage.input + r.usage.output + r.usage.cached > 0) {
       // What Lunchbox kept out of this turn, in tokens at about four characters each: memory the
       // agent already had, conversation a briefing stood in for, and command output it shortened.
-      const lean: Partial<Usage> = { kept: Math.round((p.full - p.sent + spared) / 4), cut: Math.round(cut / 4) }
+      const lean: Partial<Usage> = { kept: Math.max(0, Math.round((p.full - p.sent + spared) / 4)), cut: Math.round(cut / 4) }
       // A session the room kept cached past its lifetime: what it read beyond the part every
       // session shares would have been written again.
       // The shared part is taken at the most any new session has read of it, so this counts low.
@@ -1215,8 +1220,8 @@ export class Engine {
     const next = ctx.arena ? null : this.fallback(meta, who, task.kind === 'answer' || task.kind === 'job' ? task.from : undefined, ctx.tried)
     if (next && ctx.main === who) ctx.main = next
     this.add(room, { kind: 'wall', from: who, to: next ?? '', arena: ctx.arena, until, reason, ...within(ctx) })
-    if (next && ++ctx.hops.n <= MAX_HOPS) return this.turn(room, next, task, access, ctx)
-    if (next) this.add(room, { kind: 'decide', text: `The crew handed this on ${MAX_HOPS} times in one go, so Lunchbox paused it here.`, options: [{ label: 'Keep going', action: { type: 'ask', who: next, text: `@${next} carry on from where the crew left off.` } }, { label: 'Leave it', action: { type: 'accept' } }] })
+    if (next && ++ctx.hops.n <= this.maxHops()) return this.turn(room, next, task, access, ctx)
+    if (next) this.add(room, { kind: 'decide', text: `The crew handed this on ${this.maxHops()} times in one go, the limit set in Settings, so Lunchbox paused it here.`, options: [{ label: 'Keep going', action: { type: 'ask', who: next, text: `@${next} carry on from where the crew left off.` } }, { label: 'Leave it', action: { type: 'accept' } }] })
     return null
   }
 

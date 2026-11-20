@@ -9,10 +9,16 @@ export function modelName(id: string) {
   const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
   // A date on the end, claude-sonnet-4-20250514, is a snapshot and not part of the version.
   const claude = id.match(/^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?=-|$)/)
-  if (claude) return `${cap(claude[1])} ${claude[2]}${claude[3] ? '.' + claude[3] : ''}`
+  if (claude) {
+    // What follows the version, as in claude-opus-4-6-thinking, tells two entries in one list apart.
+    const rest = id.slice(claude[0].length).split('-').filter((w) => w && !/^\d{6,}$/.test(w))
+    return [`${cap(claude[1])} ${claude[2]}${claude[3] ? '.' + claude[3] : ''}`, ...rest.map(cap)].join(' ')
+  }
   if (/^(fable|opus|sonnet|haiku)$/.test(id)) return `${cap(id)}, newest`
   const gpt = id.match(/^gpt-([\d.]+)(?:-(.+))?$/)
   if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ' ' + gpt[2].split('-').map(cap).join(' ') : ''}`
+  const oss = id.match(/^gpt-oss-(.+)$/)
+  if (oss) return `GPT-OSS ${oss[1].split('-').map((w) => (/^\d+[a-z]$/.test(w) ? w.toUpperCase() : cap(w))).join(' ')}`
   if (/^auto-gemini-/.test(id)) return `Gemini ${id.slice(12)}, auto`
   if (/^(gemini|grok|gemma)-/.test(id)) return id.split('-').map((w, i) => (i === 0 || /^[a-z]/.test(w) ? cap(w) : w)).join(' ')
   return id
@@ -128,6 +134,33 @@ function Choices({ a, value, back, alone }: { a: AgentInfo; value: string; back:
       ) : (
         <button className="item modelrow quiet" onClick={() => setOther(true)}><span className="grow">Another model by name</span></button>
       )}
+      <Effort a={a} model={value} />
     </div>
   )
+}
+
+const LEVEL_NAMES: Record<string, string> = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' }
+
+// How hard the agent thinks, for the model picked above. Only the levels that model takes are
+// offered; a model with no such setting shows nothing.
+export function Effort({ a, model, plain }: { a: AgentInfo; model: string; plain?: boolean }) {
+  const efforts = useApp((s) => s.settings.effort)
+  const [levels, setLevels] = useState<string[]>([])
+  useEffect(() => {
+    let on = true
+    desk.call('agents:efforts', a.id, model).then((r: unknown) => on && setLevels(Array.isArray(r) ? (r as string[]) : []), () => on && setLevels([]))
+    return () => { on = false }
+  }, [a.id, model])
+  if (!levels.length) return null
+  // A level saved for another model that this one lacks is not sent, so it reads as Default.
+  const now = levels.includes(efforts?.[a.id] ?? '') ? efforts![a.id] : ''
+  const set = (v: string) => reload.settings({ effort: { ...efforts, [a.id]: v } })
+  const seg = (
+    <div className={`seg${plain ? '' : ' small'}`} role="radiogroup" aria-label={`Effort for ${a.short}`}>
+      {['', ...levels].map((v) => (
+        <button key={v || 'default'} role="radio" aria-checked={now === v} className={now === v ? 'on' : ''} onClick={() => set(v)} title={v ? undefined : `As set up in ${a.name}`}>{v ? LEVEL_NAMES[v] ?? v : 'Default'}</button>
+      ))}
+    </div>
+  )
+  return plain ? seg : <div className="modeleffort"><b>Effort</b>{seg}</div>
 }

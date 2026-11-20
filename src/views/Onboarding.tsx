@@ -8,6 +8,7 @@ import { Logo } from '../ui/Logo'
 import { IconFolder } from '../ui/icons'
 import { flow } from '../App'
 import { desk, isDesktop, machine, short, useApp } from '../lib/desk'
+import { INSTALL } from '../lib/install'
 import { LocalSetupBox } from './Agents'
 
 const STEPS = 4
@@ -179,17 +180,6 @@ function Folder({ folder, pick, onDone }: { folder: string; pick: () => void; on
       <button className="btn big rise" style={r(3)} onClick={onDone}>Open Lunchbox <kbd>↵</kbd></button>
     </div>
   )
-}
-
-// The one line each tool's makers publish for installing it. Agents without one link to their page.
-const INSTALL: Record<string, { cmd?: string; url: string }> = {
-  claude: { cmd: 'npm install -g @anthropic-ai/claude-code', url: 'https://claude.com/claude-code' },
-  codex: { cmd: 'npm install -g @openai/codex', url: 'https://github.com/openai/codex' },
-  gemini: { cmd: 'npm install -g @google/gemini-cli', url: 'https://github.com/google-gemini/gemini-cli' },
-  grok: { url: 'https://x.ai' },
-  ollama: { url: 'https://ollama.com/download' },
-  lmstudio: { url: 'https://lmstudio.ai' },
-  llamacpp: { cmd: navigator.platform.startsWith('Win') ? 'winget install llama.cpp' : /Mac/.test(navigator.platform) ? 'brew install llama.cpp' : undefined, url: 'https://github.com/ggml-org/llama.cpp' },
 }
 
 function Missing({ a }: { a: AgentInfo }) {

@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import type { Hit, RoomSummary, Skill } from '../shared/types'
 import { Loader, Sure } from './ui/bits'
 import { Logo } from './ui/Logo'
-import { IconAgents, IconBrowser, IconClock, IconFlows, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings } from './ui/icons'
+import { IconAgents, IconBrowser, IconClock, IconFlows, IconImport, IconInbox, IconLibrary, IconPin, IconPlus, IconPool, IconSave, IconSearch, IconSettings, IconWorkshop } from './ui/icons'
 import { Onboarding } from './views/Onboarding'
 import { RoomView } from './views/Room'
 import { NewRoom } from './views/NewRoom'
@@ -23,20 +23,23 @@ import { Library } from './views/Library'
 import { Browser, useBrowser } from './views/Browser'
 import { Palette, type Command } from './views/Palette'
 import { ImportSheet } from './views/Import'
-import { THEMES, asciiOf, themeOf, tokens, type AsciiId, type Mode, type Theme, type ThemeId } from './lib/themes'
+import { Workshop } from './views/Workshop'
+import { THEMES, asciiOf, reachOf, themeOf, tokens, withTune, type AsciiId, type Mode, type Reach, type Theme, type ThemeId } from './lib/themes'
 import { loadCustom, saveCustom, themeBrief } from './lib/custom'
 import { codeColours, wellOf } from './lib/codecolors'
-import { loadTune, saveTune, tuned, type Tune } from './lib/tune'
+import { NO_TUNE, tuned, type Tune } from './lib/tune'
+import { loadTweaks, saveTweaks, withTweak, type Tweak } from './lib/tweaks'
 import { shift } from './lib/fit'
 import { ACCESS, ago, boot, desk, mod, reload, unavailable, useApp, type Access } from './lib/desk'
 
 export type View =
   | { name: 'room'; id: string; focus?: string }
-  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean }
+  | { name: 'new'; skill?: Skill; pack?: string; text?: string; send?: boolean; crew?: string[] }
   | { name: 'agents' } | { name: 'free' } | { name: 'settings'; edit?: string } | { name: 'pool' } | { name: 'savings' } | { name: 'library' } | { name: 'browser' } | { name: 'waiting' }
   | { name: 'flows'; edit?: string; template?: string }
+  | { name: 'workshop' }
 export type Look = 'lunchbox' | 'neyra'
-const VIEWS: View['name'][] = ['room', 'new', 'agents', 'free', 'settings', 'pool', 'savings', 'library', 'browser', 'waiting', 'flows']
+const VIEWS: View['name'][] = ['room', 'new', 'agents', 'free', 'settings', 'pool', 'savings', 'library', 'browser', 'waiting', 'flows', 'workshop']
 
 const saved = <T,>(key: string, fallback: T): T => {
   try { const v = localStorage.getItem('lb.' + key); return v ? JSON.parse(v) : fallback } catch { return fallback }
@@ -82,11 +85,15 @@ export function App() {
   // Themes a person made, and the one being made right now, shown on the app before it is saved.
   const [custom, setCustom] = useState<Theme[]>(loadCustom)
   const [theme, setThemeState] = useState<ThemeId>(() => themeOf(saved('palette', 'lunchbox'), custom).id)
-  const [ascii, setAscii] = useState<AsciiId>(() => asciiOf(saved('ascii', 'theme')).id)
   const [preview, setPreview] = useState<Theme | null>(null)
-  // Single colours changed on top of the theme, per mode, from Fine tune in Settings.
-  const [tune, setTuneState] = useState<Tune>(loadTune)
-  const setTune = (t: Tune) => { setTuneState(t); saveTune(t) }
+  const [reach, setReachState] = useState<Reach>(() => reachOf(saved('reach', 'balanced')))
+  // The ASCII colour and the single colours changed by hand belong to the theme they were set on.
+  const [tweaks, setTweaks] = useState(loadTweaks)
+  const ascii: AsciiId = tweaks[theme]?.ascii ?? 'theme'
+  const tune: Tune = tweaks[theme]?.tune ?? NO_TUNE
+  const tweak = (change: Tweak) => setTweaks((all) => { const next = withTweak(all, theme, change); saveTweaks(next); return next })
+  const setAscii = (a: AsciiId) => tweak({ ascii: a })
+  const setTune = (t: Tune) => tweak({ tune: t })
   const [look, setLookState] = useState<Look>(() => ((new URLSearchParams(location.search).get('look') ?? saved('look', 'lunchbox')) === 'neyra' ? 'neyra' : 'lunchbox'))
   const [ready, setReady] = useState<boolean>(() => saved<unknown>('ready', false) === true)
   const [arriving, setArriving] = useState(false)
@@ -154,8 +161,9 @@ export function App() {
   useLayoutEffect(() => {
     const root = document.documentElement
     const t = preview ?? themeOf(theme, custom)
-    const a = asciiOf(ascii)
-    const set: Record<string, string> = tokens(t, mode)
+    // A theme still being made is shown as itself.
+    const a = asciiOf(preview ? 'theme' : ascii)
+    const set: Record<string, string> = tokens(preview ? t : withTune(t, mode, tune[mode]), mode, reach)
     const own = a.id === 'theme' || a.id === 'ink' ? null : a[mode]!
     own?.forEach((c, i) => { set[`--glyph-${i + 1}`] = c })
     // The tune goes last, so a colour picked by hand wins over the theme's.
@@ -173,11 +181,12 @@ export function App() {
     if (own || (a.id === 'theme' && t.id !== 'lunchbox')) root.dataset.glyphs = ''
     else delete root.dataset.glyphs
     root.dataset.ascii = a.id
+    root.dataset.reach = reach
+    keep('reach', reach)
     keep('theme', mode)
     if (!preview) keep('palette', t.id)
-    keep('ascii', a.id)
     desk.call('theme', mode === 'dark')
-  }, [theme, mode, ascii, custom, preview, tune])
+  }, [theme, mode, ascii, custom, preview, tweaks, reach])
   useLayoutEffect(() => { document.documentElement.dataset.look = look; keep('look', look) }, [look])
   // Every window shares one saved appearance, so a change made in one is put on in the others.
   useEffect(() => {
@@ -189,8 +198,8 @@ export function App() {
         setCustom(list)
         setThemeState(themeOf(saved('palette', 'lunchbox'), list).id)
       }
-      if (key === 'ascii') setAscii(asciiOf(saved('ascii', 'theme')).id)
-      if (key === 'tune') setTuneState(loadTune())
+      if (key === 'tweaks') setTweaks(loadTweaks())
+      if (key === 'reach') setReachState(reachOf(saved('reach', 'balanced')))
       if (key === 'look') setLookState(saved<string>('look', 'lunchbox') === 'neyra' ? 'neyra' : 'lunchbox')
       if (key === 'ready') setReady(saved<unknown>('ready', false) === true)
     }
@@ -223,6 +232,7 @@ export function App() {
     const next = custom.filter((x) => x.id !== id)
     setCustom(next)
     saveCustom(next)
+    setTweaks((all) => { const rest = withTweak(all, id, { ascii: 'theme', tune: NO_TUNE }); saveTweaks(rest); return rest })
     if (theme === id) setTheme('lunchbox')
   }
   useEffect(() => {
@@ -235,6 +245,7 @@ export function App() {
   const themeWithAgent = () => go({ name: 'new', text: themeBrief(themeOf(theme, custom)), send: true })
   const setMode = (m: Mode, e?: MouseEvent) => { if (m !== mode) reveal(() => setModeState(m), e && { x: e.clientX, y: e.clientY }) }
   const setLook = (l: Look) => flow(() => setLookState(l))
+  const setReach = (r: Reach, e?: MouseEvent) => { if (r !== reach) reveal(() => setReachState(r), e && { x: e.clientX, y: e.clientY }) }
   const setAccess = (a: Access) => { setAccessState(a); keep('access', a) }
   const setWorkspace = (w: string) => { setWorkspaceState(w); keep('workspace', w) }
   const say = useCallback((text: string) => setToast({ text, id: Date.now() }), [])
@@ -267,6 +278,8 @@ export function App() {
       if (k === ',') { e.preventDefault(); go({ name: 'settings' }) }
       if (e.shiftKey && k === 'f') { e.preventDefault(); go({ name: 'flows' }) }
       if (e.shiftKey && k === 'p') { e.preventDefault(); go({ name: 'pool' }) }
+      if (e.shiftKey && k === 's') { e.preventDefault(); go({ name: 'savings' }) }
+      if (e.shiftKey && k === 'a') { e.preventDefault(); go({ name: 'agents' }) }
       if (e.shiftKey && k === 'l') { e.preventDefault(); go({ name: 'library' }) }
       if (e.shiftKey && k === 'b') { e.preventDefault(); go({ name: 'browser' }) }
       if (/^[1-9]$/.test(k) && rooms[Number(k) - 1]) { e.preventDefault(); go({ name: 'room', id: rooms[Number(k) - 1].id }) }
@@ -294,12 +307,13 @@ export function App() {
     ...flows.map((f) => ({ group: 'Flows' as const, label: `Run ${f.name}`, hint: steps(f.steps.length), run: async () => { const room = await desk.call('flows:run', f.id); if (room) go({ name: 'room', id: room }) } })),
     { group: 'Go to', label: 'Flows', hint: `${mod}⇧F`, run: () => go({ name: 'flows' }) },
     { group: 'Go to', label: 'Pool', hint: `${mod}⇧P`, run: () => go({ name: 'pool' }) },
-    { group: 'Go to', label: 'Savings', hint: 'Prompt cache', run: () => go({ name: 'savings' }) },
+    { group: 'Go to', label: 'Savings', hint: `${mod}⇧S`, run: () => go({ name: 'savings' }) },
     { group: 'Go to', label: 'Library', hint: `${mod}⇧L`, run: () => go({ name: 'library' }) },
+    { group: 'Go to', label: 'Workshop', hint: 'Add what Lunchbox is missing', run: () => go({ name: 'workshop' }) },
     { group: 'Go to', label: 'Browser', hint: `${mod}⇧B`, run: () => go({ name: 'browser' }) },
     { group: 'Actions', label: 'New flow', hint: 'Flows', run: () => go({ name: 'flows', edit: 'new' }) },
     { group: 'Actions', label: 'Import a chat', hint: 'From Claude Code, Codex, Gemini CLI or Grok', run: () => setImporting(true) },
-    { group: 'Go to', label: 'Agents', hint: 'Connected agents, models and budgets', run: () => go({ name: 'agents' }) },
+    { group: 'Go to', label: 'Agents', hint: `${mod}⇧A`, run: () => go({ name: 'agents' }) },
     { group: 'Go to', label: 'Settings', hint: `${mod},`, run: () => go({ name: 'settings' }) },
     { group: 'Actions', label: mode === 'dark' ? 'Switch to day' : 'Switch to night', hint: 'Appearance', run: () => setMode(mode === 'dark' ? 'light' : 'dark') },
     ...[...THEMES, ...custom].filter((t) => t.id !== theme).map((t) => ({ group: 'Actions' as const, label: `Theme: ${t.name}`, hint: t.note, run: () => setTheme(t.id) })),
@@ -355,6 +369,7 @@ export function App() {
           ))}
         </div>
         <div className="sbfoot">
+          <button className={`sbitem${on('workshop') ? ' on' : ''}`} onClick={() => go({ name: 'workshop' })} title="Ask an agent to add what Lunchbox is missing">{on('workshop') && sel}<IconWorkshop />Workshop{env.workshop && <i className="ws-dot" title="You are using your version" />}</button>
           <button className={`sbitem${on('agents') ? ' on' : ''}`} onClick={() => go({ name: 'agents' })}>{on('agents') && sel}<IconAgents />Agents<small>{ready_}</small></button>
           <button className={`sbitem${on('settings') ? ' on' : ''}`} onClick={() => go({ name: 'settings' })}>{on('settings') && sel}<IconSettings />Settings</button>
           {look === 'neyra' && <div className="sbversion">lunchbox {env.version}</div>}
@@ -367,7 +382,7 @@ export function App() {
             also a drag region swallows the wheel on macOS. */}
         {!['room', 'browser', 'new'].includes(view.name) && <div className="sheetdrag" aria-hidden="true" />}
         {view.name === 'room' && <RoomView key={view.id} id={view.id} focus={view.focus} access={access} setAccess={setAccess} open={(id) => go({ name: 'room', id })} say={say} />}
-        {view.name === 'new' && <NewRoom key={view.skill?.id ?? view.pack ?? (view.send ? 'send' : 'new')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
+        {view.name === 'new' && <NewRoom key={view.skill?.id ?? (view.pack ? `${view.pack}:${view.crew?.join(',') ?? ''}` : undefined) ?? (view.send ? 'send' : 'new')} skill={view.skill} pack={view.pack} text={view.text} send={view.send} suggested={view.crew} onCreated={(id) => go({ name: 'room', id })} go={go} say={say} access={access} setAccess={setAccess} workspace={workspace} setWorkspace={setWorkspace} />}
         {view.name === 'agents' && <Agents say={say} />}
         {view.name === 'free' && <FreeModels go={go} say={say} />}
         {view.name === 'flows' && <Flows key={view.edit ?? view.template ?? 'list'} edit={view.edit} template={view.template} go={go} say={say} workspace={workspace || env.cwd} />}
@@ -375,8 +390,9 @@ export function App() {
         {view.name === 'waiting' && <WaitingPage go={go} access={access} />}
         {view.name === 'savings' && <Savings go={go} />}
         {view.name === 'library' && <Library go={go} say={say} />}
+        {view.name === 'workshop' && <Workshop go={go} say={say} />}
         {view.name === 'browser' && <Browser say={say} covered={palette} />}
-        {view.name === 'settings' && <Settings edit={view.edit} theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} tune={tune} setTune={setTune} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
+        {view.name === 'settings' && <Settings edit={view.edit} theme={theme} setTheme={setTheme} mode={mode} setMode={setMode} custom={custom} tune={tune} setTune={setTune} keepTheme={keepTheme} dropTheme={dropTheme} themeWithAgent={themeWithAgent} ascii={ascii} setAscii={setAscii} reach={reach} setReach={setReach} look={look} setLook={setLook} say={say} restart={() => flow(() => { keep('ready', false); setReady(false) })} />}
         </Guard>
       </main>
 

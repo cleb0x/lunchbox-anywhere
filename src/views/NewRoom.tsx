@@ -59,9 +59,9 @@ function defaultCrew(ids: string[], preferred: string[]) {
 
 const skillText = (s: Skill) => `${s.brief}\n\nSteps that worked last time:\n${s.steps.map((x) => `- ${x}`).join('\n')}`
 
-export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send }: {
+export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setWorkspace, skill, pack: startPack, text, send, suggested }: {
   say: (t: string) => void
-  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean
+  onCreated: (id: string) => void; go: (v: View) => void; access: Access; setAccess: (a: Access) => void; workspace: string; setWorkspace: (w: string) => void; skill?: Skill; pack?: string; text?: string; send?: boolean; suggested?: string[]
 }) {
   const agents = useApp((s) => s.agents)
   const packs = useApp((s) => s.packs)
@@ -69,7 +69,12 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
   const settings = useApp((s) => s.settings)
   const env = useApp((s) => s.env)
   const usable = agents.filter((a) => !unavailable(a)).sort((a, b) => Number(b.tools) - Number(a.tools)).map((a) => a.id)
-  const [chosen, setChosen] = useState<string[] | null>(() => (skill && skill.crew.every((c) => usable.includes(c)) ? skill.crew : null))
+  // A playbook's crew is taken as far as those agents are set up here; with none of them, the usual crew.
+  const [chosen, setChosen] = useState<string[] | null>(() => {
+    if (skill && skill.crew.every((c) => usable.includes(c))) return skill.crew
+    const ready = (suggested ?? []).filter((c) => usable.includes(c))
+    return ready.length ? ready : null
+  })
   const crew = chosen ?? defaultCrew(usable, settings.defaultCrew)
   const [pack, setPack] = useState<string | undefined>(skill?.pack ?? startPack)
   const [draft, setDraft] = useState<{ text: string; files?: string[]; n: number } | undefined>(() => (skill ? { text: skillText(skill), n: 1 } : text ? { text, n: 1 } : undefined))
@@ -80,8 +85,8 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
   }
   const [arena, setArena] = useState(false)
   // Studio carries over from the last room started, so someone who works that way keeps it on.
-  const [studio, setStudio] = useState(() => { try { return localStorage.getItem('lb.studio') === '1' } catch { return false } })
-  const pickStudio = (on: boolean) => { setStudio(on); try { localStorage.setItem('lb.studio', on ? '1' : '0') } catch {} }
+  // Expert costs more turns, so every new room starts without it and it is switched on per room.
+  const [studio, setStudio] = useState(false)
   const [starting, setStarting] = useState(false)
   const made = useRef<{ id: string } | null>(null)
   const current = packs.find((p) => p.id === pack)
@@ -126,12 +131,12 @@ export function NewRoom({ onCreated, go, say, access, setAccess, workspace, setW
         <h1 className="rise" style={{ '--i': 1 } as CSSProperties}>What are we working on?</h1>
         <div className="rise" style={{ '--i': 2 } as CSSProperties}>
           {crew.length ? (
-            <Composer crew={crew} setCrew={setChosen} onSend={start} access={access} setAccess={setAccess} draft={draft} arena={arena} setArena={setArena} studio={studio} setStudio={pickStudio} pack={pack} folder={workspace}
+            <Composer crew={crew} setCrew={setChosen} onSend={start} access={access} setAccess={setAccess} draft={draft} arena={arena} setArena={setArena} studio={studio} setStudio={setStudio} pack={pack} folder={workspace}
               placeholder="Describe the goal in your own words. The crew plans it, splits it up and checks each other’s work." />
           ) : (
             <div className="noagents">
               <b>No agent is ready yet.</b>
-              <span>Install Claude Code, Codex, Grok or Gemini CLI, or add an API key or a local model. Lunchbox picks them up on its own.</span>
+              <span>Install Claude Code, Codex, Grok or Antigravity, or add an API key or a local model. Lunchbox picks them up on its own.</span>
               <button className="btn small" onClick={() => go({ name: 'agents' })}>Set up an agent</button>
             </div>
           )}
