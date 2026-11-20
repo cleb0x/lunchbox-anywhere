@@ -540,7 +540,9 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         if (Math.abs(top - ours.current) < 1) return
         const gap = el.scrollHeight - el.clientHeight - top
         stick.current = gap < 2 || (!up && gap < 80)
-        if (gap > 600 !== away) setAway(gap > 600)
+        // While an agent writes, the way back is offered as soon as the view lets go of the work.
+        const far = gap > (live_.current ? 120 : 600)
+        if (far !== away) setAway(far)
       }}>
       <div className="column" ref={column}>
         {empty && !live?.turns.length && <div className="roomempty">Nothing here yet. Say what you need and the crew takes it from there.</div>}
@@ -548,12 +550,26 @@ function Transcript({ events, live, agents, actions, focus, empty }: { events: E
         <div className="tail" />
       </div>
     </div>
-    {away && (
-      <button type="button" className="tolatest" onClick={() => { const el = box.current!; stick.current = true; setAway(false); el.scrollTo({ top: el.scrollHeight, behavior: still() ? 'auto' : 'smooth' }) }}>
-        <IconDown />{working ? 'Follow the work' : 'Latest'}
-      </button>
-    )}
+    <ToLatest on={away} who={working && live?.active ? agentOf(live.active, agents) : undefined} doing={working ? live?.doing || 'Follow the work' : 'Latest'}
+      go={() => { const el = box.current!; stick.current = true; setAway(false); el.scrollTo({ top: el.scrollHeight, behavior: still() ? 'auto' : 'smooth' }) }} />
     </div>
+  )
+}
+
+// The way back to the newest line, offered once the reader has scrolled away from it. While an
+// agent works it says who and on what, so the work can be followed from anywhere in the room.
+function ToLatest({ on, who, doing, go }: { on: boolean; who?: AgentInfo; doing: string; go: () => void }) {
+  const [here, setHere] = useState(on)
+  useEffect(() => {
+    if (on) { setHere(true); return }
+    const t = setTimeout(() => setHere(false), 180)
+    return () => clearTimeout(t)
+  }, [on])
+  if (!on && !here) return null
+  return (
+    <button type="button" className={`tolatest${on ? '' : ' leaving'}`} tabIndex={on ? 0 : -1} onClick={go}>
+      {who && <Mark seed={who.mark} size={12} active />}<span>{doing}</span><IconDown />
+    </button>
   )
 }
 

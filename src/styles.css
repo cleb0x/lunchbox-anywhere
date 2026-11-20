@@ -166,7 +166,10 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .column{position:relative;max-width:var(--col);margin:0 auto;display:flex;flex-direction:column}
 .tail{scroll-margin-bottom:44px}
 .transwrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
-.tolatest{position:absolute;left:50%;bottom:14px;z-index:2;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px 0 9px;border-radius:14px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 8px 24px -8px rgb(0 0 0/calc(.5*var(--shade)));font-size:12px;color:var(--dim);translate:-50% 0;animation:fadein 200ms var(--out) both;transition:color 140ms var(--out)}
+.tolatest{position:absolute;left:50%;bottom:14px;z-index:2;display:inline-flex;align-items:center;gap:7px;max-width:min(420px,calc(100% - 48px));height:28px;padding:0 9px 0 11px;border-radius:14px;background:var(--sheet);box-shadow:0 0 0 1px var(--line2),0 8px 24px -8px rgb(0 0 0/calc(.5*var(--shade)));font-size:12px;color:var(--dim);translate:-50% 0;animation:land 320ms var(--out) both;transition:color 140ms var(--out),opacity 180ms var(--out),transform 180ms var(--out)}
+.tolatest span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tolatest svg{flex:none}
+.tolatest.leaving{opacity:0;transform:translateY(4px);pointer-events:none}
 @media (hover:hover){.tolatest:hover{color:var(--ink)}}
 .tolatest:active{scale:.97}
 /* Find in the room: a small bar over the top right of the transcript, on the sheet like the
