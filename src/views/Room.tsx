@@ -773,13 +773,30 @@ function Hands({ e, t, doing = '', prior, plan, agents, actions }: Shared & { e?
       </div>
       <div className="exchange">
         <p className="asked">{t ? t.ask : e!.ask}</p>
-        {raw.trim() ? <div className="got"><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></div>
+        {raw.trim() ? <Got long={!flowing && lengthy(raw)}><Rich text={shown} caret={writing} flowing={flowing} prior={prior} plan={plan} /></Got>
           : e && <div className="got"><span className={cli && !e.error ? 'err soft' : 'err'}>{e.error ?? (cli ? 'What it printed went somewhere else, so there is nothing to show here.' : 'No answer')}</span></div>}
         <Acts acts={(t ?? e)?.acts ?? []} live={!!t} />
-        {work && <Working t={work} a={to} fallback={doing} leaving={!t} />}
+        {/* The heading already says who is answering whom. */}
+        {work && <Working t={work} a={to} fallback={/ is answering /.test(doing) ? '' : doing} leaving={!t} />}
       </div>
       {!work && e && <Tools e={e} actions={actions} />}
     </Ev>
+  )
+}
+
+const lengthy = (text: string) => text.length > 900 || text.split('\n').length > 16
+
+// A long answer between agents, read back later, shows its opening and keeps the rest one click
+// away: the main agent's own answer is what the person came for. The row that watched it being
+// written stays open, so nothing closes under the reader.
+function Got({ long, children }: { long: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  if (!long) return <div className="got">{children}</div>
+  return (
+    <>
+      <div className={`got folded${open ? ' open' : ''}`}>{children}</div>
+      <button type="button" className="unfoldbtn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Show less' : 'Show the whole answer'}</button>
+    </>
   )
 }
 
@@ -875,7 +892,7 @@ function Now({ t, a, fallback, elapsed }: { t: LiveTurn; a: AgentInfo; fallback:
   return (
     <div className="workline">
       <Loader size={10} />
-      {step ? <><span className="shimmer" key={step.verb}>{step.verb}</span>{step.text && <code key={step.text}>{step.text}</code>}</> : <span className="shimmer" key="idle">{fallback.startsWith(a.short + ' ') ? fallback : `${a.short} is thinking`}</span>}
+      {step ? <><span className="shimmer" key={step.verb}>{step.verb}</span>{step.text && <code key={step.text}>{step.text}</code>}</> : <span className="shimmer" key="idle">{fallback.startsWith(a.short + ' ') ? fallback : fallback ? `${a.short} is thinking` : 'Thinking'}</span>}
       <time>{elapsed}</time>
       {!!t.tokens && <time className="tok">{tokensOf(t.tokens)}</time>}
     </div>
