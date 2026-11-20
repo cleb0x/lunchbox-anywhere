@@ -70,6 +70,7 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .seg{display:inline-flex;padding:2px;border-radius:7px;box-shadow:inset 0 0 0 1px var(--line2);gap:2px}
 .seg button{white-space:nowrap;height:24px;padding:0 12px;border-radius:5px;font-size:12px;color:var(--dim);transition:color 140ms var(--out),background-color 140ms var(--out),transform 120ms var(--out)}
 .seg button.on{background:var(--ink);color:var(--ground)}
+.seg button:active,.tabs button:active{transform:scale(.97)}
 
 /* Pixel parts */
 /* Marks are lit dots on a 7 by 7 grid. Working: the light travels outward from the centre. */
@@ -127,6 +128,8 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .sbitem:active,.sbroom:active{transform:scale(.985)}
 .waitdot{width:6px;height:6px;border-radius:1.5px;background:var(--warn);flex:none;animation:markbreathe 1.6s ease-in-out infinite}
 .sbempty{padding:6px 8px;font-size:12px;color:var(--faint)}
+/* A room that joins the list, and the Needs you row when it appears, land like everything else. */
+.sbroom,.sbitem.needsyou{animation:land 300ms var(--out) backwards}
 .sbroom .grow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sblabel{padding:20px 8px 6px;font:11px var(--mono);color:var(--faint)}
 .sbrooms{flex:1;overflow:auto;display:flex;flex-direction:column;gap:1px}
@@ -442,6 +445,11 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .agood{font-size:12.5px;line-height:1.35;color:var(--dim);text-align:left;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .aleft{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
 .aleft span{font:11px var(--mono);color:var(--faint)}
+/* An agent's settings open and shut by height, so the rows under it slide instead of jumping. */
+.agentfold{display:grid;grid-template-rows:1fr;animation:unfold 260ms var(--out) both}
+.agentfold>div{min-height:0;overflow:hidden}
+.agentfold.closing{animation:fold 200ms var(--out) both;pointer-events:none}
+@keyframes fold{to{grid-template-rows:0fr;opacity:0}}
 .agentbody{display:flex;flex-direction:column;gap:16px;padding:16px 20px 20px 58px;border-top:1px solid var(--line);animation:land 260ms var(--out) both}
 .anote{font-size:12.5px;line-height:1.5;color:var(--warn)}
 label.field{display:flex;flex-direction:column;gap:6px;max-width:440px}

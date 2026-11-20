@@ -7,9 +7,11 @@ import './look-neyra.css'
 import './themes.css'
 import { App } from './App'
 import { desk } from './lib/desk'
+import { watchLeaving } from './lib/leave'
 
 // Errors anywhere in the window are kept for the report sheet, so a report says what went wrong.
 addEventListener('error', (e) => { desk.call('error:log', `${e.message} at ${e.filename}:${e.lineno}`).catch(() => {}) })
 addEventListener('unhandledrejection', (e) => { desk.call('error:log', String((e.reason as Error)?.stack ?? e.reason)).catch(() => {}) })
 
+watchLeaving()
 createRoot(document.getElementById('root')!).render(<App />)

@@ -79,6 +79,13 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
   const budget = settings.budgets[a.id] ?? 0
   const spent = ledger?.spent[a.id]
   const s = a.setup
+  // The row stays for as long as it takes to fold shut.
+  const [shown, setShown] = useState(open)
+  useEffect(() => {
+    if (open) { setShown(true); return }
+    const t = setTimeout(() => setShown(false), 200)
+    return () => clearTimeout(t)
+  }, [open])
   const state = !a.found ? (a.via === 'api' ? 'No key' : a.note ? 'Does not start' : 'Not installed') : s && !s.running ? 'Not running' : s && !a.ready ? 'No chat model' : why ? 'Unavailable' : 'Ready'
   return (
     <div className={`agent${open ? ' open' : ''}${a.found ? '' : ' missing'}`} style={{ '--i': i } as CSSProperties}>
@@ -91,8 +98,8 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
           <span>{today ? `${tokens(today.input + today.output + today.cached)} today${today.cost ? `, ${money(today.cost)}` : ''}` : state}</span>
         </span>
       </button>
-      {open && (
-        <div className="agentbody">
+      {(open || shown) && (
+        <div className={`agentfold${open ? '' : ' closing'}`}><div><div className="agentbody">
           {a.note && <p className="anote">{a.note}</p>}
           {a.setup && <LocalSetupBox a={a} say={say} />}
           {!a.found && a.via === 'cli' && !a.note && <InstallBox a={a} />}
@@ -122,7 +129,7 @@ function AgentRow({ a, i, open, toggle, say, extra }: { a: AgentInfo; i: number;
               <button className="btn small quiet" onClick={() => { desk.call('spent:clear', a.id); say(`${a.short} is back in rotation`) }}>Back already? Clear the limit ({clock(spent.until)})</button>
             )}
           </div>}
-        </div>
+        </div></div></div>
       )}
     </div>
   )
