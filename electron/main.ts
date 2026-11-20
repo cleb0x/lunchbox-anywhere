@@ -5,7 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, shell, type Rectangle } from 'electron'
 import type { Access, ChatSource, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from './count'
-import { installed, modelsFor, testConnector, useConnectors } from './agents'
+import { agyKeyMode, agySettings, effortsFor, installed, modelsFor, testConnector, useConnectors } from './agents'
 import { setBase } from './agents/http'
 import { markdown, replay } from './export'
 import { Flows } from './flows'
@@ -25,8 +25,12 @@ import { Store, type Cipher } from './store'
 import { cancelPull, pull, start } from './local'
 import { Limits } from './limits'
 import { allowed, claudeDir, found, read, resumes, room as roomFrom } from './import'
+import { Workshop } from './workshop'
+import { commands, expand } from './commands'
 
 app.setName('Lunchbox')
+// The person's own build from the Workshop shares the standard app's profile: same rooms, same keys.
+if (process.env.LUNCHBOX_USER_DATA) app.setPath('userData', process.env.LUNCHBOX_USER_DATA)
 // Electron exposes FedCM but has no browser side for it, so "Continue with Google" buttons fail
 // without a word. With it off, Google falls back to its sign-in popup, which the browser opens.
 app.commandLine.appendSwitch('disable-blink-features', 'FedCm')
@@ -62,6 +66,7 @@ let remote: Remote
 let browser: Browser
 let toolbox: Toolbox
 let updates: Updates | undefined
+let workshop: Workshop
 const packs = () => loadPacks(store.packFiles())
 const name = (id: string) => engine.agents.find((a) => a.id === id)?.short ?? id
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'room'
@@ -161,7 +166,7 @@ function createWindow(room?: string) {
   wins.add(win)
   last = win
   if (at.maximized) win.maximize()
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => { win.show(); workshop?.started() })
   win.on('focus', () => { last = win })
   for (const e of ['resize', 'move', 'maximize', 'unmaximize'] as const) win.on(e as 'resize', () => remember(win))
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -245,7 +250,7 @@ function wire() {
   })
   const h = (channel: string, fn: (...args: any[]) => unknown) => hw(channel, (_from, ...args) => fn(...args))
 
-  hw('env', (from) => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, window: from.webContents.id }))
+  hw('env', (from) => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, window: from.webContents.id, workshop: !!process.env.LUNCHBOX_WORKSHOP }))
   hw('window:new', (_from, room?: string) => { newWindow(typeof room === 'string' && store.room(room) ? room : undefined) })
   hw('window:view', (from, room: string | null) => { if (typeof room === 'string') showing.set(from, room); else showing.delete(from) })
   h('agents', () => engine.agents)
@@ -265,6 +270,23 @@ function wire() {
   })
   h('local:cancel', (model: string) => cancelPull(model))
   h('agents:models', (id: string) => modelsFor(id, store.keys()).catch((e: Error) => ({ error: e.message })))
+  h('agents:agy-mode', () => ({ keyMode: agyKeyMode(), hasKey: !!store.keys().google }))
+  // Only on the person's click: their agy settings get the gemini provider, the rest is kept,
+  // and the file as it was is saved beside it.
+  h('agents:agy-key', async () => {
+    if (!store.keys().google) throw new Error('Save a Gemini API key first')
+    const file = agySettings()
+    let current: Record<string, unknown> = {}
+    if (existsSync(file)) {
+      const text = readFileSync(file, 'utf8')
+      writeFileSync(file + '.before-lunchbox', text, { mode: 0o600 })
+      try { current = JSON.parse(text) } catch { throw new Error(`${file} is not valid JSON, so Lunchbox left it alone`) }
+    } else mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ ...current, modelProvider: 'gemini' }, null, 2), { mode: 0o600 })
+    await engine.refresh()
+    return { keyMode: agyKeyMode(), hasKey: true }
+  })
+  h('agents:efforts', (id: string, model?: string) => effortsFor(id, typeof model === 'string' && model ? model : undefined).catch(() => []))
   h('rooms', () => engine.summaries())
   h('room', (id: string) => ({ meta: store.room(id), events: store.events(id), live: engine.live(id) }))
   h('room:create', (opts: { crew: string[]; workspace: string; pack?: string; name?: string; about?: string; studio?: boolean; repo?: string }) => {
@@ -442,7 +464,57 @@ function wire() {
   h('connector:test', (c: Connector, key: string, headers?: string) => testConnector(c, key ?? '', typeof headers === 'string' ? headers : ''))
   // An installer may have just added its folder to the shell profile, so the PATH is read again.
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
-  h('packs', () => packs())
+  h('packs', () => packs().filter((p) => !p.hidden))
+  h('workshop', () => workshop.state())
+  h('commands', (folder?: string) => commands(typeof folder === 'string' ? folder : undefined).map(({ body: _body, ...c }) => c))
+  h('commands:expand', (folder: string | undefined, agent: string, name: string, args: string, to: string) => {
+    const c = commands(typeof folder === 'string' ? folder : undefined).find((x) => x.agent === agent && x.name === name)
+    return c ? expand(c, String(args ?? ''), String(to ?? '')) : null
+  })
+  h('workshop:setup', () => workshop.setup())
+  // An idea starts a Workshop room straight away, or, the first time, once the copy is set up.
+  h('workshop:idea', async (text: string) => {
+    const idea = String(text ?? '').trim()
+    if (!idea) throw new Error('Say what Lunchbox should do')
+    const { crew } = defaults()
+    if (!crew.length) throw new Error('Connect an agent first, on the Agents page')
+    const start = () => {
+      const meta = engine.create({ crew, workspace: workshop.dir, pack: 'workshop', name: idea.split('\n')[0].slice(0, 60) })
+      engine.send(meta.id, idea, 'workspace')
+      workshop.launched = { room: meta.id, at: Date.now() }
+      workshop.waiting = undefined
+      return meta.id
+    }
+    if (workshop.isReady()) return { room: start() }
+    workshop.waiting = idea
+    void workshop.setup().then(async (s) => {
+      if (s.busy?.error) { workshop.waiting = undefined; emit('workshop', await workshop.state()); return }
+      start()
+      emit('workshop', await workshop.state())
+    })
+    return { waiting: true }
+  })
+  // Opening another build quits this one, which would stop agents mid turn.
+  h('workshop:open', () => {
+    if (engine.summaries().some((r) => r.busy)) throw new Error('Agents are still working. Try it when they finish')
+    return workshop.open()
+  })
+  h('workshop:back', () => workshop.back())
+  h('workshop:stop-using', () => workshop.stopUsing())
+  h('workshop:dismiss', () => workshop.dismiss())
+  h('workshop:reset', () => workshop.reset())
+  h('workshop:update', () => workshop.update())
+  h('workshop:folder', () => shell.openPath(workshop.dir))
+  // A suggestion is the person's note, or what they asked their agents for, with the whole change
+  // attached. It goes the way reports go: to the maintainers' Telegram and the reports repo.
+  h('workshop:suggest', async (note?: string, contact?: string) => {
+    const { stat, diff } = await workshop.patch()
+    if (!stat) throw new Error('There are no changes to send yet')
+    const asked = engine.summaries().filter((r) => r.pack === 'workshop' && r.workspace === workshop.dir).map((r) => `- ${r.name}`)
+    const said = String(note ?? '').trim() || (asked.length ? `What they asked for:\n${asked.join('\n')}` : '(no note)')
+    const text = `Workshop suggestion\n\n${said}\n\nFiles:\n${stat}`
+    return send({ kind: 'idea', text, contact: contact || undefined, context: diff.slice(0, 4000), patch: diff, diagnostics: diagnostics(engine.agents) }, store.dir, Object.values(store.keys()))
+  })
   hw('packs:import', async (win) => {
     const r = await dialog.showOpenDialog(win, { title: 'Import a pack', filters: [{ name: 'Lunchbox pack', extensions: ['json'] }], properties: ['openFile'] })
     if (r.canceled) return null
@@ -545,6 +617,9 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(async () => {
   if (!first) return
+  workshop = new Workshop(app.getPath('userData'), (s) => emit('workshop', s))
+  // The person chose to run their own build: it opens instead, unless it failed last time.
+  if (await workshop.takeOver()) return
   // The Lunchbox folder exists from the first launch, so the first room has somewhere to go.
   try { mkdirSync(workspace(), { recursive: true }) } catch {}
   store = new Store(join(app.getPath('userData'), 'data'), cipher)
@@ -581,7 +656,7 @@ app.whenReady().then(async () => {
   remote.start()
   toolbox.startAll()
 })
-app.on('before-quit', () => { engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush() })
+app.on('before-quit', () => { workshop?.stop(); engine?.stopAll(); limits?.stop(); flows?.stop(); remote?.stop(); toolbox?.stopAll(); store?.flush() })
 app.on('will-quit', finishStops)
 app.on('window-all-closed', () => { if (!mac) app.quit() })
 app.on('activate', () => { if (!wins.size && store) createWindow() })

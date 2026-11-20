@@ -9,7 +9,8 @@ import { basename, extname, isAbsolute, join, relative, resolve } from 'node:pat
 import { app } from 'electron'
 import type { Access, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from '../electron/count'
-import { installed, modelsFor, testConnector, useConnectors } from '../electron/agents'
+import { effortsFor, installed, modelsFor, testConnector, useConnectors } from '../electron/agents'
+import { commands, expand } from '../electron/commands'
 import { setBase } from '../electron/agents/http'
 import { markdown, replay } from '../electron/export'
 import { Flows } from '../electron/flows'
@@ -154,7 +155,7 @@ const handlers = new Map<string, (...args: any[]) => unknown>()
 function wire() {
   const h = (channel: string, fn: (...args: any[]) => unknown) => handlers.set(channel, fn)
 
-  h('env', () => ({ home: app.getPath('home'), platform: 'linux', version: app.getVersion(), cwd: workspace(), data: store.dir, window: 1 }))
+  h('env', () => ({ home: app.getPath('home'), platform: 'linux', version: app.getVersion(), cwd: workspace(), data: store.dir, window: 1, anywhere: 'web' }))
   // On its own, the site keeps everything in this tab's storage, and a second tab would write over
   // it. So a new window opens the room here instead; connected to a computer, tabs are windows.
   h('window:new', (room?: string) => { if (typeof room === 'string' && store.room(room)) emit('open-room', room) })
@@ -179,6 +180,7 @@ function wire() {
   })
   h('local:cancel', (model: string) => cancelPull(model))
   h('agents:models', (id: string) => modelsFor(id, store.keys()).catch((e: Error) => ({ error: e.message })))
+  h('agents:efforts', (id: string, model?: string) => effortsFor(id, typeof model === 'string' && model ? model : undefined).catch(() => []))
   h('rooms', () => engine.summaries())
   h('room', (id: string) => ({ meta: store.room(id), events: store.events(id), live: engine.live(id) }))
   h('room:create', (opts: { crew: string[]; workspace: string; pack?: string; name?: string; about?: string; studio?: boolean; repo?: string }) => {
@@ -320,7 +322,13 @@ function wire() {
   h('error:log', (message: string) => logError('window', String(message).slice(0, 4000)))
   h('connector:test', (c: Connector, key: string, headers?: string) => testConnector(c, key ?? '', typeof headers === 'string' ? headers : ''))
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
-  h('packs', () => packs())
+  h('packs', () => packs().filter((p) => !p.hidden))
+  // Slash commands from the agents' own folders on this computer, and the room's folder.
+  h('commands', (folder?: string) => commands(typeof folder === 'string' ? folder : undefined).map(({ body: _body, ...c }) => c))
+  h('commands:expand', (folder: string | undefined, agent: string, name: string, args: string, to: string) => {
+    const c = commands(typeof folder === 'string' ? folder : undefined).find((x) => x.agent === agent && x.name === name)
+    return c ? expand(c, String(args ?? ''), String(to ?? '')) : null
+  })
   h('packs:import', async () => {
     const [f] = await choose({ accept: '.json,application/json' })
     if (!f) return null

@@ -6,8 +6,10 @@ import { join } from 'node:path'
 
 // Every theme on the first run, at home, in a room and in Settings, with the time each switch
 // takes and any error the window logs. node test/themes.mjs [theme ...]   (npm run build first)
+// REACH=quiet or REACH=rich shoots that setting of Theme colour into theme-<reach>-*.
 const root = new URL('..', import.meta.url).pathname
-const out = root + 'test/shots/theme-'
+const reach = process.env.REACH
+const out = root + 'test/shots/theme-' + (reach ? reach + '-' : '')
 mkdirSync(root + 'test/shots', { recursive: true })
 const temp = (name) => mkdtempSync(join(tmpdir(), `lunchbox-${name}-`))
 const bin = temp('bin')
@@ -23,7 +25,7 @@ const app = await electron.launch({
   env: { ...process.env, LB_FOLDER: 'shared', LB_PLAN_LIMITS: 'off', LB_WORKSPACE: work, LUNCHBOX_PATH: `${bin}:${process.execPath.replace(/\/[^/]+$/, '')}:/usr/bin:/bin`, LUNCHBOX_PATH_ONLY: '1', FAKE_DELAY: '20' },
   timeout: 30000,
 })
-const kill = setTimeout(() => { console.log('timed out'); app.close().finally(() => process.exit(1)) }, 290000)
+const kill = setTimeout(() => { console.log('timed out'); app.close().finally(() => process.exit(1)) }, 420000)
 const page = await app.firstWindow()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
@@ -56,6 +58,7 @@ const pick = (selector, name) => page.evaluate(([sel, n]) => {
 for (const mode of ['night', 'day']) {
   await page.click('.sbitem >> text=Settings')
   await page.waitForSelector('.themecard')
+  if (reach) await pick('[aria-label="Theme colour"] button', reach)
   await pick('.seg button', mode)
   await shot(`cards-${mode}`, 900)
   for (const id of ids) {
@@ -66,8 +69,17 @@ for (const mode of ['night', 'day']) {
     await page.waitForTimeout(600)
     const { palette, theme } = await page.evaluate(() => ({ palette: document.documentElement.dataset.palette ?? '', theme: document.documentElement.dataset.theme }))
     console.log(`${id} ${mode}: mode ${theme}, palette ${palette || '(lunchbox)'}`)
+    await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 99999))
+    await shot(`${id}-${mode}-settings`, 500)
     await page.click('.sbitem >> text=New room')
     await shot(`${id}-${mode}-home`, 1300)
+    await page.click('[aria-label^="Mode:"]')
+    await shot(`${id}-${mode}-modes`, 400)
+    await page.click('.menu .item:has-text("Full access")')
+    await page.click('.composer textarea')
+    await shot(`${id}-${mode}-full`, 400)
+    await page.click('[aria-label^="Mode:"]')
+    await page.click('.menu .item:has-text("Auto")')
     await page.click(`.sbroom >> text=${room.trim().slice(0, 20)}`)
     await shot(`${id}-${mode}-room`, 1000)
   }

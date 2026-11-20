@@ -6,7 +6,8 @@ import type { AgentInfo, Report } from '../shared/types'
 
 // Reports go to a small function that files them as issues in a private reports repo; the app never
 // holds a GitHub token. When it can't be reached, a report waits in the outbox and goes later.
-const ENDPOINT = 'https://lunchbox-report.vercel.app/api/report'
+// Tests point this at an address that answers nothing, so they never file a real report.
+const ENDPOINT = process.env.LB_REPORT_ENDPOINT || 'https://lunchbox-report.vercel.app/api/report'
 
 type Logged = { at: number; where: 'main' | 'window'; message: string }
 const errors: Logged[] = []
@@ -58,6 +59,8 @@ export async function send(r: Report, dir: string, keys: string[] = []): Promise
     contact: r.contact ? clean(String(r.contact), 200, keys) : undefined,
     context: r.context ? clean(String(r.context), 4000, keys) : undefined,
     diagnostics: r.diagnostics ? clean(String(r.diagnostics), 6000, keys) : undefined,
+    // A Workshop change goes whole, with paths and anything shaped like a key cleaned as above.
+    patch: r.kind === 'idea' && r.patch ? clean(String(r.patch), 400000, keys) : undefined,
   }
   try {
     const { number } = await post(report)

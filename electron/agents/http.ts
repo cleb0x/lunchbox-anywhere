@@ -534,12 +534,12 @@ export function looping(text: string) {
   return tail.trim().length > 40 && text.slice(-4000).split(tail).length - 1 >= 6
 }
 
-const ROUNDS = 60
 const REPAIRS = 2
-const SAME = 3
 
 export type Step = { working?: string; acts?: Act[] }
-export type Hands = { bench: Bench; onStep(s: Step): void; inbox?(): string | null }
+// rounds and same are the person's limits on tool calls per turn and on one failing call made
+// again; without them an agent works until it is done or stopped.
+export type Hands = { bench: Bench; onStep(s: Step): void; inbox?(): string | null; rounds?: number; same?: number }
 
 // history is the conversation, which only grows at the end; prompt is what changes every turn.
 // Keeping them apart lets every provider cache the history as a prefix: Anthropic through explicit
@@ -604,7 +604,8 @@ export async function chat(name: string, key: string, model: string, system: str
   let format: object | undefined
   const failed = new Map<string, number>()
   try {
-    for (let n = 0; n < ROUNDS; n++) {
+    const rounds = hands?.rounds || Infinity
+    for (let n = 0; n < rounds; n++) {
       writing = false
       sieve = new Sieve(tools?.map((t) => t.name))
       ask.waiting(n === 0)
@@ -659,7 +660,7 @@ export async function chat(name: string, key: string, model: string, system: str
         const sig = `${call.name} ${JSON.stringify(call.args)}`
         if (out.ok) failed.delete(sig)
         else failed.set(sig, (failed.get(sig) ?? 0) + 1)
-        if ((failed.get(sig) ?? 0) >= SAME) throw new Error(`${id} made the same failing ${call.name} call ${SAME} times, so Lunchbox stopped it.`)
+        if (hands.same && (failed.get(sig) ?? 0) >= hands.same) throw new Error(`${id} made the same failing ${call.name} call ${hands.same} times, so Lunchbox stopped it, as your limit in Settings says.`)
       }
       repairs = 0
       if (viaText) wire.say(done.map((d) => `Result of ${d.call.name}${d.ok ? '' : ' (it failed)'}:\n${d.text}`).join('\n\n') + '\n\nCarry on. Use another tool block if you need one, or answer the person.')
@@ -669,7 +670,7 @@ export async function chat(name: string, key: string, model: string, system: str
       const sent = hands.inbox?.()
       if (sent) wire.say(sent)
       hands.onStep({ working: '~Thinking' })
-      if (n === ROUNDS - 1) throw new Error(`${id} used ${ROUNDS} tool calls without finishing, so Lunchbox stopped it. Ask it to carry on.`)
+      if (n === rounds - 1) throw new Error(`${id} used ${rounds} tool calls without finishing, the limit set in Settings, so Lunchbox stopped it. Ask it to carry on.`)
     }
   } catch (e) {
     clearTimeout(slow)

@@ -86,10 +86,10 @@ export function textOut() {
 
 export const newTurn = (): Turn => ({ text: '', final: '', acts: [], usage: { input: 0, output: 0, cached: 0, cost: 0 }, denied: [] })
 
-const SHELL_TOOLS = new Set(['Bash', 'run_terminal_command', 'run_shell_command', 'shell', 'exec_command'])
+const SHELL_TOOLS = new Set(['Bash', 'run_terminal_command', 'run_shell_command', 'run_command', 'shell', 'exec_command'])
 const X_SEARCH = /^(x[ _-]?search:?|x_keyword_search|x_semantic_search|search_x)$/i
 const WEB_SEARCH = /^(websearch|web_search|google_web_search|search_web)$/i
-const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'search_replace', 'write_file', 'replace', 'edit_file', 'create_file'])
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'search_replace', 'write_file', 'replace', 'edit_file', 'create_file', 'write_to_file', 'replace_file_content', 'multi_replace_file_content', 'sed_file', 'notebook_edit'])
 
 const clip = (s: string, n = 4000) => (s.length > n ? '…' + s.slice(-n) : s)
 
@@ -131,7 +131,7 @@ export function toAct(name: string, input: Record<string, unknown>, raw: string,
     } catch {}
     return { t: 'tool', name: X_SEARCH.test(name) ? 'x_search' : 'web_search', detail: `${query}${mode}`.trim(), ok: !failed }
   }
-  if (EDIT_TOOLS.has(name)) return { t: 'edit', path: String(input.file_path ?? input.path ?? input.target_file ?? ''), change: name === 'Write' || name === 'write_file' || name === 'create_file' ? 'write' : 'edit' }
+  if (EDIT_TOOLS.has(name)) return { t: 'edit', path: String(input.file_path ?? input.path ?? input.target_file ?? ''), change: name === 'Write' || name === 'write_file' || name === 'create_file' || name === 'write_to_file' ? 'write' : 'edit' }
   return { t: 'tool', name, detail: detail(input), ok: !failed }
 }
 
@@ -408,6 +408,56 @@ export function gemini() {
   return { turn, line }
 }
 
+// Antigravity names its tool inputs in Pascal case; these are the ones the room shows.
+const AGY_FIELDS: Record<string, string> = { CommandLine: 'command', AbsolutePath: 'file_path', TargetFile: 'file_path', Path: 'path', SearchPath: 'path', DirectoryPath: 'path', Query: 'query', Url: 'url', Pattern: 'pattern' }
+const agyInput = (p: Record<string, unknown> = {}) => Object.fromEntries(Object.entries(p).map(([k, v]) => [AGY_FIELDS[k] ?? k, v]))
+
+// Antigravity CLI stream-json: init, then a step_update for each step as it starts and ends (text
+// arrives as deltas on agent_response steps), then result.
+export function antigravity() {
+  const turn = newTurn()
+  function line(o: any): Update | null {
+    switch (o.event) {
+      case 'init':
+        turn.session = o.conversation_id
+        turn.model = o.init?.model
+        return null
+      case 'step_update': {
+        const s = o.step_update ?? {}
+        if (s.step_type === 'agent_response') {
+          if (!s.text_delta) return null
+          turn.text += s.text_delta
+          return { delta: s.text_delta }
+        }
+        if (s.step_type !== 'tool') return null
+        const name = s.tool_name ?? s.tool_info?.name ?? 'tool'
+        const input = agyInput(s.tool_info?.parameters)
+        if (s.state === 'ACTIVE') return { working: `${name} ${detail(input)}`.trim() }
+        if (s.state !== 'DONE' && s.state !== 'ERROR') return null
+        const error = s.tool_info?.error?.message ?? ''
+        if (/denied permission/i.test(error)) turn.denied.push(name + (input.command ? `(${String(input.command).split(' ').slice(0, 2).join(' ')}:*)` : ''))
+        // Commands come back with when they ran and their exit line in front of what they printed.
+        const out = toolText(s.tool_info?.output ?? error).replace(/^Created At:[^\n]*\nCompleted At:[^\n]*\n/, '').replace(/\n\nCommand output:\n/, '\n')
+        const act = toAct(name, input, out, s.state === 'ERROR')
+        turn.acts.push(act)
+        return { acts: [act], working: '' }
+      }
+      case 'result': {
+        const r = o.result ?? {}
+        const u = r.usage ?? {}
+        // input_tokens leaves out what was read from cache; thinking is billed as output.
+        turn.usage = { input: u.input_tokens ?? 0, output: (u.output_tokens ?? 0) + (u.thinking_tokens ?? 0), cached: u.cache_read_tokens ?? 0, cost: 0 }
+        turn.session ??= r.conversation_id
+        if (r.status && r.status !== 'SUCCESS') turn.error ??= r.error ?? 'Antigravity stopped'
+        if (!turn.text && r.response) turn.text = r.response
+        return null
+      }
+    }
+    return null
+  }
+  return { turn, line }
+}
+
 // Limits read differently in every CLI. Anything that says the plan or quota is used up counts,
 // and a reset time is kept when one is given.
 export function limitOf(text: string): { until: number } | null {
@@ -460,6 +510,6 @@ export function plain(text: string) {
   const model = message.match(/['"`]([\w.:-]+)['"`] model is not supported when using Codex with a ChatGPT account/)
   if (model) return `its model ${model[1]} is not available on a ChatGPT plan. Pick another model for Codex in Agents, or change model in ~/.codex/config.toml`
   // Google closed the free personal sign in for Gemini CLI in November 2026.
-  if (/IneligibleTierError|no longer supported for Gemini Code Assist for individuals/i.test(message)) return 'Google no longer lets Gemini CLI sign in with a personal Google account. Add Gemini API in Agents with a free key from aistudio.google.com, or run gemini once in a terminal and sign in with that key'
+  if (/IneligibleTierError|no longer supported for Gemini Code Assist for individuals/i.test(message)) return 'Google no longer lets Gemini CLI sign in with a personal Google account. Add Antigravity in Agents, the Google CLI that replaced it, or Gemini API with a free key from aistudio.google.com'
   return message.replace(/\s+/g, ' ').trim()
 }

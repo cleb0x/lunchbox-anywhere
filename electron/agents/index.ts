@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { delimiter, isAbsolute, join, resolve } from 'node:path'
 import type { Access, AgentInfo, Act, Connector, Meter, Usage } from '../../shared/types'
 import { capture, env, launch, probe, runnable, stop, version, which } from '../system'
-import { claudeLike, codex, gemini, limitOf, reason, textOut, type Turn, type Update } from './parse'
+import { antigravity, claudeLike, codex, gemini, limitOf, reason, textOut, type Turn, type Update } from './parse'
 import { chat, listModels, parseHeaders, PROVIDERS } from './http'
 import type { Bench } from './bench'
 import { logoOf } from '../../shared/logos'
@@ -44,6 +44,10 @@ export type Input = {
   inbox?: () => string | null
   // Local models: free the model from memory when it has answered.
   unload?: boolean
+  // The room lends the Lunchbox browser, so other browsers the agent could start are kept from it.
+  ownBrowser?: boolean
+  // The person's limits, when they set any.
+  limits?: import('../../shared/types').Limits
   // For the agent's own shell: extra variables, and a folder that goes first on its PATH.
   env?: Record<string, string>
   front?: string
@@ -84,10 +88,27 @@ export const providerOf = (d: Def) => d.provider ?? d.key!
 // A resumed session already has the protocol; it is sent again only when it changed.
 const prompt = (i: Input) => (i.fresh === false ? i.prompt : `${i.system}\n\n${i.prompt}`)
 
+// The MCP servers the person set up in Claude Code, for this folder and everywhere, as the names
+// its permission rules use. Browsers are left out when the room lends its own.
+export function claudeServers(cwd: string, ownBrowser = false): string[] {
+  const names = new Set<string>()
+  const add = (o: unknown) => { if (o && typeof o === 'object') for (const k of Object.keys(o)) if (/^[\w.-]+$/.test(k)) names.add(k) }
+  try {
+    const config = JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json'), 'utf8'))
+    add(config.mcpServers)
+    add(config.projects?.[cwd]?.mcpServers)
+  } catch {}
+  try { add(JSON.parse(readFileSync(join(cwd, '.mcp.json'), 'utf8')).mcpServers) } catch {}
+  names.delete('lunchbox')
+  return [...names].map((n) => `mcp__${n}`).filter((n) => !(ownBrowser && OTHER_BROWSERS.includes(n)))
+}
+
+// Browser MCP servers people often have set up in Claude Code. Inside a room the Lunchbox browser
+// does their job where the person can see it, so a turn that has it gets none of these.
+const OTHER_BROWSERS = ['mcp__playwright', 'mcp__puppeteer', 'mcp__chrome-devtools', 'mcp__claude-in-chrome', 'mcp__browsermcp', 'mcp__browser-use', 'mcp__browserbase']
+
 // Calls to a crewmate can take minutes, far past the CLIs' default tool timeouts.
 const HANDS_TIMEOUT = 15 * 60
-// Long enough for any real turn; past it the CLI is stuck, and the room's queue with it.
-const TURN_LIMIT = 60 * 60 * 1000
 
 // The hands URL carries a per-turn token, so it goes in a private file rather than the command
 // line, where any other program on the computer could read it.
@@ -135,7 +156,11 @@ export const CATALOG: Def[] = [
     id: 'claude', name: 'Claude Code', short: 'Claude', maker: 'Anthropic', via: 'cli', bin: 'claude', tools: true, mark: 'claude',
     good: 'Design, careful edits, long reasoning', alphabet: '.:-=+*#%@',
     spawn: (i, file) => {
-      const allowed = ['Task', 'Agent', ...(i.access === 'workspace' ? ['Bash'] : []), ...(i.hands ? ['mcp__lunchbox'] : []), ...(i.allow ?? [])]
+      // Auto lets Claude Code work as it would in a terminal: commands (checked by the room's mode
+      // first), the web, its skills and the MCP servers the person set up for it. A tool missing
+      // here is refused without a word, since a run without a terminal cannot ask.
+      const auto = i.access === 'workspace' ? ['Bash', 'WebSearch', 'WebFetch', 'Skill', 'TodoWrite', 'NotebookEdit', ...claudeServers(i.cwd, i.ownBrowser)] : []
+      const allowed = ['Task', 'Agent', ...auto, ...(i.hands ? ['mcp__lunchbox'] : []), ...(i.allow ?? [])]
       const hands = claudeHands(i, file)
       const hook = claudeHook(i, file)
       return {
@@ -147,6 +172,7 @@ export const CATALOG: Def[] = [
           ...hands.args,
           ...hook.args,
           ...(i.lean ? ['--strict-mcp-config'] : []),
+          ...(i.ownBrowser ? ['--disallowedTools', OTHER_BROWSERS.join(',')] : []),
           ...(i.effort ? ['--effort', i.effort] : []),
           ...(i.model ? ['--model', i.model] : []),
           ...(i.session ? ['--resume', i.session] : []),
@@ -163,7 +189,7 @@ export const CATALOG: Def[] = [
     good: 'Building, running and fixing tests', alphabet: '.-01',
     spawn: (i) => {
       const sandbox = { plan: ['-s', 'read-only'], ask: ['-s', 'read-only'], workspace: ['-s', 'workspace-write'], full: ['--dangerously-bypass-approvals-and-sandbox'] }[i.access]
-      const tail = [...codexHands(i), ...(i.effort ? ['-c', `model_reasoning_effort="${i.effort}"`] : []), ...(i.model ? ['-m', i.model] : [])]
+      const tail = [...codexHands(i), ...(i.effort && codexTakes(i.model, i.effort) ? ['-c', `model_reasoning_effort="${i.effort}"`] : []), ...(i.model ? ['-m', i.model] : [])]
       // `exec resume` takes neither -C nor -s: the folder comes from the working directory and the
       // sandbox from config, or every resumed turn fails and silently starts a new session.
       const resumeSandbox = i.access === 'full' ? ['--dangerously-bypass-approvals-and-sandbox'] : ['-c', `sandbox_mode="${i.access === 'workspace' ? 'workspace-write' : 'read-only'}"`]
@@ -192,8 +218,28 @@ export const CATALOG: Def[] = [
     }),
   },
   {
-    id: 'gemini', name: 'Gemini CLI', short: 'Gemini', maker: 'Google', via: 'cli', bin: 'gemini', tools: true, mark: 'gemini',
+    id: 'antigravity', name: 'Antigravity', short: 'Antigravity', maker: 'Google', via: 'cli', bin: 'agy', tools: true, mark: 'gemini',
     good: 'Long files, review, second opinions', alphabet: '.,oO0@',
+    // Headless, a permission it would ask for is refused, so Ask runs as Plan: it reads and
+    // proposes, and nothing changes. Auto is agy's own auto mode, which agy -p uses wherever the
+    // account has it: edits in the folder, commands in its sandbox (the folder, temp and build
+    // caches writable, no network, ~/.ssh and .env blocked) and its own check on anything that
+    // has to leave it. Passing no mode keeps that, and falls back to agy's default elsewhere.
+    spawn: (i) => ({
+      args: [
+        '--print=', '--input-format', 'stream-json', '--output-format', 'stream-json',
+        ...{ plan: ['--mode', 'plan'], ask: i.allow?.length ? ['--mode', 'accept-edits'] : ['--mode', 'plan'], workspace: [], full: ['--dangerously-skip-permissions'] }[i.access],
+        ...agyChoice(i.model, i.effort),
+        ...(i.session ? ['--conversation', i.session] : []),
+      ],
+      // A prompt as an argument would not fit a whole room on Windows; on stdin it is one message.
+      stdin: JSON.stringify({ event: 'user', message: { content: prompt(i) } }) + '\n',
+      parser: antigravity(),
+    }),
+  },
+  {
+    id: 'gemini', name: 'Gemini CLI', short: 'Gemini', maker: 'Google', via: 'cli', bin: 'gemini', tools: true, mark: 'gemini',
+    good: 'For a Gemini API key or Enterprise sign in; personal accounts use Antigravity', alphabet: '.,oO0@',
     spawn: (i, file) => ({
       args: [
         '-o', 'stream-json', '--skip-trust', '-p', 'Respond to the request above.',
@@ -289,6 +335,8 @@ async function locate(bin: string) {
 const paths = new Map<string, string>()
 
 export async function detect(keys: Record<string, string>, models: Record<string, string>, health: Record<string, string>): Promise<AgentInfo[]> {
+  // Google moved everyone but paid API key and Enterprise users to Antigravity, so Gemini CLI is
+  // only listed where it is already installed.
   return Promise.all(
     all().map(async (d): Promise<AgentInfo> => {
       const base = { ...d, spawn: undefined, key: undefined, model: models[d.id], note: health[d.id] }
@@ -304,6 +352,10 @@ export async function detect(keys: Record<string, string>, models: Record<string
           return { ...base, found: false, ready: false, note: `There is a ${d.bin} at ${path}, but it does not start. Install ${d.name} again, then check again.` }
         }
         paths.set(d.id, path)
+        if (d.id === 'antigravity') {
+          lastKey = agyKey(keys)
+          if (!agyKeyMode() || !lastKey) return { ...base, found: true, ready: false, version: started.version || undefined, note: AGY_NEEDS_KEY }
+        }
         return { ...base, found: true, ready: true, version: started.version || undefined }
       }
       if (d.via === 'local') {
@@ -318,7 +370,7 @@ export async function detect(keys: Record<string, string>, models: Record<string
       // The model typed into the connector is the one used, unless another was picked since.
       return { ...base, model: base.model || connModels.get(d.id) || undefined, found: mine || !!key, ready: mine || !!key }
     }),
-  )
+  ).then((list) => list.filter((a) => a.id !== 'gemini' || a.found))
 }
 
 // What Claude Code's --model takes: its short names follow the newest of each line, the full ids
@@ -328,15 +380,91 @@ const CLAUDE_MODELS = ['fable', 'opus', 'sonnet', 'haiku', 'claude-fable-5-2', '
 // Gemini CLI has no command that lists models; these are the ones it accepts by name, newest first.
 const GEMINI_MODELS = ['auto-gemini-3', 'gemini-3.1-pro-preview', 'gemini-3-pro-preview', 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.1-flash-lite']
 
-// Codex keeps the models this account may pick in its own cache, in the order its picker shows them.
-function codexModels() {
+// Google lets other apps run Antigravity only on a Gemini API key, never on a person's Google
+// account: an app driving agy under a consumer login can get that account suspended. agy uses a
+// key when its own settings name the gemini provider and GEMINI_API_KEY is set; Lunchbox checks
+// both before every run and never starts agy any other way.
+export const agySettings = () => join(homedir(), '.gemini', 'antigravity-cli', 'settings.json')
+export function agyKeyMode() {
+  try { return JSON.parse(readFileSync(agySettings(), 'utf8')).modelProvider === 'gemini' } catch { return false }
+}
+const agyKey = (keys: Record<string, string>) => keys.google || process.env.GEMINI_API_KEY || ''
+export const AGY_NEEDS_KEY = 'Google allows apps to run Antigravity only with a Gemini API key, not your Google account. Set it up here in one step.'
+
+// `agy models` prints one model a line: its id, a tab, then the name it shows. A model offered
+// at several efforts comes as one id per effort (gemini-3.8-flash-high); agy also takes the bare
+// id with --effort, so the list shows each model once and effort is picked beside it.
+const LEVEL = /-(minimal|low|medium|high|xhigh|max)$/
+const agyEfforts = new Map<string, string[]>()
+// The key the last agent check saw, so the model list can be read with it.
+let lastKey = ''
+async function antigravityModels() {
+  const path = paths.get('antigravity') ?? (await locate('agy'))
+  if (!path || !agyKeyMode()) return []
+  return learnAgyModels(await capture(path, ['models'], 15000, await env(lastKey ? { GEMINI_API_KEY: lastKey } : {})))
+}
+
+export function learnAgyModels(out: string) {
+  const ids = [...out.matchAll(/^([\w.:/-]+)\t/gm)].map((m) => m[1])
+  const bases: string[] = []
+  agyEfforts.clear()
+  for (const id of ids) {
+    const level = id.match(LEVEL)?.[1]
+    const base = level ? id.slice(0, -level.length - 1) : id
+    if (!bases.includes(base)) bases.push(base)
+    if (level) agyEfforts.set(base, [...(agyEfforts.get(base) ?? []), level])
+  }
+  return bases
+}
+
+// The model and effort agy is started with. An id saved with its effort in it still works, and an
+// effort the model has no setting for is left out, since agy refuses the whole run over it.
+export function agyChoice(model?: string, effort?: string): string[] {
+  if (!model) return []
+  const level = model.match(LEVEL)?.[1]
+  const base = level && agyEfforts.has(model.slice(0, -level.length - 1)) ? model.slice(0, -level.length - 1) : model
+  const levels = agyEfforts.get(base) ?? []
+  const want = effort && levels.includes(effort) ? effort : base !== model ? level : undefined
+  return want ? ['--model', base, '--effort', want] : ['--model', model]
+}
+
+// Codex keeps the models this account may pick in its own cache, in the order its picker shows
+// them, each with the reasoning efforts it takes.
+type CodexModel = { slug?: string; visibility?: string; priority?: number; supported_reasoning_levels?: { effort?: string }[] }
+function codexCache(): CodexModel[] {
   try {
     const file = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'models_cache.json')
-    const list: { slug?: string; visibility?: string; priority?: number }[] = JSON.parse(readFileSync(file, 'utf8')).models ?? []
-    return list.filter((m) => m.slug && m.visibility !== 'hide').sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0)).map((m) => m.slug!)
+    const list: CodexModel[] = JSON.parse(readFileSync(file, 'utf8')).models ?? []
+    return list.filter((m) => m.slug && m.visibility !== 'hide').sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
   } catch {
     return []
   }
+}
+const codexModels = () => codexCache().map((m) => m.slug!)
+// A level the model does not list is left out rather than failing the turn; with no cache to ask,
+// Codex is trusted to judge it.
+function codexTakes(model: string | undefined, effort: string) {
+  const list = codexCache()
+  const m = model ? list.find((x) => x.slug === model) : list[0]
+  return !m?.supported_reasoning_levels?.length || m.supported_reasoning_levels.some((l) => l.effort === effort)
+}
+
+// What the person can set as effort for an agent with a given model, in order. Empty when the
+// tool or model has no such setting. Claude Code takes the same five levels for every model.
+export async function effortsFor(id: string, model?: string): Promise<string[]> {
+  if (id === 'claude') return ['low', 'medium', 'high', 'xhigh', 'max']
+  if (id === 'codex') {
+    const list = codexCache()
+    const m = (model && list.find((x) => x.slug === model)) || (!model ? list[0] : undefined)
+    return (m?.supported_reasoning_levels ?? []).map((l) => l.effort!).filter(Boolean)
+  }
+  if (id === 'antigravity') {
+    if (!model) return []
+    if (!agyEfforts.size) await antigravityModels()
+    const level = model.match(LEVEL)?.[1]
+    return agyEfforts.get(model) ?? (level ? agyEfforts.get(model.slice(0, -level.length - 1)) : undefined) ?? []
+  }
+  return []
 }
 
 // Grok prints its models with `grok models`: the default marked with *, the rest with -.
@@ -353,6 +481,7 @@ export async function modelsFor(id: string, keys: Record<string, string>) {
   if (d?.id === 'codex') return codexModels()
   if (d?.id === 'grok') return grokModels()
   if (d?.id === 'gemini') return GEMINI_MODELS
+  if (d?.id === 'antigravity') return antigravityModels()
   if (!d || d.via === 'cli') return []
   wear(d, keys)
   const all = await listModels(providerOf(d), keys[d.key!] ?? '')
@@ -367,7 +496,7 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     const ctl = new AbortController()
     const t0 = Date.now()
     wear(d, keys)
-    const hands = input.bench ? { bench: input.bench, onStep: (s: { working?: string; acts?: Act[] }) => onUpdate(s), inbox: input.inbox } : undefined
+    const hands = input.bench ? { bench: input.bench, onStep: (s: { working?: string; acts?: Act[] }) => onUpdate(s), inbox: input.inbox, rounds: input.limits?.toolCalls, same: input.limits?.failures } : undefined
     if (PROVIDERS[provider]?.style === 'ollama') PROVIDERS[provider].unload = !!input.unload
     const done = chat(provider, keys[d.key ?? ''] ?? '', input.model ?? '', input.system, input.prompt, ctl.signal, (delta) => onUpdate({ delta }), input.history, input.cacheKey, hands)
       .then((r) => ({ text: r.text, acts: r.acts, usage: r.usage, denied: [], ms: Date.now() - t0 }))
@@ -391,7 +520,13 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     const path = paths.get(id) || (await locate(d.bin!))
     if (!path) return failed(`${d.name} is not installed on this computer`)
     const file = join(tmpdir(), `lunchbox-${process.pid}-${t0}-${Math.random().toString(36).slice(2, 8)}.txt`)
+    if (id === 'antigravity') {
+      if (!agyKeyMode() || !agyKey(keys)) return failed(AGY_NEEDS_KEY)
+      lastKey = agyKey(keys)
+      if (input.model && !agyEfforts.size) await antigravityModels()
+    }
     const spec = d.spawn!(input, file)
+    if (id === 'antigravity') spec.env = { ...spec.env, GEMINI_API_KEY: agyKey(keys) }
     // The prompt and the hands token are in these files, so they go however the turn ends.
     try {
       if (spec.file) writeFileSync(file, spec.file, { mode: 0o600 })
@@ -433,7 +568,9 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
         if (u) onUpdate(u)
       } catch {}
     })
-    const cap = setTimeout(() => { timedOut = true; stop(proc) }, TURN_LIMIT)
+    // A turn runs until it ends or is stopped, unless the person set a time limit.
+    const minutes = input.limits?.minutes
+    const cap = minutes ? setTimeout(() => { timedOut = true; stop(proc) }, minutes * 60_000) : undefined
     const code = await new Promise<number | null>((ok) => {
       proc.on('close', ok)
       // A background process the CLI started can hold its output open long after the CLI is done.
@@ -446,7 +583,7 @@ export function run(id: string, input: Input, keys: Record<string, string>, onUp
     // The CLI's final answer is only its last message. When the turn wrote before that too, keep it all.
     const text = (turn.final && turn.text.trim().endsWith(turn.final.trim()) ? turn.text : turn.final || turn.text).trim()
     let error = turn.error
-    if (timedOut) error = `${name} was still working after ${TURN_LIMIT / 60000} minutes, so Lunchbox stopped it`
+    if (timedOut) error = `${name} was still working after ${minutes} minutes, the limit set in Settings, so Lunchbox stopped it`
     else if (stopped) error = 'Stopped'
     // A crash partway through keeps what was written, but it is not a finished answer.
     else if (code !== 0 && !error) error = reason(stderr) || `${name} exited with code ${code}`

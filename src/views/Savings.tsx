@@ -6,7 +6,7 @@ import { desk, money, tokens, useApp } from '../lib/desk'
 import { place } from '../lib/fit'
 import { drawSavingsCard } from '../ui/shareCard'
 import { IconClose } from '../ui/icons'
-import { cash, cached as gross, savedBy, savedIn } from '../lib/saved'
+import { cash, cached as gross, own, savedBy, savedIn } from '../lib/saved'
 import type { View } from '../App'
 
 const zero = (): Usage => ({ input: 0, output: 0, cached: 0, cost: 0, saved: 0, gross: 0, kept: 0, premium: 0, cut: 0, held: 0, spared: 0, trimmed: 0, warmed: 0, pings: 0 })
@@ -19,7 +19,7 @@ const total = (r: Record<string, Usage> | undefined) => Object.values(r ?? {}).r
 type Counts = { input: number; cached: number; kept?: number; cut?: number }
 // What Lunchbox never sent: memory and conversation an agent did not need again, and command
 // output it shortened on the way in.
-const unsent = (u: { kept?: number; cut?: number }) => (u.kept ?? 0) + (u.cut ?? 0)
+const unsent = (u: { kept?: number; cut?: number }) => Math.max(0, (u.kept ?? 0) + (u.cut ?? 0))
 // Everything an agent would have read: billed in full, read from the provider's cache, or never sent.
 const read = (u: Counts) => u.input + u.cached + unsent(u)
 const reused = (u: Counts) => u.cached + unsent(u)
@@ -39,6 +39,8 @@ export function Savings({ go }: { go: (v: View) => void }) {
   // What storing the cache cost on top of the input price, where the agent reported it.
   const stored = week.premium ?? 0
   const both = savedIn(week)
+  // Prompt caching is the agents' own and happens without Lunchbox; this is what Lunchbox added.
+  const mine = own(week)
 
   const crew = Object.entries(ledger?.week ?? {})
     .map(([id, u]) => ({ a: agents.find((x) => x.id === id), id, u }))
@@ -56,15 +58,15 @@ export function Savings({ go }: { go: (v: View) => void }) {
         <header className="pagehead row rise">
           <div className="grow">
             <h1>Savings</h1>
-            <p>What working in Lunchbox saved, at API list prices. Each room and agent shows where its saving came from.</p>
+            <p>What your rooms did not pay full price for. Dollars are API list prices: on a subscription nothing is billed per token, so there a saving means your plan lasts longer.</p>
           </div>
           <div className="sv-actions">
           <span className="sv-range">Last 7 days</span>
           {(both > 0 || reused(week) > 0) && <button className="btn small quiet" onClick={async () => {
-            const money = both > 0
+            const money = mine > 0
             setCard(await drawSavingsCard({
-              headline: money ? cash(both) : tokens(reused(week)),
-              line: money ? 'saved in Lunchbox, at API list prices' : 'tokens never sent or read from cache',
+              headline: money ? cash(mine) : tokens(reused(week)),
+              line: money ? 'saved by Lunchbox, at API list prices' : 'tokens never sent or read from cache',
               stats: [
                 { value: tokens(reused(week)), label: 'tokens not paid in full' },
                 { value: pct(ratio(week)), label: 'of every read' },
@@ -79,14 +81,14 @@ export function Savings({ go }: { go: (v: View) => void }) {
         {card && <ShareCard image={card} close={() => setCard(null)} />}
 
         <div className="sv-kpis rise" style={{ '--i': 1 } as CSSProperties}>
-          <Kpi label="Saved" value={both !== 0 ? cash(both) : reused(week) > 0 ? `${tokens(reused(week))} tokens` : '$0.00'}
-            series={last7.map((d) => Math.max(0, savedIn(d)))}
-            note={both === 0 && reused(week) > 0 ? 'Counted in tokens for agents with no price' : undefined}
-            info={`Everything saved in your rooms this week at API list prices, one figure. Cached reads are what your agents' prompt caching saved, before the ${cash(stored)} that storing the cache cost. The rest is what Lunchbox did on top: context it did not send twice, command output it shortened, and how long it kept caches alive, with the cost of keeping rooms warm taken off. A subscription pays nothing per token, so this is what the same work would have cost on an API key.`} />
+          <Kpi label="Saved by Lunchbox" value={priced(week) ? cash(mine) : unsent(week) > 0 ? `${tokens(unsent(week))} tokens` : '$0.00'}
+            series={last7.map((d) => Math.max(0, own(d)))}
+            note={!priced(week) && unsent(week) > 0 ? 'Counted in tokens for agents with no price' : both > mine ? `${cash(both)} with your agents' own caching` : undefined}
+            info={`What Lunchbox itself saved this week at API list prices: context it did not send twice, command output it shortened, and how long it kept caches alive, with the cost of keeping rooms warm taken off. Your agents' own prompt caching saved ${cash(both - mine)} more on cached reads, and storing that cache cost ${cash(stored)}; they cache with or without Lunchbox, so it is not counted here. A subscription pays nothing per token, so on one this is how much further your plan went, not money back.`} />
           <Kpi label="Tokens never sent" value={tokens(unsent(week))} series={last7.map(unsent)}
             info="Tokens Lunchbox kept out of your agents' requests: shared memory and conversation an agent did not need sending again, and long command output shortened to what matters." />
           <Kpi label="Read from cache" value={tokens(week.cached)} series={last7.map((d) => d.cached)}
-            info="Tokens your agents read from their provider's cache at a fraction of the full price. On Claude a cached read costs a tenth of a fresh one, or less on the newest models." />
+            info="Tokens your agents read from their provider's cache at a fraction of the full price, which their own prompt caching does. On Claude a cached read costs a tenth of a fresh one, or less on the newest models." />
           <Kpi label="Savings rate" value={pct(ratio(week))} series={last7.map(ratio)} unit
             info="The share of everything your agents would have read that was never sent or was read from cache. Long rooms push this up." />
         </div>

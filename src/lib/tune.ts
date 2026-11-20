@@ -23,15 +23,14 @@ export const PARTS: { key: Part; name: string; hint: string }[] = [
 const HEX = /^#[0-9a-f]{6}$/i
 export const NO_TUNE: Tune = { dark: {}, light: {} }
 
-export function loadTune(): Tune {
-  try {
-    const raw = JSON.parse(localStorage.getItem('lb.tune') ?? 'null')
-    const clean = (m: unknown) => Object.fromEntries(Object.entries(m && typeof m === 'object' ? m : {}).filter(([k, v]) => PARTS.some((p) => p.key === k) && typeof v === 'string' && HEX.test(v)))
-    return { dark: clean(raw?.dark), light: clean(raw?.light) }
-  } catch { return NO_TUNE }
+// Whatever was stored, as a tune: only the colours that can be tuned, and only as hex.
+export function cleanTune(raw: unknown): Tune {
+  const part = (m: unknown) => Object.fromEntries(Object.entries(m && typeof m === 'object' ? m : {}).filter(([k, v]) => PARTS.some((p) => p.key === k) && typeof v === 'string' && HEX.test(v)))
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return { dark: part(r.dark), light: part(r.light) }
 }
-export function saveTune(t: Tune) {
-  try { localStorage.setItem('lb.tune', JSON.stringify(t)) } catch {}
+export function loadTune(): Tune {
+  try { return cleanTune(JSON.parse(localStorage.getItem('lb.tune') ?? 'null')) } catch { return NO_TUNE }
 }
 
 // The custom properties a tune sets, with everything that follows from them.

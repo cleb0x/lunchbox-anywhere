@@ -121,7 +121,7 @@ function PlaybookSheet({ p, close, go }: { p: Playbook; close: () => void; go: (
     addEventListener('keydown', key)
     return () => removeEventListener('keydown', key)
   }, [close])
-  const start = () => go({ name: 'new', pack: p.pack, text: fillPlaybook(p, input) })
+  const start = () => go({ name: 'new', pack: p.pack, text: fillPlaybook(p, input), crew: p.crew })
   const tools = (p.tools ?? []).map((t) => CATALOG.find((c) => c.id === t)).filter((t): t is CatalogTool => !!t)
   return createPortal(
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && close()}>
@@ -170,7 +170,7 @@ function Tools({ q, say, first }: { q: string; say: (t: string) => void; first?:
       <div className="toolnote rise" style={{ '--i': 2 } as CSSProperties}>
         <div className="grow">
           <b>{ready.length ? `${ready.length} connected, ${count} tools in every room` : 'Connect a tool once, every agent can use it'}</b>
-          <span>Lunchbox runs these open source MCP servers itself and passes their tools to Claude Code, Codex and Gemini in every room. Nothing to configure per agent.</span>
+          <span>Lunchbox runs these open source MCP servers itself and passes their tools to Claude Code and Codex in every room. Nothing to configure per agent.</span>
         </div>
         <div className="row">
           <span className="quiet">Lunchbox browser</span>

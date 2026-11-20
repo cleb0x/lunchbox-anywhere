@@ -36,6 +36,7 @@ const PRIOR: Record<string, Partial<Record<Category, number>>> = {
   claude: { code: 1060, writing: 1060, design: 1050, research: 1030 },
   codex: { code: 1070, data: 1030 },
   grok: { live: 1120, research: 1030 },
+  antigravity: { research: 1050, data: 1050, design: 1010 },
   gemini: { research: 1050, data: 1050, design: 1010 },
   ollama: { general: 980 },
   'claude-api': { writing: 1040, code: 1030 },

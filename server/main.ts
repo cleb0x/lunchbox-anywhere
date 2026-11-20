@@ -14,7 +14,8 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { app } from 'electron'
 import type { Access, ChatSource, Connector, Flow, Report, Settings, Skill } from '../shared/types'
 import { Count } from '../electron/count'
-import { installed, modelsFor, testConnector, useConnectors } from '../electron/agents'
+import { agyKeyMode, agySettings, effortsFor, installed, modelsFor, testConnector, useConnectors } from '../electron/agents'
+import { commands, expand } from '../electron/commands'
 import { setBase } from '../electron/agents/http'
 import { markdown, replay } from '../electron/export'
 import { Flows } from '../electron/flows'
@@ -137,7 +138,7 @@ const handlers = new Map<string, (...args: any[]) => unknown>()
 function wire() {
   const h = (channel: string, fn: (...args: any[]) => unknown) => handlers.set(channel, fn)
 
-  h('env', () => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, uploads: join(app.getPath('userData'), 'uploads'), window: asking ? pageId(asking) : 0 }))
+  h('env', () => ({ home: homedir(), platform: process.platform, version: app.getVersion(), cwd: workspace(), data: store.dir, anywhere: 'server', uploads: join(app.getPath('userData'), 'uploads'), window: asking ? pageId(asking) : 0 }))
   // Each browser tab is a window. New ones are opened by the page itself (server/ui/bridge.ts).
   h('window:view', () => {})
   // Chats from the agents' own apps on this computer. A session a room already continues is left off.
@@ -167,6 +168,23 @@ function wire() {
   h('local:pull', (model: string) => { pull(model, (p) => { emit('local:pull', p); if (p.finished) engine.refresh() }) })
   h('local:cancel', (model: string) => cancelPull(model))
   h('agents:models', (id: string) => modelsFor(id, store.keys()).catch((e: Error) => ({ error: e.message })))
+  h('agents:agy-mode', () => ({ keyMode: agyKeyMode(), hasKey: !!store.keys().google }))
+  // Only on the person's click: their agy settings get the gemini provider, the rest is kept,
+  // and the file as it was is saved beside it.
+  h('agents:agy-key', async () => {
+    if (!store.keys().google) throw new Error('Save a Gemini API key first')
+    const file = agySettings()
+    let current: Record<string, unknown> = {}
+    if (existsSync(file)) {
+      const text = readFileSync(file, 'utf8')
+      writeFileSync(file + '.before-lunchbox', text, { mode: 0o600 })
+      try { current = JSON.parse(text) } catch { throw new Error(`${file} is not valid JSON, so Lunchbox left it alone`) }
+    } else mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ ...current, modelProvider: 'gemini' }, null, 2), { mode: 0o600 })
+    await engine.refresh()
+    return { keyMode: agyKeyMode(), hasKey: true }
+  })
+  h('agents:efforts', (id: string, model?: string) => effortsFor(id, typeof model === 'string' && model ? model : undefined).catch(() => []))
   h('rooms', () => engine.summaries())
   h('room', (id: string) => ({ meta: store.room(id), events: store.events(id), live: engine.live(id) }))
   h('room:create', (opts: { crew: string[]; workspace: string; pack?: string; name?: string; about?: string; studio?: boolean; repo?: string }) => {
@@ -287,7 +305,13 @@ function wire() {
   h('error:log', (message: string) => logError('window', String(message).slice(0, 4000)))
   h('connector:test', (c: Connector, key: string, headers?: string) => testConnector(c, key ?? '', typeof headers === 'string' ? headers : ''))
   h('connector:installed', (bins: string[]) => { resetPath(); return installed(Array.isArray(bins) ? bins : []) })
-  h('packs', () => packs())
+  h('packs', () => packs().filter((p) => !p.hidden))
+  // Slash commands from the agents' own folders on this computer, and the room's folder.
+  h('commands', (folder?: string) => commands(typeof folder === 'string' ? folder : undefined).map(({ body: _body, ...c }) => c))
+  h('commands:expand', (folder: string | undefined, agent: string, name: string, args: string, to: string) => {
+    const c = commands(typeof folder === 'string' ? folder : undefined).find((x) => x.agent === agent && x.name === name)
+    return c ? expand(c, String(args ?? ''), String(to ?? '')) : null
+  })
   h('packs:import:file', (path: string) => { const pack = importPack(path, join(store.dir, 'packs')); emit('packs', packs()); return pack })
   h('packs:link', async (url: string) => { const pack = await fetchPack(url, join(store.dir, 'packs')); emit('packs', packs()); return pack })
   h('packs:remove', (id: string) => { const r = removePack(id, join(store.dir, 'packs')); emit('packs', packs()); return r })

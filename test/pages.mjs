@@ -14,7 +14,7 @@ const work = temp('work')
 writeFileSync(join(work, 'notes.md'), '# Agent limits\n\nEvery plan has a cap.\nMost people hit it on Mondays.\n')
 writeFileSync(join(work, 'page.html'), '<h1>Limits</h1>\n<p>Draft</p>\n')
 chmodSync(root + 'test/fake-agent.mjs', 0o755)
-for (const name of ['claude', 'codex', 'grok']) symlinkSync(root + 'test/fake-agent.mjs', `${bin}/${name}`)
+for (const name of ['claude', 'codex', 'grok', 'agy']) symlinkSync(root + 'test/fake-agent.mjs', `${bin}/${name}`)
 
 const app = await electron.launch({
   executablePath: createRequire(import.meta.url)('electron'),
@@ -40,6 +40,18 @@ await page.waitForSelector('.newroom')
 await shot('01-home', 1200)
 await page.click('[aria-label^="Mode:"]')
 await shot('01b-modes', 400)
+await page.keyboard.press('Escape')
+await page.click('[aria-label="Agents in this room"]')
+await shot('01d-crew', 500)
+// Antigravity runs only where its own settings name a Gemini API key, which this computer may not have.
+if (await page.locator('.crewrow:has-text("Antigravity"):not(.off)').count()) {
+  await page.click('.crewrow:has-text("Antigravity") .item')
+  await page.click('.crewrow:has-text("Antigravity") .modelchip')
+  await shot('01e-models', 700)
+  await page.keyboard.press('Escape')
+  await page.click('[aria-label="Agents in this room"]')
+  await page.click('.crewrow:has-text("Antigravity") .item')
+}
 await page.keyboard.press('Escape')
 await page.click('[aria-label="Where the room works"]')
 await shot('01c-folders', 400)
@@ -85,8 +97,8 @@ await visit('Library', '06-library', async () => {
   await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 900))
   await shot('07b-library-scrolled', 500)
   await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 0))
-  for (const [i, t] of [[0, 'skills'], [1, 'tools'], [2, 'packs']]) {
-    await page.click(`.tabs button >> nth=${i + 1}`).catch(() => {})
+  for (const [i, t] of [[1, 'tools'], [2, 'packs'], [3, 'habits'], [4, 'skills']]) {
+    await page.click(`.tabs button >> nth=${i}`).catch(() => {})
     await shot(`07-library-${t}`, 500)
   }
 })
@@ -98,6 +110,9 @@ await visit('Agents', '08b-agents', async () => {
   }
   await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 99999))
   await shot('08c-agents-local', 600)
+  await page.evaluate(() => document.querySelector('.page')?.scrollTo(0, 0))
+  await page.click('.agenthead:has-text("Antigravity")')
+  await shot('08d-agent-install', 500)
 })
 await visit('Settings', '09-settings')
 await page.click('.seg button:has-text("Day")')
