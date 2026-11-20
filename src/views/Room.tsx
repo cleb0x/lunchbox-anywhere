@@ -122,15 +122,17 @@ export function RoomView({ id, access, setAccess, open, focus, say }: {
 
   const turning = data?.live.turns.length ?? 0
   useEffect(() => { if (!turning) setStopping(false) }, [turning])
+  const stopped = useRef(0)
   function stop() {
+    stopped.current = performance.now()
     setStopping(true)
     desk.call('room:stop', id)
   }
 
   // A new plan lifts out of the chat into the panel, so the panel opens for it. Only for now: the
-  // choice to keep it closed stays saved.
+  // choice to keep it closed stays saved. Pressing Stop is no moment for a panel to slide in.
   useEffect(() => {
-    const open = () => { if (!panelOn.current) { glideFrom.current = columnLeft(); reflow(); setPanel(true) } }
+    const open = () => { if (!panelOn.current && performance.now() - stopped.current > 4000) { glideFrom.current = columnLeft(); reflow(); setPanel(true) } }
     addEventListener('lunchbox:plan', open)
     return () => removeEventListener('lunchbox:plan', open)
   }, [])
