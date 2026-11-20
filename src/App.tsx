@@ -131,7 +131,11 @@ export function App() {
   const loaded = useApp((s) => s.loaded)
   const all = useApp((s) => s.rooms)
   // Pinned rooms lead the list; archived ones leave it and wait under their own heading.
-  const rooms = [...all.filter((r) => r.pinned && !r.archived), ...all.filter((r) => !r.pinned && !r.archived)]
+  // Rooms dragged into place keep it; the rest, new ones included, lead in the order of last use.
+  const order = useApp((s) => s.settings.roomOrder) ?? []
+  const rank = new Map(order.map((id, i) => [id, i]))
+  const placed = [...all].sort((a, b) => Number(rank.has(a.id)) - Number(rank.has(b.id)) || (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
+  const rooms = [...placed.filter((r) => r.pinned && !r.archived), ...placed.filter((r) => !r.pinned && !r.archived)]
   const archived = all.filter((r) => r.archived)
   const [showArchived, setShowArchived] = useState(false)
   const [ctx, setCtx] = useState<{ room: RoomSummary; x: number; y: number; from: HTMLElement } | null>(null)
@@ -182,6 +186,30 @@ export function App() {
     list.splice(at < 0 ? list.length : at, 0, g)
     reload.settings({ groups: list })
   }
+  // A room dropped on another goes just above it, in that room's folder. The whole list is written
+  // down, so from then on rooms stay where they were put.
+  const dragged = useRef<string | null>(null)
+  const moveRoom = (id: string, before: string) => {
+    if (id === before) return
+    const ids = rooms.map((r) => r.id).filter((x) => x !== id)
+    ids.splice(Math.max(0, ids.indexOf(before)), 0, id)
+    reload.settings({ roomOrder: ids })
+    const target = all.find((r) => r.id === before)
+    const into = target?.group && known.has(target.group) ? target.group : null
+    if ((all.find((r) => r.id === id)?.group ?? null) !== into) desk.call('room:group', id, into)
+  }
+  const dropOnRoom = (r: RoomSummary) => ({
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      if (!e.dataTransfer.types.includes('text/lb-room') || dragged.current === r.id) return
+      e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setOver(`room:${r.id}`)
+    },
+    onDragLeave: (e: DragEvent<HTMLElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(null) },
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      const id = e.dataTransfer.getData('text/lb-room')
+      setOver(null)
+      if (id) { e.preventDefault(); e.stopPropagation(); moveRoom(id, r.id) }
+    },
+  })
   // Rooms in a folder that goes are moved out, never deleted.
   const removeGroup = (id: string) => {
     for (const r of all.filter((x) => x.group === id)) desk.call('room:group', r.id, null)
@@ -443,8 +471,9 @@ export function App() {
     )
   }
   const roomRow = (r: RoomSummary) => (
-    <button key={r.id} className={`sbroom${on('room', r.id) ? ' on' : ''}`} onClick={() => go({ name: 'room', id: r.id })} onContextMenu={menuFor(r)} title={r.name}
-      draggable onDragStart={(e) => { e.dataTransfer.setData('text/lb-room', r.id); e.dataTransfer.effectAllowed = 'move' }} onDragEnd={() => setOver(null)}>
+    <button key={r.id} className={`sbroom${on('room', r.id) ? ' on' : ''}${over === `room:${r.id}` ? ' dropbefore' : ''}`} onClick={() => go({ name: 'room', id: r.id })} onContextMenu={menuFor(r)} title={r.name}
+      draggable onDragStart={(e) => { dragged.current = r.id; e.dataTransfer.setData('text/lb-room', r.id); e.dataTransfer.effectAllowed = 'move' }} onDragEnd={() => { dragged.current = null; setOver(null) }}
+      {...dropOnRoom(r)}>
       {on('room', r.id) && sel}
       {r.flow && <span className="sbflow" title="Started by a flow"><IconClock /></span>}
       {r.pinned && <span className="sbpin" title="Pinned"><IconPin /></span>}

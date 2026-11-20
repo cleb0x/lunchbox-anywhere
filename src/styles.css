@@ -144,7 +144,8 @@ textarea:focus-visible,input:focus-visible,[role=dialog]:focus{outline:0}
 .sbfolder[aria-expanded=true] .sbficon,.sbfolder:hover .sbficon{color:var(--dim)}
 .sbfolder .grow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 /* A folder dragged over another lands before it: a hairline in the ink colour marks where. */
-.sbfolder.dropbefore{box-shadow:inset 0 2px 0 -1px var(--ink)}
+.sbroom.dropbefore::after{content:"";position:absolute;left:8px;right:8px;top:-1px;height:2px;border-radius:1px;background:var(--ink);pointer-events:none}
+.sbgroupbody .sbroom.dropbefore::after{left:30px}
 .sbgroup.archived{opacity:.6}
 .item.fileto .grow b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sbgroupbody{position:relative;display:flex;flex-direction:column;gap:1px;animation:land 220ms var(--out) both}

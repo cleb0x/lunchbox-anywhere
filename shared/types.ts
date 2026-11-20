@@ -271,6 +271,8 @@ export type Settings = {
   repos?: string[]
   // Folders in the sidebar that rooms are filed in, in the order they were made.
   groups?: Group[]
+  // Rooms in the order they were dragged into. Rooms not in it, such as new ones, come first, newest first.
+  roomOrder?: string[]
   browser?: boolean
   remote?: { on: boolean; chat?: number; name?: string; access?: Access }
   planLimits?: boolean
