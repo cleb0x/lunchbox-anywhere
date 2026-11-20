@@ -588,8 +588,9 @@ test('antigravity: never starts on a Google login, only on a Gemini API key', as
   const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { run, agyKeyMode, AGY_NEEDS_KEY } = await import('../electron/agents/index')
-  const home = process.env.HOME
-  process.env.HOME = mkdtempSync(join(tmpdir(), 'lb-agy-'))
+  // Windows takes the home folder from USERPROFILE, everywhere else from HOME.
+  const home = process.env.HOME, profile = process.env.USERPROFILE
+  process.env.HOME = process.env.USERPROFILE = mkdtempSync(join(tmpdir(), 'lb-agy-'))
   try {
     assert.equal(agyKeyMode(), false)
     const r = await run('antigravity', { prompt: 'hi', system: '', cwd: process.env.HOME, access: 'plan' }, { google: 'AIza-test' }, () => {}).done
@@ -601,6 +602,8 @@ test('antigravity: never starts on a Google login, only on a Gemini API key', as
     if (!/not installed/.test(keyless.error ?? '') && !process.env.GEMINI_API_KEY) assert.equal(keyless.error, AGY_NEEDS_KEY, 'key mode without a key does not start either')
   } finally {
     process.env.HOME = home
+    if (profile === undefined) delete process.env.USERPROFILE
+    else process.env.USERPROFILE = profile
   }
 })
 
